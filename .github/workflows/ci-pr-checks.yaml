@@ -97,6 +97,12 @@ jobs:
         if: steps.check-python.outputs.has_python == 'true'
         run: ruff format --check .
 
+      - name: Test runtime helpers
+        if: steps.check-python.outputs.has_python == 'true'
+        run: |
+          pip install -r runtime/vllm/requirements-test.txt
+          python -m pytest runtime/vllm -q
+
   # Container: build (no push) to validate Dockerfile
   container-build:
     runs-on: ubuntu-latest
