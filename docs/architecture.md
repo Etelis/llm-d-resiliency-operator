@@ -3,17 +3,7 @@
 IRO (inference resiliency operator) is one controller-runtime binary. Engine
 fault recovery runs inside it, on the elected replica.
 
-```mermaid
-flowchart TB
-    subgraph iro["IRO operator Pod"]
-        mgr["manager<br/>leader election, metrics :8080, probes :8081"]
-        ef["Engine fault recovery<br/>opt-in, leader only"]
-        mgr --> ef
-    end
-    ef -->|"engine adapter"| ranks["engine ranks"]
-    ef -->|"workload adapter"| lws["LWS, Pods, journal"]
-    router["Router (EPP)"] --> ranks
-```
+![Engine fault recovery](diagrams/engine-fault-recovery.svg)
 
 | Part | Job | Doc |
 | --- | --- | --- |
@@ -42,7 +32,7 @@ sequenceDiagram
 ```
 
 The runner only runs on the leader, and engine fault recovery won't start
-without leader election.
+without leader election. One IRO instance handles one engine group today.
 
 ---
 
@@ -55,15 +45,3 @@ without leader election.
 | `internal/engine` | engine contract and shared types |
 | `internal/engine/vllm` | vLLM adapter |
 | `internal/workload/lws` | LWS adapter |
-| `runtime/vllm` | Pod-side bridge for vLLM |
-| `deploy/kubernetes`, `deploy/vllm-ft` | base manifests and the engine fault overlay |
-
----
-
-## Deployment
-
-- The base manifests are in [deploy/kubernetes](../deploy/kubernetes).
-- The overlay in [deploy/vllm-ft](../deploy/vllm-ft/README.md) adds a
-  namespaced Role for one LWS and the flags that turn engine fault recovery
-  on.
-- One IRO instance handles one engine group today.

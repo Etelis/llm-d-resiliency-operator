@@ -42,8 +42,8 @@ flowchart LR
     subgraph op["IRO operator, leader replica"]
         ctrl["Recovery controller"]
     end
-    ctrl -->|"read · retry · scale_down · verify"| eng["Engine adapter<br/>vLLM today"]
-    ctrl -->|"discover · reset · journal"| wl["Workload adapter<br/>LWS today"]
+    ctrl -->|"read · retry · scale_down · verify"| eng["Inference engine adapter"]
+    ctrl -->|"discover · reset · journal"| wl["Workload adapter"]
     eng --> ranks["engine ranks"]
     wl --> k8s["Kubernetes API"]
     k8s -.->|"workload controller<br/>recreates Pods"| ranks
@@ -113,8 +113,8 @@ Can't fix:  rejected, failed or timed out → save → recreate group → starti
 
 ### PR #11
 
-The controller, the vLLM and LWS adapters, the runtime bridge for vLLM Pods,
-and a deploy overlay. Opt-in with `--enable-vllm-ft`.
+The recovery controller and the first engine and workload adapters (vLLM and
+LWS). Opt-in with `--enable-vllm-ft`.
 
 ### Follow-ups
 
