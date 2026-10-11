@@ -27,7 +27,6 @@ type Config struct {
 	PollInterval         time.Duration
 	DiagnosisTimeout     time.Duration
 	ApplyTimeout         time.Duration
-	StartupTimeout       time.Duration
 	RetryStabilityWindow time.Duration
 	StorePort            int
 }
@@ -35,7 +34,7 @@ type Config struct {
 func Defaults() Config {
 	return Config{
 		PollInterval: time.Second, DiagnosisTimeout: 75 * time.Second, ApplyTimeout: 90 * time.Second,
-		StartupTimeout: 10 * time.Minute, RetryStabilityWindow: 2 * time.Minute, StorePort: 29600,
+		RetryStabilityWindow: 2 * time.Minute, StorePort: 29600,
 	}
 }
 
@@ -265,19 +264,16 @@ func (controller *Controller) waitForDiagnosis(ctx context.Context, state State,
 
 //nolint:gocritic // Discovery uncertainty must preserve the previous reconciliation snapshot.
 func (controller *Controller) discoveryUnavailable(ctx context.Context, state State, err error) error {
-	now := time.Now().UTC()
 	state.Verified = nil
 	if state.DiscoveryUnavailableSince.IsZero() {
-		state.DiscoveryUnavailableSince = now
+		state.DiscoveryUnavailableSince = time.Now().UTC()
 	}
 	state.Reason = "workload discovery unavailable: " + err.Error()
-	if now.Sub(state.DiscoveryUnavailableSince) > controller.Config.StartupTimeout {
-		state.Phase = "intervention_required"
-		state.Reason = "workload discovery deadline exceeded; workload identity remains unconfirmed: " + err.Error()
-	}
 	// A failed Kubernetes read does not prove a Pod/container replacement. Keep
 	// the operation and its original deadline so an unchanged group resumes
 	// reconciliation after discovery succeeds. Never reset an unconfirmed group.
+	// Discovery also fails while Pods schedule, pull images or start. That has
+	// no bounded duration, so this wait never escalates.
 	controller.set(state)
 	return controller.persist(ctx, state)
 }
@@ -308,11 +304,8 @@ func (controller *Controller) Step(ctx context.Context) error {
 	}
 	if state.Phase == "resetting" {
 		if overlaps(group, state.PreviousGroup) {
-			if now.Sub(state.Since) > controller.Config.StartupTimeout {
-				state.Phase = "intervention_required"
-				state.Reason = "old group not fully replaced"
-				return controller.persist(ctx, state)
-			}
+			// Reset is fenced by the old group's identities, so repeating it until
+			// that group is gone never removes a replacement.
 			return controller.Workload.Reset(ctx, state.PreviousGroup)
 		}
 		state.Group = group
@@ -334,11 +327,6 @@ func (controller *Controller) Step(ctx context.Context) error {
 			state.Since = now
 			state.PreviousGroup = state.Group
 			state.Reason = "waiting for complete LWS group replacement"
-			return controller.persist(ctx, state)
-		}
-		if now.Sub(state.Since) > controller.Config.StartupTimeout {
-			state.Phase = "intervention_required"
-			state.Reason = "partial LWS replacement did not complete"
 			return controller.persist(ctx, state)
 		}
 		return nil
@@ -371,11 +359,9 @@ func (controller *Controller) Step(ctx context.Context) error {
 		if allHealthy(state.Status, active) {
 			return controller.verify(ctx, state, active, false)
 		}
-		if now.Sub(state.Since) > controller.Config.StartupTimeout {
-			state.Phase = "intervention_required"
-			state.Reason = "group failed to start healthy"
-			return controller.persist(ctx, state)
-		}
+		// Startup time depends on the model and the cluster, so waiting has no
+		// deadline. A failed or hung start is restarted by Kubernetes (container
+		// restarts, startup probes) and returns here as a new group.
 		return nil
 	}
 	if state.Phase == "applying" {

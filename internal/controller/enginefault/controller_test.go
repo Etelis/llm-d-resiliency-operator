@@ -511,32 +511,71 @@ func TestDiscoveryFailureInvalidatesVerificationBeforePersistence(t *testing.T) 
 	}
 }
 
-func TestProlongedDiscoveryUncertaintyEscalatesWithoutDeletingUnknownWorkload(t *testing.T) {
-	controller, adapter, workload := setup(t)
-	state := controller.Snapshot()
-	state.DiscoveryUnavailableSince = time.Now().Add(-2 * controller.Config.StartupTimeout)
-	controller.set(state)
-	workload.discoverErrors = []error{errors.New("Kubernetes discovery still unavailable")}
-	step(t, controller)
-	if controller.Snapshot().Phase != "intervention_required" || len(workload.resets) != 0 ||
-		len(adapter.dispatches) != 0 || len(controller.Snapshot().Verified) != 0 {
-		t.Fatal("unbounded discovery uncertainty or action against an unconfirmed workload")
+func TestSlowStartupNeverRequiresIntervention(t *testing.T) {
+	for _, wait := range []string{"engine", "discovery", "partial", "teardown"} {
+		t.Run(wait, func(t *testing.T) {
+			controller, adapter, workload := setup(t)
+			original := workload.group
+			replacement := engine.Group{ID: "replacement", Endpoints: slices.Clone(original.Endpoints)}
+			for index := range replacement.Endpoints {
+				replacement.Endpoints[index].PodUID += "-new"
+			}
+			state := controller.Snapshot()
+			state.Verified = nil
+			state.Since = time.Now().Add(-time.Hour)
+			want, wantResets := "starting", 0
+			switch wait {
+			case "engine":
+				// The same Pods are still downloading, loading or compiling the model.
+				state.Phase = "starting"
+				adapter.status = statuses("unknown", "unknown", "unknown", "unknown")
+			case "discovery":
+				// Pods are still scheduling, pulling images or starting.
+				state.DiscoveryUnavailableSince = state.Since
+				workload.discoverErrors = []error{errors.New("pod test-0-1 is starting or terminating")}
+				want = "serving"
+			case "partial":
+				state.Phase = "starting"
+				state.PreviousGroup = original
+				workload.group = engine.Group{ID: "partial", Endpoints: append(
+					slices.Clone(original.Endpoints[:2]), replacement.Endpoints[2:]...)}
+			case "teardown":
+				state.Phase = "resetting"
+				state.PreviousGroup = original
+				want, wantResets = "resetting", 1
+			}
+			controller.set(state)
+			step(t, controller)
+			if controller.Snapshot().Phase != want || len(workload.resets) != wantResets || len(adapter.dispatches) != 0 {
+				t.Fatalf("slow startup escalated or acted: %+v", controller.Snapshot())
+			}
+			adapter.status = statuses("healthy", "healthy", "healthy", "healthy")
+			if wait == "partial" || wait == "teardown" {
+				workload.group = replacement
+			}
+			step(t, controller)
+			if controller.Snapshot().Phase != "serving" || len(controller.Snapshot().Verified) != 4 ||
+				len(workload.resets) != wantResets {
+				t.Fatalf("group did not serve once startup completed: %+v", controller.Snapshot())
+			}
+		})
 	}
 }
 
-func TestRepeatedPostVerificationReadFailureKeepsUncertaintyDeadline(t *testing.T) {
+func TestRepeatedPostVerificationReadFailureKeepsUncertaintyStart(t *testing.T) {
 	controller, _, workload := setup(t)
 	state := controller.Snapshot()
 	state.Verified = nil
-	state.DiscoveryUnavailableSince = time.Now().Add(-2 * controller.Config.StartupTimeout)
+	state.DiscoveryUnavailableSince = time.Now().Add(-time.Hour)
 	controller.set(state)
 	// A successful initial read does not resolve the uncertainty when the
 	// identity check after inference keeps failing.
 	workload.discoverErrors = []error{nil, errors.New("post-inference Kubernetes read failure")}
 	step(t, controller)
-	if controller.Snapshot().Phase != "intervention_required" || len(workload.resets) != 0 ||
-		len(controller.Snapshot().Verified) != 0 {
-		t.Fatal("successful preliminary read restarted an unresolved verification deadline")
+	after := controller.Snapshot()
+	if after.Phase != "serving" || !after.DiscoveryUnavailableSince.Equal(state.DiscoveryUnavailableSince) ||
+		len(workload.resets) != 0 || len(after.Verified) != 0 {
+		t.Fatal("successful preliminary read restarted or escalated unresolved uncertainty")
 	}
 }
 
