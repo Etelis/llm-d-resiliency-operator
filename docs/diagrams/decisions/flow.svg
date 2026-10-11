@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 930" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">How the decision is made</title>
+  <desc id="desc">Checked top to bottom, first match wins. No active ranks: reset. Any FT failed: reset. All plain healthy: healthy. No fault signal: frontend_degraded if a rank is healthy, else wait. No dead rank: retry if all plain unhealthy, else wait. No survivors: reset. Survivors all plain unhealthy: scale_down, else wait.</desc>
+  <defs>
+    <marker id="arrow-dark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A3A3A"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2C8549"/></marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C0443F"/></marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3F6BA8"/></marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8E5BA6"/></marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B97A10"/></marker>
+    <marker id="arrow-maroon" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8B1E1E"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7A7A7A"/></marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F7A85"/></marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C9711C"/></marker>
+    <marker id="arrow-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5E52B8"/></marker>
+  </defs>
+  <rect x="5" y="5" width="1590" height="920" rx="10" fill="#FFFFFF" stroke="#A46BAA" stroke-width="10"/>
+  <!-- start -->
+  <rect x="160" y="34" width="280" height="42" rx="21" fill="#3A3A3A"/>
+  <text x="300" y="61" font-size="16" font-weight="700" text-anchor="middle" fill="#FFFFFF">rank states, removed ignored</text>
+  <path d="M300,76 L300,118" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <!-- spine -->
+  <path d="M300,180 L300,218" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="312" y="204" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <path d="M300,280 L300,318" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="312" y="304" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <path d="M300,380 L300,433" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="312" y="411" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <path d="M300,495 L300,558" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="312" y="531" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <path d="M300,620 L300,668" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="312" y="649" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <path d="M300,730 L300,773" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="312" y="756" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <!-- direct exits -->
+  <path d="M465,150 L1179,150" fill="none" stroke="#C0443F" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <text x="479" y="141" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="1180" y="128" width="200" height="44" rx="22" fill="#FFFFFF" stroke="#C0443F" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <text x="1280" y="155" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">reset</text>
+  <text x="1396" y="155" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">via the budget</text>
+  <path d="M465,250 L1179,250" fill="none" stroke="#C0443F" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <text x="479" y="241" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <rect x="1180" y="228" width="200" height="44" rx="22" fill="#FFFFFF" stroke="#C0443F" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <text x="1280" y="255" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">reset</text>
+  <text x="1396" y="255" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">via the budget</text>
+  <path d="M465,350 L1179,350" fill="none" stroke="#2C8549" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="479" y="341" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <rect x="1180" y="328" width="200" height="44" rx="22" fill="#E2F1E7" stroke="#2C8549" stroke-width="2.5"/>
+  <text x="1280" y="355" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">healthy</text>
+  <text x="1396" y="355" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">→ serving</text>
+  <path d="M465,700 L1179,700" fill="none" stroke="#C0443F" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <text x="479" y="691" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="1180" y="678" width="200" height="44" rx="22" fill="#FFFFFF" stroke="#C0443F" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <text x="1280" y="705" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">reset</text>
+  <text x="1396" y="705" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">via the budget</text>
+  <!-- sub-questions -->
+  <path d="M465,465 L668,465" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="479" y="456" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="670" y="435" width="300" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="820" y="471" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any healthy rank?</text>
+  <path d="M970,465 L1085,465 L1085,433 L1179,433" fill="none" stroke="#1F7A85" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
+  <path d="M1085,465 L1085,497 L1179,497" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
+  <text x="1099" y="424" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <text x="1099" y="488" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="1180" y="411" width="200" height="44" rx="22" fill="#DFF1F3" stroke="#1F7A85" stroke-width="2.5"/>
+  <text x="1280" y="438" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">frontend_degraded</text>
+  <text x="1396" y="429" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">check the</text>
+  <text x="1396" y="447" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">healthy ranks</text>
+  <rect x="1180" y="475" width="200" height="44" rx="22" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
+  <text x="1280" y="502" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
+  <text x="1396" y="493" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">stay in diagnosing,</text>
+  <text x="1396" y="511" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">reset at 75 s</text>
+  <path d="M465,590 L668,590" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <text x="479" y="581" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="670" y="560" width="300" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="820" y="596" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">All plain unhealthy?</text>
+  <path d="M970,590 L1085,590 L1085,558 L1179,558" fill="none" stroke="#B97A10" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+  <path d="M1085,590 L1085,622 L1179,622" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
+  <text x="1099" y="549" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <text x="1099" y="613" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="1180" y="536" width="200" height="44" rx="22" fill="#FCF0D6" stroke="#B97A10" stroke-width="2.5"/>
+  <text x="1280" y="563" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">retry</text>
+  <text x="1396" y="554" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">→ applying,</text>
+  <text x="1396" y="572" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">every rank</text>
+  <rect x="1180" y="600" width="200" height="44" rx="22" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
+  <text x="1280" y="627" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
+  <text x="1396" y="618" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">stay in diagnosing,</text>
+  <text x="1396" y="636" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">reset at 75 s</text>
+  <!-- last question -->
+  <path d="M470,805 L1085,805 L1085,773 L1179,773" fill="none" stroke="#8E5BA6" stroke-width="2.5" marker-end="url(#arrow-purple)"/>
+  <path d="M1085,805 L1085,837 L1179,837" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
+  <text x="1099" y="764" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
+  <text x="1099" y="828" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
+  <rect x="1180" y="751" width="200" height="44" rx="22" fill="#EFE5F5" stroke="#8E5BA6" stroke-width="2.5"/>
+  <text x="1280" y="778" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">scale_down</text>
+  <text x="1396" y="769" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">→ applying,</text>
+  <text x="1396" y="787" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">dead ranks removed</text>
+  <rect x="1180" y="815" width="200" height="44" rx="22" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
+  <text x="1280" y="842" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
+  <text x="1396" y="833" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">stay in diagnosing,</text>
+  <text x="1396" y="851" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">reset at 75 s</text>
+  <!-- questions -->
+  <rect x="135" y="120" width="330" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="156" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any active ranks?</text>
+  <rect x="135" y="220" width="330" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="256" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any FT failed?</text>
+  <rect x="135" y="320" width="330" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="356" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">All plain healthy?</text>
+  <rect x="135" y="435" width="330" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="471" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any fault signal?</text>
+  <rect x="135" y="560" width="330" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="596" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any rank dead?</text>
+  <rect x="135" y="670" width="330" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="706" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any survivors?</text>
+  <rect x="130" y="775" width="340" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
+  <text x="300" y="811" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Survivors all plain unhealthy?</text>
+  <text x="135" y="900" font-size="15" font-weight="400" text-anchor="start" fill="#5A5A5A">A fault signal is dead, diagnosing or unhealthy, exit evidence, or an FT operation. Plain means no exit evidence and no FT operation.</text>
+</svg>
