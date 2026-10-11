@@ -46,9 +46,9 @@ func TestFaultDecisionsPreserveOriginalMembership(t *testing.T) {
 		{"single survivor waits for diagnosis", statuses("healthy", "dead", "dead", "dead"), nil, "wait", nil, nil},
 		{"no survivors", statuses("dead", "dead", "dead", "dead"), nil, "reset", nil, nil},
 		{"no survivors after exclusion", statuses("unknown", "dead", "dead", "dead"), []int{0}, "reset", nil, nil},
-		{"unknown is not lost capacity", statuses("healthy", "unknown", "unknown", "unknown"), nil, "frontend_degraded", nil, []int{0}},
+		{"unknown is not lost capacity", statuses("healthy", "unknown", "unknown", "unknown"), nil, "wait", nil, nil},
 		{"wait for peers", statuses("healthy", "dead", "unhealthy", "diagnosing"), nil, "wait", nil, nil},
-		{"frontend only", statuses("healthy", "unknown", "healthy", "healthy"), nil, "frontend_degraded", nil, []int{0, 2, 3}},
+		{"frontend only", statuses("healthy", "unknown", "healthy", "healthy"), nil, "wait", nil, nil},
 		{"missing is not dead", statuses("unknown", "unknown", "unknown", "unknown"), nil, "wait", nil, nil},
 		{"excluded stays out", statuses("healthy", "healthy", "healthy", "healthy"), []int{3}, "healthy", nil, nil},
 	}
@@ -122,15 +122,16 @@ func TestSingleSurvivorRecoveryUsesRuntimeResult(t *testing.T) {
 func TestMissingFrontendWaitsForEngineDiagnosisBeforeReset(t *testing.T) {
 	controller, adapter, workload := setup(t)
 	adapter.status = statuses("healthy", "unknown", "healthy", "healthy")
-	adapter.verifyErr = errors.New("collective has not completed")
+	// A successful diagnosis probe must not mark the healthy subset as serving.
 	step(t, controller)
 	state := controller.Snapshot()
-	if state.Phase != "diagnosing" || len(state.Verified) != 0 || len(workload.resets) != 0 {
+	if state.Phase != "diagnosing" || len(state.Verified) != 0 || len(workload.resets) != 0 ||
+		len(adapter.dispatches) != 0 || adapter.verifications != 2 {
 		t.Fatalf("frontend uncertainty caused premature reset or verification: %+v", state)
 	}
 	step(t, controller)
-	if !controller.Snapshot().Since.Equal(state.Since) {
-		t.Fatal("repeated verification restarted the diagnosis deadline")
+	if !controller.Snapshot().Since.Equal(state.Since) || adapter.verifications != 2 {
+		t.Fatal("diagnosis deadline restarted or inference probe repeated")
 	}
 	adapter.status = statuses("unhealthy", "dead", "unhealthy", "unhealthy")
 	adapter.verifyErr = nil
@@ -144,14 +145,14 @@ func TestMissingFrontendWaitsForEngineDiagnosisBeforeReset(t *testing.T) {
 func TestUnresolvedFrontendFaultEventuallyResets(t *testing.T) {
 	controller, adapter, workload := setup(t)
 	adapter.status = statuses("healthy", "unknown", "healthy", "healthy")
-	adapter.verifyErr = errors.New("collective stalled")
+	// Even a successful peer probe cannot resolve an unknown rank.
 	step(t, controller)
 	state := controller.Snapshot()
 	state.Since = time.Now().Add(-2 * time.Minute)
 	controller.set(state)
 	step(t, controller)
 	if controller.Snapshot().Phase != "resetting" || len(workload.resets) != 1 {
-		t.Fatal("unresolved inference failure did not reach bounded reset")
+		t.Fatal("unresolved frontend state did not reach bounded reset")
 	}
 }
 

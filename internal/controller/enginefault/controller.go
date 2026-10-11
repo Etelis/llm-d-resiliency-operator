@@ -206,7 +206,7 @@ func (controller *Controller) beginReset(ctx context.Context, state State, reaso
 }
 
 //nolint:gocritic // Verification must not mutate concurrently published controller state.
-func (controller *Controller) verify(ctx context.Context, state State, ranks []int, allowDiagnosis bool) error {
+func (controller *Controller) verify(ctx context.Context, state State, ranks []int) error {
 	state.Verified = nil
 	controller.set(state)
 	err := controller.Adapter.Verify(ctx, state.Group, ranks)
@@ -214,9 +214,6 @@ func (controller *Controller) verify(ctx context.Context, state State, ranks []i
 		return ctx.Err()
 	}
 	if err != nil {
-		if allowDiagnosis {
-			return controller.waitForDiagnosis(ctx, state, "frontend verification failed: "+err.Error())
-		}
 		return controller.beginReset(ctx, state, "inference verification failed: "+err.Error())
 	}
 	// Verify against current workload identities as well as engine outputs.
@@ -235,9 +232,6 @@ func (controller *Controller) verify(ctx context.Context, state State, ranks []i
 		return controller.beginReset(ctx, state, reason)
 	}
 	if !allHealthy(state.Status, ranks) {
-		if allowDiagnosis {
-			return controller.waitForDiagnosis(ctx, state, "engine health changed during frontend verification")
-		}
 		return controller.beginReset(ctx, state, "engine health changed during verification")
 	}
 	state.Phase = "serving"
@@ -245,20 +239,6 @@ func (controller *Controller) verify(ctx context.Context, state State, ranks []i
 	state.DiscoveryUnavailableSince = time.Time{}
 	state.Verified = slices.Clone(ranks)
 	state.Reason = "inference verified"
-	return controller.persist(ctx, state)
-}
-
-//nolint:gocritic // Preserve the original diagnosis deadline across repeated verification failures.
-func (controller *Controller) waitForDiagnosis(ctx context.Context, state State, reason string) error {
-	now := time.Now().UTC()
-	if state.Phase != "diagnosing" {
-		state.Phase = "diagnosing"
-		state.Since = now
-	}
-	if now.Sub(state.Since) > controller.Config.DiagnosisTimeout {
-		return controller.beginReset(ctx, state, "diagnosis deadline exceeded: "+reason)
-	}
-	state.Reason = reason
 	return controller.persist(ctx, state)
 }
 
@@ -295,7 +275,7 @@ func (controller *Controller) Step(ctx context.Context) error {
 		state.Instruction = ""
 		state.Status = controller.Adapter.EngineStatus(ctx, group)
 		if allHealthy(state.Status, activeRanks(state)) {
-			return controller.verify(ctx, state, activeRanks(state), false)
+			return controller.verify(ctx, state, activeRanks(state))
 		}
 		return nil
 	}
@@ -357,7 +337,7 @@ func (controller *Controller) Step(ctx context.Context) error {
 	active := activeRanks(state)
 	if state.Phase == "starting" {
 		if allHealthy(state.Status, active) {
-			return controller.verify(ctx, state, active, false)
+			return controller.verify(ctx, state, active)
 		}
 		// Startup time depends on the model and the cluster, so waiting has no
 		// deadline. A failed or hung start is restarted by Kubernetes (container
@@ -369,15 +349,9 @@ func (controller *Controller) Step(ctx context.Context) error {
 	}
 
 	decision := Decide(state.Status, state.Excluded)
-	if decision.Action == "frontend_degraded" {
-		if state.Phase == "serving" && slices.Equal(state.Verified, decision.Participants) {
-			return nil
-		}
-		return controller.verify(ctx, state, decision.Participants, true)
-	}
 	if decision.Action == "healthy" {
 		if state.Phase != "serving" || len(state.Verified) != len(active) {
-			return controller.verify(ctx, state, active, false)
+			return controller.verify(ctx, state, active)
 		}
 		return nil
 	}
@@ -489,7 +463,7 @@ func (controller *Controller) finishRound(ctx context.Context, state State, now 
 		state.Excluded = append(state.Excluded, state.Round.Removed...)
 		slices.Sort(state.Excluded)
 		state.Excluded = slices.Compact(state.Excluded)
-		return controller.verify(ctx, state, state.Round.Participants, false)
+		return controller.verify(ctx, state, state.Round.Participants)
 	}
 	if now.Sub(state.Since) > controller.Config.ApplyTimeout {
 		return controller.beginReset(ctx, state, "FT completion deadline exceeded")

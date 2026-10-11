@@ -52,20 +52,6 @@ func Decide(allStatuses []engine.RankStatus, excluded []int) Decision {
 		return Decision{Action: "healthy", Reason: "all active ranks healthy"}
 	}
 	if !fault {
-		// Losing an API is not necessarily losing its EngineCore/EP worker.
-		// Verify inference on healthy peers without changing EP membership.
-		participants := []int{}
-		for _, status := range active {
-			if status.Status == "healthy" {
-				participants = append(participants, status.Rank)
-			}
-		}
-		if len(participants) > 0 {
-			return Decision{
-				Action: "frontend_degraded", Participants: participants,
-				Reason: "API unavailable; verify peer inference without changing EP membership",
-			}
-		}
 		return Decision{Action: "wait", Reason: "unknown frontend state; no removal evidence"}
 	}
 	if len(dead) == 0 && allUnhealthy {
