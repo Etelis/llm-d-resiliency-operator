@@ -14,7 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	inferencev1alpha1 "github.com/llm-d/llm-d-resiliency-operator/apis/inference/v1alpha1"
+	inferencev1alpha1 "github.com/llm-d-incubation/llm-d-resiliency-operator/apis/inference/v1alpha1"
 )
 
 // Reconciler reconciles a RecoveryRequest object
