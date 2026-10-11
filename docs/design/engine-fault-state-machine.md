@@ -128,15 +128,3 @@ H = healthy, U = unhealthy.
 | t + 75 s | H H diagnosing H | reset → `resetting` |
 | later | new group | `starting` → `serving` |
 | 4th time in 30 min | | `intervention_required` |
-
----
-
-## Known Gaps
-
-- A model that takes over 10 minutes to load ends in `intervention_required`,
-  and that same group never leaves it, even once healthy.
-- `intervention_required` raises no Event or metric, and doesn't try again
-  once the reset budget refills.
-- A failed journal write still changes the in-memory state, and `resetting`
-  can repeat the delete without a saved write.
-- Removed ranks only come back with a new group.
