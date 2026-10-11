@@ -1,29 +1,27 @@
 # Architecture
 
-IRO (inference resiliency operator) is one controller-runtime binary with two
-recovery paths.
+IRO (inference resiliency operator) is one controller-runtime binary. Engine
+fault recovery runs inside it, on the elected replica.
 
 ```mermaid
 flowchart TB
     subgraph iro["IRO operator Pod"]
         mgr["manager<br/>leader election, metrics :8080, probes :8081"]
-        rr["RecoveryRequest controller"]
         ef["Engine fault recovery<br/>opt-in, leader only"]
-        mgr --> rr
         mgr --> ef
     end
-    det["fault detector"] -->|creates| crd["RecoveryRequest"]
-    rr -->|watches| crd
-    rr -->|"relabels serving Pods"| pods["inference Pods"]
     ef -->|"engine adapter"| ranks["engine ranks"]
     ef -->|"workload adapter"| lws["LWS, Pods, journal"]
     router["Router (EPP)"] --> ranks
 ```
 
-| Path | Trigger | Scope | IRO acts on | State kept in | Docs |
-| --- | --- | --- | --- | --- | --- |
-| RecoveryRequest | a request from a fault detector | node or device | Pod serving labels | the request's status | [CRDs](crds.md) |
-| Engine fault recovery | ranks report faults | one engine group | the engine's FT API, the group's leader Pod | journal ConfigMap | [design](design/engine-fault-recovery.md) |
+| Part | Job | Doc |
+| --- | --- | --- |
+| Recovery controller | The state machine, one tick per second | [State machine](design/engine-fault-state-machine.md) |
+| Engine adapter | Talks to the engine ranks | [Adapters](design/adapters.md), [vLLM](engines/vllm.md) |
+| Workload adapter | Finds the group, recreates it, keeps the journal | [Adapters](design/adapters.md), [LWS](workloads/lws.md) |
+| Journal | Saved state for restarts | [Journal and failover](design/journal-and-failover.md) |
+| Router (EPP) | Routes traffic on each rank's own health | [vLLM routing](engines/vllm.md#routing) |
 
 ---
 
@@ -36,16 +34,15 @@ sequenceDiagram
     participant L as Lease
     M->>M: parse flags
     M->>G: create manager
-    M->>G: register RecoveryRequest controller
     M->>G: register engine fault runner, if enabled
     M->>G: start
     G->>L: acquire, if --leader-elect
     L-->>G: leader
-    G->>G: start controllers and runner
+    G->>G: start the runner
 ```
 
-With leader election on, both paths run only on the leader. Engine fault
-recovery won't start without it.
+The runner only runs on the leader, and engine fault recovery won't start
+without leader election.
 
 ---
 
@@ -54,8 +51,6 @@ recovery won't start without it.
 | Package | Role |
 | --- | --- |
 | `cmd` | entry point, flags, manager |
-| `apis/inference/v1alpha1` | RecoveryRequest types |
-| `internal/controller/recoveryrequest` | RecoveryRequest controller |
 | `internal/controller/enginefault` | recovery controller, decisions, runner, setup |
 | `internal/engine` | engine contract and shared types |
 | `internal/engine/vllm` | vLLM adapter |
@@ -67,8 +62,8 @@ recovery won't start without it.
 
 ## Deployment
 
-- One Deployment with its ServiceAccount and a ClusterRole for RecoveryRequest
-  and nodes ([deploy/kubernetes](../deploy/kubernetes)).
-- The engine fault overlay ([deploy/vllm-ft](../deploy/vllm-ft/README.md)) adds
-  a namespaced Role for one LWS and the flags to turn it on.
+- The base manifests are in [deploy/kubernetes](../deploy/kubernetes).
+- The overlay in [deploy/vllm-ft](../deploy/vllm-ft/README.md) adds a
+  namespaced Role for one LWS and the flags that turn engine fault recovery
+  on.
 - One IRO instance handles one engine group today.

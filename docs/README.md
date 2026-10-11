@@ -12,7 +12,6 @@
 | see the LWS side and its RBAC | [LeaderWorkerSet workload](workloads/lws.md) |
 | debug a stuck group | [Operations](operations.md) |
 | look up a flag | [Configuration](configuration.md) |
-| use RecoveryRequest | [CRDs](crds.md) |
 | check pinned dependency versions | [Upstream versions](upstream-versions.md) |
 
 ```text
@@ -31,6 +30,5 @@ docs/
 │   └── lws.md
 ├── operations.md
 ├── configuration.md
-├── crds.md
 └── upstream-versions.md
 ```

@@ -12,15 +12,6 @@ Everything is set with operator flags. Engine fault recovery is off unless
 | `--leader-elect` | `false` | Lease-based leader election. Required for engine fault recovery. |
 | `-v` and other klog flags | | Log verbosity |
 
-## RecoveryRequest
-
-| Flag | Default | Purpose |
-| --- | --- | --- |
-| `--pod-namespace` | `default` | Namespace of the Pods to relabel |
-| `--pod-label-key` | `llm-d.ai/inference-serving` | Label selector for those Pods |
-
-See [CRDs](crds.md).
-
 ## Engine Fault Recovery
 
 | Flag | Default | Purpose |

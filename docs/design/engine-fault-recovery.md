@@ -31,7 +31,7 @@ in-place recovery fails.
 
 - Routing. The router (EPP) owns traffic and reads each rank's own health.
 - Adding removed ranks back. Full capacity returns with a new group.
-- Node or device repair. That's the [RecoveryRequest](../crds.md) path.
+- Node or device repair.
 
 ---
 
@@ -122,7 +122,6 @@ and a deploy overlay. Opt-in with `--enable-vllm-ft`.
 - A startup timeout flag, and letting a slow group recover from
   `intervention_required`.
 - Keep in-memory state unchanged when a journal write fails.
-- A Lease per group, and a switch to turn off RecoveryRequest, for one IRO per
-  LWS.
+- A Lease named after the group, for one IRO per LWS.
 - Choose the engine through configuration instead of always vLLM.
 - More than one group per LWS.
