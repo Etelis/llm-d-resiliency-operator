@@ -25,7 +25,9 @@ in the [state machine](engine-fault-state-machine.md).
 
 - **Only `dead` removes a rank.** Anything else may still come back, so it gets
   a bounded wait instead.
-- **`unknown` alone isn't a fault.** A lost API doesn't mean a lost engine.
+- **`unknown` doesn't prove engine loss.** It returns `wait`, even when peers
+  are healthy. IRO diagnoses without changing membership and resets if the
+  diagnosis deadline expires.
 - **Survivors must all be plain `unhealthy` before `scale_down`.** Otherwise
   the engine hasn't finished classifying the fault.
 - **Capacity is the engine's call.** The engine checks it can still run the

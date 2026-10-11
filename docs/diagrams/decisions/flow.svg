@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 930" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">How the decision is made</title>
-  <desc id="desc">Checked top to bottom, first match wins. No active ranks: reset. Any FT failed: reset. All plain healthy: healthy. No fault signal: frontend_degraded if a rank is healthy, else wait. No dead rank: retry if all plain unhealthy, else wait. No survivors: reset. Survivors all plain unhealthy: scale_down, else wait.</desc>
+  <desc id="desc">Checked top to bottom, first match wins. No active ranks: reset. Any FT failed: reset. All plain healthy: healthy. No fault signal: wait for engine diagnosis. No dead rank: retry if all plain unhealthy, else wait. No survivors: reset. Survivors all plain unhealthy: scale_down, else wait.</desc>
   <defs>
     <marker id="arrow-dark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A3A3A"/></marker>
     <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2C8549"/></marker>
@@ -54,22 +54,12 @@
   <text x="1280" y="705" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">reset</text>
   <text x="1396" y="705" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">via the budget</text>
   <!-- sub-questions -->
-  <path d="M465,465 L668,465" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
+  <path d="M465,465 L1179,465" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
   <text x="479" y="456" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
-  <rect x="670" y="435" width="300" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>
-  <text x="820" y="471" font-size="18" font-weight="700" text-anchor="middle" fill="#1E1E1E">Any healthy rank?</text>
-  <path d="M970,465 L1085,465 L1085,433 L1179,433" fill="none" stroke="#1F7A85" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
-  <path d="M1085,465 L1085,497 L1179,497" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
-  <text x="1099" y="424" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">yes</text>
-  <text x="1099" y="488" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
-  <rect x="1180" y="411" width="200" height="44" rx="22" fill="#DFF1F3" stroke="#1F7A85" stroke-width="2.5"/>
-  <text x="1280" y="438" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">frontend_degraded</text>
-  <text x="1396" y="429" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">check the</text>
-  <text x="1396" y="447" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">healthy ranks</text>
-  <rect x="1180" y="475" width="200" height="44" rx="22" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
-  <text x="1280" y="502" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
-  <text x="1396" y="493" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">stay in diagnosing,</text>
-  <text x="1396" y="511" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">reset at 75 s</text>
+  <rect x="1180" y="443" width="200" height="44" rx="22" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
+  <text x="1280" y="470" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
+  <text x="1396" y="457" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">bounded diagnosis,</text>
+  <text x="1396" y="475" font-size="14" font-weight="400" text-anchor="start" fill="#5A5A5A">reset at 75 s</text>
   <path d="M465,590 L668,590" fill="none" stroke="#3A3A3A" stroke-width="2.5" marker-end="url(#arrow-dark)"/>
   <text x="479" y="581" font-size="15" font-weight="700" text-anchor="start" fill="#5A5A5A">no</text>
   <rect x="670" y="560" width="300" height="60" rx="12" fill="#FFFFFF" stroke="#3A3A3A" stroke-width="2.5"/>

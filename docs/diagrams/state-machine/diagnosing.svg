@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 612" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">diagnosing state</title>
-  <desc id="desc">diagnosing is entered from serving when a rank reports a fault or the healthy ranks fail a request. On entry it starts a 75 second clock and may probe idle ranks once. Each tick it checks, in order: healthy again, reset decided, deadline, still waiting, a retry too soon, then saves and sends a round.</desc>
+  <desc id="desc">diagnosing is entered from serving when a rank is unknown or reports a fault. On entry it starts a 75 second clock and may probe idle ranks once. Each tick it checks, in order: healthy again, reset decided, deadline, still waiting, a retry too soon, then saves and sends a round.</desc>
   <defs>
     <marker id="arrow-dark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A3A3A"/></marker>
     <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2C8549"/></marker>
@@ -25,7 +25,7 @@
   <text x="570" y="325" font-size="14" font-weight="700" text-anchor="start" fill="#5A5A5A" letter-spacing="2">EVERY TICK, IN ORDER</text>
   <circle cx="584" cy="355" r="13" fill="#B97A10"/>
   <text x="584" y="360" font-size="15" font-weight="700" text-anchor="middle" fill="#FFFFFF">1</text>
-  <text x="610" y="361" font-size="19" font-weight="400" text-anchor="start" fill="#1E1E1E">Healthy again, or only an API down → verify</text>
+  <text x="610" y="361" font-size="19" font-weight="400" text-anchor="start" fill="#1E1E1E">All active ranks healthy again → verify</text>
   <circle cx="584" cy="385" r="13" fill="#B97A10"/>
   <text x="584" y="390" font-size="15" font-weight="700" text-anchor="middle" fill="#FFFFFF">2</text>
   <text x="610" y="391" font-size="19" font-weight="400" text-anchor="start" fill="#1E1E1E">Reset decided (FT failed, no ranks)</text>
@@ -50,8 +50,8 @@
   <rect x="60" y="437" width="190" height="38" rx="19" fill="#E2F1E7" stroke="#2C8549" stroke-width="2.5"/>
   <text x="155" y="461" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">serving</text>
   <path d="M251,456 L538,456" fill="none" stroke="#2C8549" stroke-width="2.5" marker-end="url(#arrow-green)"/>
-  <text x="396" y="444" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">API down, and the rest</text>
-  <text x="396" y="482" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">fail a request</text>
+  <text x="396" y="444" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">a rank is unknown</text>
+  <text x="396" y="482" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">even if peers respond</text>
   <!-- goes to -->
   <text x="1160" y="75" font-size="14" font-weight="700" text-anchor="start" fill="#5A5A5A" letter-spacing="2">GOES TO</text>
   <path d="M1101,180 L1299,180" fill="none" stroke="#2C8549" stroke-width="2.5" marker-end="url(#arrow-green)"/>

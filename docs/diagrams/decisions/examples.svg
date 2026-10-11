@@ -42,10 +42,10 @@
   <text x="355" y="179" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">healthy</text>
   <rect x="420" y="154" width="110" height="40" rx="8" fill="#F0F0F0" stroke="#8A8A8A" stroke-width="2"/>
   <text x="475" y="179" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">unknown</text>
-  <path d="M531,174 L599,174" fill="none" stroke="#1F7A85" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
-  <rect x="600" y="154" width="320" height="40" rx="20" fill="#DFF1F3" stroke="#1F7A85" stroke-width="2.5"/>
-  <text x="760" y="179" font-size="15" font-weight="700" text-anchor="middle" fill="#1E1E1E">frontend_degraded · check 0 1 2</text>
-  <text x="950" y="180" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">only an API is down</text>
+  <path d="M531,174 L599,174" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
+  <rect x="600" y="154" width="320" height="40" rx="20" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
+  <text x="760" y="179" font-size="15" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
+  <text x="950" y="180" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">unknown rank; bounded diagnosis</text>
   <rect x="40" y="208" width="1520" height="56" rx="8" fill="#FAFAFA"/>
   <rect x="60" y="216" width="110" height="40" rx="8" fill="#F0F0F0" stroke="#8A8A8A" stroke-width="2"/>
   <text x="115" y="241" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">unknown</text>
@@ -58,7 +58,7 @@
   <path d="M531,236 L599,236" fill="none" stroke="#7A7A7A" stroke-width="2.5" marker-end="url(#arrow-gray)"/>
   <rect x="600" y="216" width="320" height="40" rx="20" fill="#EDEDED" stroke="#7A7A7A" stroke-width="2.5"/>
   <text x="760" y="241" font-size="16" font-weight="700" text-anchor="middle" fill="#1E1E1E">wait</text>
-  <text x="950" y="242" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">nothing healthy to check</text>
+  <text x="950" y="242" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">unknown ranks; bounded diagnosis</text>
   <rect x="60" y="278" width="110" height="40" rx="8" fill="#FCEBD9" stroke="#C9711C" stroke-width="2"/>
   <text x="115" y="303" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">unhealthy</text>
   <rect x="180" y="278" width="110" height="40" rx="8" fill="#FCEBD9" stroke="#C9711C" stroke-width="2"/>

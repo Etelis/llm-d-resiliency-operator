@@ -46,8 +46,9 @@ write nothing.
 
 ![serving state](../diagrams/state-machine/serving.svg)
 
-An API that stops answering, with nothing else wrong, doesn't change
-membership as long as the healthy ranks still answer.
+An API that stops answering clears verification and moves IRO to
+`diagnosing`. Membership stays unchanged while the engine classifies the
+fault. A successful peer probe alone cannot restore `serving`.
 
 ### diagnosing
 
