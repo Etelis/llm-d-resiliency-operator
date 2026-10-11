@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 580" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">What the decision looks at</title>
+  <desc id="desc">Five rank states. healthy: serving, not a fault. unhealthy: faulted but alive, a fault, can't remove. diagnosing: the engine is still working it out, a fault, can't remove. dead: gone for this process, a fault, the only state that can remove a rank. unknown: IRO couldn't read the rank, not a fault. Signals on top: process exit evidence and FT operations count as faults but never remove a rank; FT failed resets. Removed ranks are ignored and must keep reporting dead or unknown.</desc>
+  <defs>
+    <marker id="arrow-dark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A3A3A"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2C8549"/></marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C0443F"/></marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3F6BA8"/></marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8E5BA6"/></marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B97A10"/></marker>
+    <marker id="arrow-maroon" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8B1E1E"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7A7A7A"/></marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F7A85"/></marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C9711C"/></marker>
+    <marker id="arrow-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5E52B8"/></marker>
+  </defs>
+  <rect x="5" y="5" width="1590" height="570" rx="10" fill="#FFFFFF" stroke="#A46BAA" stroke-width="10"/>
+  <text x="50" y="58" font-size="14" font-weight="700" text-anchor="start" fill="#5A5A5A" letter-spacing="2">RANK STATES</text>
+  <rect x="40" y="76" width="290" height="222" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="100" y="99" width="170" height="42" rx="8" fill="#E2F1E7" stroke="#2C8549" stroke-width="2"/>
+  <text x="185" y="125" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">healthy</text>
+  <text x="185" y="174" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">serving</text>
+  <text x="66" y="241" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">counts as a fault</text>
+  <text x="304" y="241" font-size="15" font-weight="700" text-anchor="end" fill="#8A8A8A">no</text>
+  <text x="66" y="273" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">can remove the rank</text>
+  <text x="304" y="273" font-size="15" font-weight="700" text-anchor="end" fill="#8A8A8A">no</text>
+  <rect x="345" y="76" width="290" height="222" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="405" y="99" width="170" height="42" rx="8" fill="#FCEBD9" stroke="#C9711C" stroke-width="2"/>
+  <text x="490" y="125" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">unhealthy</text>
+  <text x="490" y="174" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">faulted,</text>
+  <text x="490" y="196" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">still alive</text>
+  <text x="371" y="241" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">counts as a fault</text>
+  <text x="609" y="241" font-size="15" font-weight="700" text-anchor="end" fill="#B97A10">yes</text>
+  <text x="371" y="273" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">can remove the rank</text>
+  <text x="609" y="273" font-size="15" font-weight="700" text-anchor="end" fill="#8A8A8A">no</text>
+  <rect x="650" y="76" width="290" height="222" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="710" y="99" width="170" height="42" rx="8" fill="#E9E6F8" stroke="#5E52B8" stroke-width="2"/>
+  <text x="795" y="125" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">diagnosing</text>
+  <text x="795" y="174" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">engine still</text>
+  <text x="795" y="196" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">working it out</text>
+  <text x="676" y="241" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">counts as a fault</text>
+  <text x="914" y="241" font-size="15" font-weight="700" text-anchor="end" fill="#B97A10">yes</text>
+  <text x="676" y="273" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">can remove the rank</text>
+  <text x="914" y="273" font-size="15" font-weight="700" text-anchor="end" fill="#8A8A8A">no</text>
+  <rect x="955" y="76" width="290" height="222" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="1015" y="99" width="170" height="42" rx="8" fill="#F6D9D6" stroke="#A8322A" stroke-width="2"/>
+  <text x="1100" y="125" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">dead</text>
+  <text x="1100" y="174" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">gone for</text>
+  <text x="1100" y="196" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">this process</text>
+  <text x="981" y="241" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">counts as a fault</text>
+  <text x="1219" y="241" font-size="15" font-weight="700" text-anchor="end" fill="#B97A10">yes</text>
+  <text x="981" y="273" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">can remove the rank</text>
+  <text x="1219" y="273" font-size="15" font-weight="700" text-anchor="end" fill="#A8322A">yes</text>
+  <rect x="1260" y="76" width="290" height="222" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="1320" y="99" width="170" height="42" rx="8" fill="#F0F0F0" stroke="#8A8A8A" stroke-width="2"/>
+  <text x="1405" y="125" font-size="15" font-weight="600" text-anchor="middle" fill="#1E1E1E">unknown</text>
+  <text x="1405" y="174" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">IRO couldn't</text>
+  <text x="1405" y="196" font-size="16" font-weight="400" text-anchor="middle" fill="#5A5A5A">read the rank</text>
+  <text x="1286" y="241" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">counts as a fault</text>
+  <text x="1524" y="241" font-size="15" font-weight="700" text-anchor="end" fill="#8A8A8A">no</text>
+  <text x="1286" y="273" font-size="15" font-weight="400" text-anchor="start" fill="#1E1E1E">can remove the rank</text>
+  <text x="1524" y="273" font-size="15" font-weight="700" text-anchor="end" fill="#8A8A8A">no</text>
+  <text x="50" y="350" font-size="14" font-weight="700" text-anchor="start" fill="#5A5A5A" letter-spacing="2">ON TOP OF THE STATE</text>
+  <rect x="40" y="368" width="490" height="160" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <circle cx="78" cy="408" r="13" fill="#C0443F"/>
+  <text x="78" y="414" font-size="17" font-weight="700" text-anchor="middle" fill="#FFFFFF">!</text>
+  <text x="104" y="415" font-size="19" font-weight="700" text-anchor="start" fill="#1E1E1E">Process exit evidence</text>
+  <text x="66" y="460" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">From a small observer in each Pod.</text>
+  <text x="66" y="486" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">Counts as a fault, never removes the rank.</text>
+  <rect x="555" y="368" width="490" height="160" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="579" y="394" width="30" height="28" rx="6" fill="#FCF0D6" stroke="#B97A10" stroke-width="2"/>
+  <text x="594" y="414" font-size="12" font-weight="700" text-anchor="middle" fill="#B97A10">FT</text>
+  <text x="621" y="415" font-size="19" font-weight="700" text-anchor="start" fill="#1E1E1E">FT operation running</text>
+  <text x="581" y="460" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">Counts as a fault: the rank isn't plain.</text>
+  <text x="581" y="486" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">FT failed on any rank → reset.</text>
+  <rect x="1070" y="368" width="490" height="160" rx="14" fill="#FFFFFF" stroke="#DADADA" stroke-width="1.5"/>
+  <rect x="1094" y="391" width="100" height="34" rx="8" fill="#FFFFFF" stroke="#8A8A8A" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="1144" y="413" font-size="15" font-weight="400" text-anchor="middle" fill="#5A5A5A">removed</text>
+  <text x="1210" y="415" font-size="19" font-weight="700" text-anchor="start" fill="#1E1E1E">Removed rank</text>
+  <text x="1096" y="460" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">Ignored by the decision. Must keep</text>
+  <text x="1096" y="486" font-size="16" font-weight="400" text-anchor="start" fill="#5A5A5A">reporting dead or unknown, or reset.</text>
+  <text x="50" y="558" font-size="15" font-weight="400" text-anchor="start" fill="#5A5A5A">Plain healthy or plain unhealthy: no exit evidence and no FT operation running.</text>
+</svg>
