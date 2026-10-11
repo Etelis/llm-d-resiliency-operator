@@ -16,6 +16,7 @@ import (
 	"github.com/llm-d-incubation/llm-d-resiliency-operator/internal/controller/enginefault"
 	"github.com/llm-d-incubation/llm-d-resiliency-operator/internal/controller/recoveryrequest"
 	"github.com/llm-d-incubation/llm-d-resiliency-operator/internal/engine"
+	"github.com/llm-d-incubation/llm-d-resiliency-operator/internal/engine/vllm"
 )
 
 var (
@@ -76,7 +77,7 @@ func main() {
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		klog.Fatalf("unable to set up health check: %v", err)
 	}
-	adapters := map[string]engine.Adapter{}
+	adapters := map[string]engine.Adapter{"vllm": vllm.New()}
 	if err := engineOptions.Setup(mgr, adapters); err != nil {
 		klog.Fatalf("unable to configure engine FT: %v", err)
 	}
