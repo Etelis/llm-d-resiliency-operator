@@ -2,189 +2,85 @@
 
 - **Revision**: 1
 - **Last Updated**: 2026-10-11
-- **PR**: [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11)
 
 ---
 
-Every state the recovery controller can be in, how it gets there and how it
-leaves. The why is in the [design overview](engine-fault-recovery.md). What
-picks the next step in `serving` and `diagnosing` is in
+Every state the recovery controller can be in. Read the overview top to bottom:
+the further down, the more drastic the action. Each state is then expanded on
+its own. The why is in the [design overview](engine-fault-recovery.md), and
+what picks the next step in `serving` and `diagnosing` is in
 [decisions](engine-fault-decisions.md).
 
-## State Machine
+## Overview
 
-```mermaid
-stateDiagram-v2
-    state needs_reset <<choice>>
-    [*] --> starting: first start or new group
-    starting --> serving: all ranks healthy and verified
-    starting --> intervention_required: not healthy after 10 min
-    serving --> diagnosing: fault reported
-    diagnosing --> serving: healthy again and verified
-    diagnosing --> applying: retry or scale_down sent
-    applying --> serving: round finished and verified
-    starting --> needs_reset: verification failed
-    serving --> needs_reset: verification failed
-    diagnosing --> needs_reset: reset decision or deadline
-    applying --> needs_reset: round failed or deadline
-    needs_reset --> resetting: under 3 resets in 30 min
-    needs_reset --> intervention_required: budget used up
-    resetting --> starting: replacement group found
-    resetting --> intervention_required: old Pods still there after 10 min
-    intervention_required --> serving: new group, healthy and verified
-```
+![Engine fault state machine](../diagrams/state-machine/overview.svg)
 
-The diamond is the reset budget: at most 3 resets in any 30 minutes.
+Three rules hold everywhere:
 
-### From any state
-
-| What happens | Result |
-| --- | --- |
-| Kubernetes can't be read | Same state, same deadlines, no action. |
-| ...for 10 minutes | `intervention_required` |
-| The group is replaced (new Pods or containers) | `starting` |
-| The group is only partly replaced | `starting`, waits up to 10 minutes for the rest |
-| A removed rank reports alive | reset |
-| The operator restarts or a new leader takes over | Same state, restored from the [journal](journal-and-failover.md). Verification is redone. |
+- `serving` is reached only after a real request succeeds.
+- Every reset goes through the budget: 3 in 30 minutes, then
+  `intervention_required`.
+- Deadlines are saved in the [journal](journal-and-failover.md), so an operator
+  restart doesn't extend them.
 
 ---
 
 ## States
 
+Each card shows where the state comes from, what IRO does on entry and on every
+tick (checked in order), and where each check leads.
+
 ### starting
 
-The group isn't proven yet: first start, a group IRO hasn't seen before, or the
-replacement after a reset. Each tick IRO reads every rank. Once all active
-ranks are healthy, it sends each one a real request (verification).
+The group isn't proven yet.
 
-| Way out | Next |
-| --- | --- |
-| All active ranks healthy, verification passes | `serving` |
-| Verification fails | reset |
-| Still not healthy after 10 minutes | `intervention_required` |
+![starting state](../diagrams/state-machine/starting.svg)
 
 After a reset, the 10 minutes count from the reset itself, so they include Pod
 restart and model load.
 
 ### serving
 
-Every active rank is healthy and IRO has seen each one answer a request. The
-group spends almost all its time here. Healthy ticks change nothing and write
-nothing.
+Where the group spends almost all its time. Healthy ticks change nothing and
+write nothing.
 
-| Way out | Next |
-| --- | --- |
-| A rank reports a fault | `diagnosing` |
-| An API stops answering and the healthy ranks fail a request | `diagnosing` |
-| Re-verification fails, for example right after an operator restart | reset |
+![serving state](../diagrams/state-machine/serving.svg)
 
-An API that stops answering, with nothing else wrong, doesn't leave `serving`
-as long as the healthy ranks still answer. Membership doesn't change.
+An API that stops answering, with nothing else wrong, doesn't change
+membership as long as the healthy ranks still answer.
 
 ### diagnosing
 
-Something is wrong and IRO waits for the engine to say what. The first tick
-only starts a 75 s clock and saves. If the engine hasn't classified the fault
-yet, IRO also sends one request to the healthy ranks, because an idle rank may
-only notice a dead peer once it has work.
+Something is wrong and IRO waits for the engine to say what.
 
-Every later tick:
+![diagnosing state](../diagrams/state-machine/diagnosing.svg)
 
-```mermaid
-flowchart TD
-    d["decide from rank states"] --> h{"healthy or<br/>frontend_degraded?"}
-    h -->|yes| v(["verify, then serving"])
-    h -->|no| r{"reset decided?"}
-    r -->|yes| x(["reset"])
-    r -->|no| t{"75 s passed?"}
-    t -->|yes| x
-    t -->|no| w{"wait, or under 2 s in?"}
-    w -->|yes| stay(["stay"])
-    w -->|no| rr{"retry within 2 min<br/>of the last one?"}
-    rr -->|yes| x
-    rr -->|no| send(["save the round, applying, send it"])
-```
-
-| Way out | Next |
-| --- | --- |
-| Healthy again, verification passes | `serving` |
-| `retry` or `scale_down` decided, at least 2 s in | `applying` |
-| Reset decided (FT failed, no ranks left) | reset |
-| 75 s without a usable answer | reset |
-| A second `retry` within 2 minutes of the last one | reset |
+The request on entry is there because an idle rank may only notice a dead peer
+once it has work to do.
 
 ### applying
 
-A recovery round was saved, then sent to the participating ranks. IRO waits for
-it to finish. It never sends the same round twice, even after a restart.
+A recovery round is in flight.
 
-```mermaid
-flowchart TD
-    s["read the participants"] --> f{"one dead or<br/>FT failed?"}
-    f -->|yes| x(["reset"])
-    f -->|no| c{"one running a<br/>different round?"}
-    c -->|yes| x
-    c -->|no| h{"all healthy?"}
-    h -->|yes| v(["mark removed ranks,<br/>verify, then serving"])
-    h -->|no| t{"90 s passed?"}
-    t -->|yes| x
-    t -->|no| stay(["stay, never re-send"])
-```
+![applying state](../diagrams/state-machine/applying.svg)
 
-| Way out | Next |
-| --- | --- |
-| Every participant healthy, verification passes | `serving`, removed ranks stay out |
-| A participant didn't accept the round | reset |
-| A participant died or reported FT failed | reset |
-| A participant is running a different round | reset |
-| Not finished after 90 s | reset |
+After a restart, the new leader checks the saved round against the round IDs
+the ranks report, and never sends it again.
 
 ### resetting
 
-IRO deleted the group's leader Pod and waits for the workload to come back as a
-completely new group. The workload controller recreates every Pod in the group
-when the leader goes.
+The group is being recreated.
 
-```mermaid
-flowchart TD
-    d["look at the workload"] --> e{"readable?"}
-    e -->|no| k(["stay, up to 10 min of failures"])
-    e -->|yes| o{"any old Pod left?"}
-    o -->|no| st(["starting, clean slate"])
-    o -->|yes| t{"10 min since the reset?"}
-    t -->|yes| ir(["intervention_required"])
-    t -->|no| del(["delete the old leader again"])
-```
+![resetting state](../diagrams/state-machine/resetting.svg)
 
-| Way out | Next |
-| --- | --- |
-| No Pod from the old group is left | `starting`, removed ranks and rounds cleared |
-| Old Pods still there after 10 minutes | `intervention_required` |
-
-The repeated delete always names the old leader's UID, so it can never hit the
-new leader. The reset count carries over to the new group.
+The repeated delete always names the old leader's UID, so it can't hit the new
+leader. The reset count carries over to the new group.
 
 ### intervention_required
 
 IRO has stopped acting on this group and waits for someone to replace it.
-Nothing is deleted on the way in. It gets here when:
 
-- a 4th reset was needed within 30 minutes,
-- old Pods didn't go away after a reset,
-- a partial replacement didn't finish,
-- the group didn't get healthy in 10 minutes, or
-- Kubernetes couldn't be read for 10 minutes.
-
-```mermaid
-flowchart LR
-    ir(["intervention_required"]) --> q{"new group with<br/>no shared Pods?"}
-    q -->|no| ir
-    q -->|yes| h{"all ranks healthy?"}
-    h -->|"not yet"| ir
-    h -->|yes| v{"verification passes?"}
-    v -->|yes| s(["serving"])
-    v -->|no| r(["reset"])
-```
+![intervention_required state](../diagrams/state-machine/intervention-required.svg)
 
 How to get a group out of here is in [operations](../operations.md).
 
@@ -200,8 +96,6 @@ How to get a group out of here is in [operations](../operations.md).
 | Startup | 10 min | none | `starting`, `resetting`, partial replacement, Kubernetes outage. |
 | Retry window | 2 min | none | A second `retry` inside it resets instead. |
 | Reset budget | 3 per 30 min | none | Then `intervention_required`. |
-
-Deadlines are timestamps in the journal, so a restart doesn't extend them.
 
 ---
 

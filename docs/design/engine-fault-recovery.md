@@ -2,7 +2,6 @@
 
 - **Revision**: 1
 - **Last Updated**: 2026-10-11
-- **PR**: [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11)
 - **Proposal**: [IRO proposal](https://docs.google.com/document/d/1Jx2Y3bwwoemy1wk9ZLykPYvPYpVpKDpn/edit)
 
 ---
@@ -111,7 +110,7 @@ Can't fix:  rejected, failed or timed out → save → recreate group → starti
 
 ## Implementation Plan
 
-### PR #11
+### First version
 
 The recovery controller and the first engine and workload adapters (vLLM and
 LWS). Opt-in with `--enable-vllm-ft`.

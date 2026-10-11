@@ -2,7 +2,6 @@
 
 - **Revision**: 1
 - **Last Updated**: 2026-10-11
-- **PR**: [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11)
 
 ---
 
