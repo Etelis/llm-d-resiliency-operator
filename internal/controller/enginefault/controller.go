@@ -248,7 +248,10 @@ func (controller *Controller) discoveryUnavailable(ctx context.Context, state St
 	if state.DiscoveryUnavailableSince.IsZero() {
 		state.DiscoveryUnavailableSince = time.Now().UTC()
 	}
-	state.Reason = "workload discovery unavailable: " + err.Error()
+	// Preserve the reset cause while the replacement Pods are unavailable.
+	if state.Phase != "resetting" {
+		state.Reason = "workload discovery unavailable: " + err.Error()
+	}
 	// A failed Kubernetes read does not prove a Pod/container replacement. Keep
 	// the operation and its original deadline so an unchanged group resumes
 	// reconciliation after discovery succeeds. Never reset an unconfirmed group.

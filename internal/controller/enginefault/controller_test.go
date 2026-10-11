@@ -454,6 +454,28 @@ func TestDiscoveryFailurePreservesFaultReconciliation(t *testing.T) {
 	}
 }
 
+func TestResetCauseSurvivesUnavailableReplacementAndRestart(t *testing.T) {
+	controller, adapter, workload := setup(t)
+	if err := controller.beginReset(context.Background(), controller.Snapshot(), "FT completion deadline exceeded"); err != nil {
+		t.Fatal(err)
+	}
+	before := controller.Snapshot()
+	workload.discoverErrors = []error{
+		errors.New("replacement Pod not running"), errors.New("observer not yet listening"),
+	}
+	step(t, controller)
+	replacement, err := New(context.Background(), adapter, workload, Defaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	step(t, replacement)
+	after := replacement.Snapshot()
+	if after.Phase != "resetting" || after.Reason != before.Reason || !after.Since.Equal(before.Since) ||
+		len(after.Verified) != 0 || len(workload.resets) != 1 || len(adapter.dispatches) != 0 {
+		t.Fatalf("replacement discovery lost the reset cause or repeated recovery: %+v", after)
+	}
+}
+
 func TestDiscoveryFailureDuringVerificationPreservesRound(t *testing.T) {
 	controller, adapter, workload := setup(t)
 	adapter.status = statuses("unhealthy", "dead", "unhealthy", "unhealthy")
