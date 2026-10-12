@@ -288,21 +288,11 @@ func (controller *Controller) Step(ctx context.Context) error {
 	state := controller.Snapshot()
 	now := time.Now().UTC()
 	group, err := controller.Workload.Discover(ctx)
-	if state.Phase == "intervention_required" {
-		// Keep reporting the failure, but allow an externally repaired/new
-		// deployment to return to service without another destructive action.
-		if err != nil || (state.Group.ID != "" && (group.ID == state.Group.ID || overlaps(group, state.Group))) {
-			return err
-		}
-		state.Group = group
-		state.Excluded = nil
-		state.Round = engine.Round{}
-		state.Instruction = ""
-		state.Status = controller.Adapter.EngineStatus(ctx, group)
-		if allHealthy(state.Status, activeRanks(state)) {
-			return controller.verify(ctx, state, activeRanks(state))
-		}
-		return nil
+	// Keep reporting the failure while any failed Pod remains. A group with none
+	// of them is handled below like any new group.
+	if state.Phase == "intervention_required" &&
+		(err != nil || (state.Group.ID != "" && (group.ID == state.Group.ID || overlaps(group, state.Group)))) {
+		return err
 	}
 	if err != nil {
 		return controller.discoveryUnavailable(ctx, state, err)
@@ -342,6 +332,10 @@ func (controller *Controller) Step(ctx context.Context) error {
 		state.Verified = nil
 		controller.set(state)
 
+		if state.Phase == "intervention_required" {
+			// The failed group was replaced, so the reset budget starts over.
+			state.Resets = nil
+		}
 		state.Group = group
 		state.Excluded = nil
 		state.Round = engine.Round{}

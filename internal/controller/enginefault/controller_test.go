@@ -531,6 +531,48 @@ func TestResetCauseSurvivesUnavailableReplacementAndRestart(t *testing.T) {
 	}
 }
 
+func TestReplacedGroupStartsOverAfterIntervention(t *testing.T) {
+	controller, adapter, workload := setup(t)
+	state := controller.Snapshot()
+	now := time.Now().UTC()
+	state.Resets = []time.Time{now.Add(-12 * time.Minute), now.Add(-8 * time.Minute), now.Add(-4 * time.Minute)}
+	controller.set(state)
+	failFT := func() {
+		adapter.status = statuses("unhealthy", "unhealthy", "unhealthy", "unhealthy")
+		adapter.status[0].FTState = "failed"
+	}
+	failFT()
+	step(t, controller)
+	step(t, controller)
+	step(t, controller)
+	if controller.Snapshot().Phase != "intervention_required" || len(workload.resets) != 0 {
+		t.Fatalf("exhausted reset budget did not wait for intervention: %+v", controller.Snapshot())
+	}
+	// An operator replaces the group. It starts over like any new group.
+	workload.group.ID = "repaired"
+	workload.group.Endpoints = slices.Clone(workload.group.Endpoints)
+	for index := range workload.group.Endpoints {
+		workload.group.Endpoints[index].PodUID += "-new"
+	}
+	adapter.status = statuses("unknown", "unknown", "unknown", "unknown")
+	step(t, controller)
+	if state := controller.Snapshot(); state.Phase != "starting" || len(state.Resets) != 0 {
+		t.Fatalf("replaced group did not start over: %+v", state)
+	}
+	adapter.status = statuses("healthy", "healthy", "healthy", "healthy")
+	step(t, controller)
+	if controller.Snapshot().Phase != "serving" {
+		t.Fatalf("replaced group did not return to service: %+v", controller.Snapshot())
+	}
+	// Its first unrecoverable fault is reset instead of returning to intervention.
+	failFT()
+	step(t, controller)
+	step(t, controller)
+	if controller.Snapshot().Phase != "resetting" || len(workload.resets) != 1 {
+		t.Fatalf("replaced group kept the exhausted reset budget: %+v", controller.Snapshot())
+	}
+}
+
 func TestReplacementStartingTimeExcludesReset(t *testing.T) {
 	controller, adapter, workload := setup(t)
 	if err := controller.beginReset(context.Background(), controller.Snapshot(), "FT completion deadline exceeded"); err != nil {
