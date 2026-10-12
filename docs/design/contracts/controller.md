@@ -108,7 +108,7 @@ Runs one reconciliation: read, decide, act.
 | | |
 |---|---|
 | **Input** | none |
-| **Output** | `nil`, or an error that the runner logs. An error never changes the saved phase. |
+| **Output** | `nil`, or an error that the runner logs. An error before a save leaves the saved state as it was. A workload call that fails after its save is repeated on the next poll, and its error is returned once the step has saved. |
 | **Side effects** | any of `Journal.Save`, `Probe`, `Apply`, `Verify`, `Reset`, `ResetAll`, `Release`, and [`Recorder`](telemetry.md#interface) calls for what happened |
 
 In order:
@@ -229,7 +229,7 @@ sent, and cleared when `Progress` reports `Succeeded` or `Failed`.
 
 The two deadlines catch different hangs: an engine that never reaches a state IRO can act on,
 and a round that never finishes. While the workload reports `Recreating`, deadlines are not checked, and
-both restart when it ends. A new group drops the round in flight: the workload is already replacing everything.
+both restart when it ends, and when a new leader takes over. A new group drops the round in flight: the workload is already replacing everything.
 
 **After a round succeeds**, the controller saves its participants and joiners in `Verifying` and calls
 `Verify` on them. A failure is retried for `VerifyTimeout`; then the group is reset (reason `verify_failed`).
@@ -272,7 +272,7 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 
 | # | Rule | Why |
 |---|---|---|
-| C1 | `Remove` holds only members that are Terminal, or that take part in the round and are Terminal before it succeeds | the router follows native health. A removed member that still serves gets traffic outside the group. |
+| C1 | `Remove` holds only members that are Terminal, and they stay Terminal until the round succeeds | the router follows native health. A removed member that still serves gets traffic outside the group. |
 | C2 | `Add` holds only candidates that are Joinable, on Pods that are `Ready` and unchanged | a stale Pod must not join |
 | C3 | `Participants` and `Remove` are admitted members, `Add` holds candidates, the three are disjoint, and `Participants` is not empty | a round must name a real, consistent membership change |
 | C4 | Excluded members stay Terminal | otherwise an excluded member could take traffic again |
