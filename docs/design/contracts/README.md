@@ -5,7 +5,7 @@
 - **Date:** 2026-10-12
 - **Based on:** PR #11 at `9a3a10c` (controller, LWS), PR #19 at `5a03f3e` (vLLM). "Today" in these docs means that code.
 - **Code:** the interfaces and types are in [`internal/workload`](../../../internal/workload), [`internal/engine`](../../../internal/engine),
-  [`internal/journal`](../../../internal/journal) and [`internal/controller/enginefault`](../../../internal/controller/enginefault). No implementation yet.
+  [`internal/journal`](../../../internal/journal) and [`internal/controller/enginefault`](../../../internal/controller/enginefault). Implementations: see [Code layout](#code-layout).
 - **Scope:** recovery of one engine group, including getting back to full capacity after a shrink by
   resetting the failed Pod or the whole group. Capacity never comes from new Pods elsewhere.
 
@@ -198,24 +198,27 @@ and serves below full.
 
 ## Code layout
 
-Every file the design needs. This PR adds the contracts; each implementation comes with its own PR.
+Every file the design needs, and the PR that brings it.
 
 | File | Holds | Comes with |
 |---|---|---|
-| `internal/workload/workload.go` | `Workload` and its objects | this PR |
-| `internal/engine/engine.go` | `Engine`, `Driver`, `Policy` and their objects | this PR |
-| `internal/journal/journal.go` | `Journal` | this PR |
-| `internal/controller/enginefault/controller.go` | `Controller`, `Config`, `Record` | this PR |
-| `internal/controller/enginefault/recorder.go` | `Recorder`, `Incident` | this PR |
-| `internal/controller/enginefault/step.go` | `New` and `Step`: phases, reading Discover, checks, restoring capacity | controller PR |
-| `internal/controller/enginefault/runner.go` | the leader-elected loop that calls `Step` | controller PR |
-| `internal/controller/enginefault/setup.go` | flags; picks the engine and workload | controller PR |
-| `cmd/main.go` | registers engines and workloads, starts the manager | controller PR |
-| `internal/workload/lws/workload.go` | LWS `Workload` | LWS PR |
-| `internal/journal/configmap/journal.go` | ConfigMap `Journal`, owned by the workload object | LWS PR |
-| `internal/engine/vllm/driver.go` | vLLM `Driver` | vLLM PR |
-| `internal/engine/vllm/policy.go` | vLLM `Policy` | vLLM PR |
-| `internal/telemetry/recorder.go` | `Recorder`: logs, metrics, Events, incident history | telemetry PR |
+| `internal/workload/workload.go` | `Workload` and its objects | contracts (#32) |
+| `internal/engine/engine.go` | `Engine`, `Driver`, `Policy` and their objects | contracts (#32) |
+| `internal/journal/journal.go` | `Journal` | contracts (#32) |
+| `internal/controller/enginefault/controller.go` | `Controller`, `Config`, `Record` | contracts (#32) |
+| `internal/controller/enginefault/recorder.go` | `Recorder`, `Incident` | contracts (#32) |
+| `internal/controller/enginefault/step.go` | `New` and `Step`: phases, reading Discover, connecting members, checks | controller (#11) |
+| `internal/controller/enginefault/round.go` | sending and watching rounds, plan checks, `Verify`, `ResetAll` | controller (#11) |
+| `internal/controller/enginefault/capacity.go` | restoring capacity | controller (#11) |
+| `internal/controller/enginefault/incident.go` | incident records | controller (#11) |
+| `internal/controller/enginefault/runner.go` | the leader-elected loop that calls `Step` | controller (#11) |
+| `internal/controller/enginefault/setup.go` | flags; picks the engine and workload | controller (#11) |
+| `cmd/main.go` | registers engines and workloads, starts the manager | controller (#11) |
+| `internal/workload/lws/workload.go` | LWS `Workload` | controller (#11), see [lws.md](../lws.md) |
+| `internal/journal/configmap/journal.go` | ConfigMap `Journal`, owned by the workload object | controller (#11) |
+| `internal/telemetry/recorder.go` | `Recorder`: log lines (#11); metrics, Events, incident history later | controller (#11), telemetry |
+| `internal/engine/vllm/driver.go` | vLLM `Driver` | vLLM (#19) |
+| `internal/engine/vllm/policy.go` | vLLM `Policy` | vLLM (#19) |
 
 ## Open decisions
 
