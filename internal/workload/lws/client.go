@@ -64,14 +64,20 @@ func New(reader client.Reader, writer client.Client, config Config) (*Client, er
 	}, nil
 }
 
-func (workload *Client) Discover(ctx context.Context) (engine.Group, error) {
+func (workload *Client) leaderWorkerSet(ctx context.Context) (*unstructured.Unstructured, error) {
 	set := &unstructured.Unstructured{}
 	set.SetGroupVersionKind(schema.GroupVersionKind{
 		Group: "leaderworkerset.x-k8s.io", Version: "v1", Kind: "LeaderWorkerSet",
 	})
-	if err := workload.reader.Get(ctx, client.ObjectKey{
+	err := workload.reader.Get(ctx, client.ObjectKey{
 		Namespace: workload.config.Namespace, Name: workload.config.Name,
-	}, set); err != nil {
+	}, set)
+	return set, err
+}
+
+func (workload *Client) Discover(ctx context.Context) (engine.Group, error) {
+	set, err := workload.leaderWorkerSet(ctx)
+	if err != nil {
 		return engine.Group{}, err
 	}
 	groupPods, err := workload.validate(set)
@@ -340,8 +346,17 @@ func (workload *Client) Save(ctx context.Context, data []byte) error {
 func (workload *Client) write(ctx context.Context, data []byte) error {
 	state := workload.state.DeepCopy()
 	if state == nil {
+		// The LWS owns its journal. Deleting the LWS deletes the journal, so a
+		// new LWS of the same name starts with a clean state.
+		set, err := workload.leaderWorkerSet(ctx)
+		if err != nil {
+			return err
+		}
 		state = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 			Namespace: workload.config.Namespace, Name: workload.config.Name + "-ft-state",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: set.GetAPIVersion(), Kind: set.GetKind(), Name: set.GetName(), UID: set.GetUID(),
+			}},
 		}}
 	}
 	if state.Data == nil {

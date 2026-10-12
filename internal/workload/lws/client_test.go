@@ -620,6 +620,30 @@ func TestStateConflicts(t *testing.T) {
 	}
 }
 
+func TestStateIsOwnedByLWS(t *testing.T) {
+	t.Parallel()
+	api, config := fixture(t)
+	workload := newWorkload(t, api, config)
+	if _, err := workload.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := workload.Save(t.Context(), []byte("state")); err != nil {
+		t.Fatal(err)
+	}
+	var state corev1.ConfigMap
+	key := client.ObjectKey{Namespace: config.Namespace, Name: config.Name + "-ft-state"}
+	if err := api.Get(t.Context(), key, &state); err != nil {
+		t.Fatal(err)
+	}
+	// Deleting the LWS deletes its journal, so a new LWS of the same name
+	// starts with a clean state.
+	owners := state.OwnerReferences
+	if len(owners) != 1 || owners[0].APIVersion != "leaderworkerset.x-k8s.io/v1" ||
+		owners[0].Kind != "LeaderWorkerSet" || owners[0].Name != "model" || owners[0].UID != "set-uid" {
+		t.Fatalf("journal is not owned by its LWS: %+v", owners)
+	}
+}
+
 func TestStateRecreatedAfterDeletion(t *testing.T) {
 	t.Parallel()
 	api, config := fixture(t)
