@@ -1,0 +1,388 @@
+// Copyright 2026 The llm-d Authors.
+// SPDX-License-Identifier: Apache-2.0
+
+package lws_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/workload/lws"
+)
+
+var created = metav1.NewTime(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+
+type deletion struct {
+	name        string
+	propagation metav1.DeletionPropagation
+}
+
+type cluster struct {
+	api     client.Client
+	deletes []deletion
+}
+
+func newCluster(t *testing.T, set *unstructured.Unstructured, pods ...*corev1.Pod) *cluster {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	world := &cluster{}
+	objects := []client.Object{}
+	if set != nil {
+		objects = append(objects, set)
+	}
+	for _, pod := range pods {
+		objects = append(objects, pod)
+	}
+	world.api = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithInterceptorFuncs(interceptor.Funcs{
+		Delete: func(ctx context.Context, api client.WithWatch, object client.Object, options ...client.DeleteOption) error {
+			settings := (&client.DeleteOptions{}).ApplyOptions(options)
+			if settings.Preconditions == nil || settings.Preconditions.UID == nil {
+				t.Errorf("delete of %s without a UID precondition", object.GetName())
+				return errors.New("missing UID precondition")
+			}
+			var current corev1.Pod
+			if err := api.Get(ctx, client.ObjectKeyFromObject(object), &current); err != nil {
+				return err
+			}
+			if current.UID != *settings.Preconditions.UID {
+				return apierrors.NewConflict(schema.GroupResource{Resource: "pods"}, object.GetName(), errors.New("UID changed"))
+			}
+			propagation := metav1.DeletionPropagation("")
+			if settings.PropagationPolicy != nil {
+				propagation = *settings.PropagationPolicy
+			}
+			world.deletes = append(world.deletes, deletion{object.GetName(), propagation})
+			return api.Delete(ctx, object, options...)
+		},
+	}).Build()
+	return world
+}
+
+func leaderWorkerSet(policy string) *unstructured.Unstructured {
+	return specified(1, 2, "", policy)
+}
+
+func specified(replicas, size int64, identity, policy string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "leaderworkerset.x-k8s.io/v1", "kind": "LeaderWorkerSet",
+		"metadata": map[string]any{"namespace": "test", "name": "model", "uid": "set-uid"},
+		"spec": map[string]any{
+			"replicas": replicas, "groupIdentity": identity,
+			"leaderWorkerTemplate": map[string]any{"size": size, "restartPolicy": policy},
+		},
+	}}
+}
+
+func readyPod(index int) *corev1.Pod {
+	name := "model-0"
+	if index > 0 {
+		name = fmt.Sprintf("model-0-%d", index)
+	}
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: "test", UID: types.UID(name + "-uid"), CreationTimestamp: created,
+			Labels: map[string]string{
+				"leaderworkerset.sigs.k8s.io/name":         "model",
+				"leaderworkerset.sigs.k8s.io/group-index":  "0",
+				"leaderworkerset.sigs.k8s.io/worker-index": fmt.Sprint(index),
+			},
+		},
+		Spec: corev1.PodSpec{NodeName: fmt.Sprintf("node-%d", index), Containers: []corev1.Container{{Name: "engine"}}},
+		Status: corev1.PodStatus{
+			PodIP: fmt.Sprintf("10.0.0.%d", index+1),
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "engine", ContainerID: name + "-container",
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			}},
+		},
+	}
+}
+
+func terminating(pod *corev1.Pod) {
+	pod.Finalizers = []string{"test/hold"}
+	pod.DeletionTimestamp = &created
+}
+
+func newWorkload(t *testing.T, world *cluster) workload.Workload {
+	t.Helper()
+	options := &lws.Options{Namespace: "test", Name: "model"}
+	instance, _, err := options.New(world.api, world.api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return instance
+}
+
+func discover(t *testing.T, instance workload.Workload) workload.Group {
+	t.Helper()
+	group, err := instance.Discover(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return group
+}
+
+func TestNewNeedsNamespaceAndName(t *testing.T) {
+	t.Parallel()
+	world := newCluster(t, leaderWorkerSet(""))
+	for _, options := range []lws.Options{{Namespace: "test"}, {Name: "model"}} {
+		if _, _, err := options.New(world.api, world.api); err == nil {
+			t.Fatalf("%+v was accepted", options)
+		}
+	}
+}
+
+func TestDiscover(t *testing.T) {
+	t.Parallel()
+	world := newCluster(t, leaderWorkerSet("RecreateGroupOnPodRestart"), readyPod(0), readyPod(1))
+	instance := newWorkload(t, world)
+	group := discover(t, instance)
+	if len(group.Pods) != 2 || group.Recreating || group.RecreateStopped {
+		t.Fatalf("group: %+v", group)
+	}
+	for index, pod := range group.Pods {
+		want := readyPod(index)
+		if pod.Name != want.Name || pod.UID != string(want.UID) || pod.IP != want.Status.PodIP || pod.Index != index ||
+			pod.Node != want.Spec.NodeName || pod.State != workload.PodReady || pod.Identity == "" {
+			t.Fatalf("pod %d: %+v", index, pod)
+		}
+	}
+	if again := discover(t, instance); again.Pods[0].Identity != group.Pods[0].Identity {
+		t.Fatal("identity is not stable")
+	}
+}
+
+func TestDiscoverPodState(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		mutate func(*corev1.Pod)
+		want   workload.PodState
+	}{
+		"no IP":     {func(pod *corev1.Pod) { pod.Status.PodIP = "" }, workload.PodStarting},
+		"no status": {func(pod *corev1.Pod) { pod.Status.ContainerStatuses = nil }, workload.PodStarting},
+		"waiting container": {
+			func(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].State = corev1.ContainerState{} }, workload.PodStarting,
+		},
+		"no container ID": {func(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].ContainerID = "" }, workload.PodStarting},
+		"init done": {func(pod *corev1.Pod) {
+			pod.Spec.InitContainers = []corev1.Container{{Name: "init"}}
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+				Name: "init", ContainerID: "init-container",
+				State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}},
+			}}
+		}, workload.PodReady},
+		"terminating": {terminating, workload.PodTerminating},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			worker := readyPod(1)
+			test.mutate(worker)
+			world := newCluster(t, leaderWorkerSet("None"), readyPod(0), worker)
+			if got := discover(t, newWorkload(t, world)).Pods[1].State; got != test.want {
+				t.Fatalf("state %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestDiscoverIdentity(t *testing.T) {
+	t.Parallel()
+	base := readyPod(1)
+	world := newCluster(t, leaderWorkerSet("None"), readyPod(0), base)
+	before := discover(t, newWorkload(t, world)).Pods[1].Identity
+	for name, test := range map[string]struct {
+		mutate  func(*corev1.Pod)
+		changed bool
+	}{
+		"new UID":       {func(pod *corev1.Pod) { pod.UID = "other-uid" }, true},
+		"new container": {func(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].ContainerID = "other" }, true},
+		"restart":       {func(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].RestartCount = 1 }, true},
+		"new IP":        {func(pod *corev1.Pod) { pod.Status.PodIP = "10.0.0.9" }, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			worker := readyPod(1)
+			test.mutate(worker)
+			got := discover(t, newWorkload(t, newCluster(t, leaderWorkerSet("None"), readyPod(0), worker))).Pods[1].Identity
+			if (got != before) != test.changed {
+				t.Fatalf("identity %s, before %s", got, before)
+			}
+		})
+	}
+}
+
+func TestDiscoverReportsPodsAsTheyAre(t *testing.T) {
+	t.Parallel()
+	other := readyPod(1)
+	other.Labels["leaderworkerset.sigs.k8s.io/name"] = "other"
+	tenth, second := readyPod(10), readyPod(2)
+	world := newCluster(t, leaderWorkerSet("None"), readyPod(0), other, tenth, second)
+	group := discover(t, newWorkload(t, world))
+	if len(group.Pods) != 3 || group.Pods[1].Index != 2 || group.Pods[2].Index != 10 {
+		t.Fatalf("pods: %+v", group.Pods)
+	}
+}
+
+func TestDiscoverRejectsUnsupportedSpec(t *testing.T) {
+	t.Parallel()
+	deleted := leaderWorkerSet("None")
+	deleted.SetDeletionTimestamp(&created)
+	deleted.SetFinalizers([]string{"test/hold"})
+	for name, set := range map[string]*unstructured.Unstructured{
+		"two replicas":    specified(2, 2, "", "None"),
+		"zero size":       specified(1, 0, "", "None"),
+		"hash identity":   specified(1, 2, "Hash", "None"),
+		"after start":     specified(1, 2, "", "RecreateGroupAfterStart"),
+		"being deleted":   deleted,
+		"missing the LWS": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := newWorkload(t, newCluster(t, set, readyPod(0))).Discover(t.Context()); err == nil {
+				t.Fatal("spec accepted")
+			}
+		})
+	}
+}
+
+func TestDiscoverRejectsMismatchedIndex(t *testing.T) {
+	t.Parallel()
+	worker := readyPod(1)
+	worker.Labels["leaderworkerset.sigs.k8s.io/worker-index"] = "0"
+	if _, err := newWorkload(t, newCluster(t, leaderWorkerSet("None"), readyPod(0), worker)).Discover(t.Context()); err == nil {
+		t.Fatal("mismatched index accepted")
+	}
+}
+
+func TestDiscoverRecreating(t *testing.T) {
+	t.Parallel()
+	older := metav1.NewTime(created.Add(-time.Minute))
+	for name, test := range map[string]struct {
+		policy  string
+		leader  func(*corev1.Pod)
+		worker  func(*corev1.Pod)
+		want    bool
+		stopped bool
+	}{
+		"steady":                 {policy: "RecreateGroupOnPodRestart"},
+		"leader terminating":     {policy: "None", leader: terminating, want: true},
+		"recreate pending":       {policy: "None", leader: annotate("leaderworkerset.sigs.k8s.io/group-recreate-pending"), want: true},
+		"worker older":           {policy: "None", worker: func(pod *corev1.Pod) { pod.CreationTimestamp = older }, want: true},
+		"restart recreates":      {policy: "RecreateGroupOnPodRestart", worker: restart, want: true},
+		"restart under None":     {policy: "None", worker: restart},
+		"terminating recreates":  {policy: "RecreateGroupOnPodRestart", worker: terminating, want: true},
+		"terminating under None": {policy: "None", worker: terminating},
+		"budget used up": {
+			policy: "RecreateGroupOnPodRestart", worker: restart,
+			leader: annotate("leaderworkerset.sigs.k8s.io/group-restart-budget-exhausted"), stopped: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			leader, worker := readyPod(0), readyPod(1)
+			if test.leader != nil {
+				test.leader(leader)
+			}
+			if test.worker != nil {
+				test.worker(worker)
+			}
+			group := discover(t, newWorkload(t, newCluster(t, leaderWorkerSet(test.policy), leader, worker)))
+			if group.Recreating != test.want || group.RecreateStopped != test.stopped {
+				t.Fatalf("recreating %v, stopped %v", group.Recreating, group.RecreateStopped)
+			}
+		})
+	}
+	t.Run("leader missing", func(t *testing.T) {
+		t.Parallel()
+		if !discover(t, newWorkload(t, newCluster(t, leaderWorkerSet("None"), readyPod(1)))).Recreating {
+			t.Fatal("missing leader is not Recreating")
+		}
+	})
+}
+
+func annotate(key string) func(*corev1.Pod) {
+	return func(pod *corev1.Pod) { pod.Annotations = map[string]string{key: "true"} }
+}
+
+func restart(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].RestartCount = 1 }
+
+func TestReset(t *testing.T) {
+	t.Parallel()
+	worker := workload.PodRef{Name: "model-0-1", UID: "model-0-1-uid"}
+	for name, test := range map[string]struct {
+		policy  string
+		pod     workload.PodRef
+		deleted bool
+		err     error
+	}{
+		"recreates group": {policy: "RecreateGroupOnPodRestart", pod: worker, err: workload.ErrUnsupported},
+		"leader":          {policy: "None", pod: workload.PodRef{Name: "model-0", UID: "model-0-uid"}, err: workload.ErrUnsupported},
+		"worker":          {policy: "None", pod: worker, deleted: true},
+		"stale UID":       {policy: "None", pod: workload.PodRef{Name: "model-0-1", UID: "old"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			world := newCluster(t, leaderWorkerSet(test.policy), readyPod(0), readyPod(1))
+			instance := newWorkload(t, world)
+			if err := instance.Reset(t.Context(), test.pod); !errors.Is(err, test.err) {
+				t.Fatalf("error %v, want %v", err, test.err)
+			}
+			if (len(world.deletes) == 1) != test.deleted {
+				t.Fatalf("deletes: %+v", world.deletes)
+			}
+			if err := instance.Reset(t.Context(), test.pod); !errors.Is(err, test.err) {
+				t.Fatalf("repeat: %v", err)
+			}
+		})
+	}
+}
+
+func TestResetAll(t *testing.T) {
+	t.Parallel()
+	world := newCluster(t, leaderWorkerSet("RecreateGroupOnPodRestart"), readyPod(0), readyPod(1))
+	instance := newWorkload(t, world)
+	stale := []workload.PodRef{{Name: "model-0", UID: "old"}, {Name: "model-0-1", UID: "model-0-1-uid"}}
+	if err := instance.ResetAll(t.Context(), stale); err != nil || len(world.deletes) != 0 {
+		t.Fatalf("stale leader: %v, %+v", err, world.deletes)
+	}
+	current := []workload.PodRef{{Name: "model-0-1", UID: "model-0-1-uid"}, {Name: "model-0", UID: "model-0-uid"}}
+	if err := instance.ResetAll(t.Context(), current); err != nil {
+		t.Fatal(err)
+	}
+	if len(world.deletes) != 1 || world.deletes[0] != (deletion{"model-0", metav1.DeletePropagationForeground}) {
+		t.Fatalf("deletes: %+v", world.deletes)
+	}
+	if err := instance.ResetAll(t.Context(), current); err != nil {
+		t.Fatalf("repeat: %v", err)
+	}
+	if err := instance.ResetAll(t.Context(), current[:1]); err == nil {
+		t.Fatal("ResetAll without the leader was accepted")
+	}
+}
+
+func TestRelease(t *testing.T) {
+	t.Parallel()
+	world := newCluster(t, leaderWorkerSet("None"), readyPod(0), readyPod(1))
+	err := newWorkload(t, world).Release(t.Context(), []workload.PodRef{{Name: "model-0-1", UID: "model-0-1-uid"}})
+	if !errors.Is(err, workload.ErrUnsupported) || len(world.deletes) != 0 {
+		t.Fatalf("release: %v, %+v", err, world.deletes)
+	}
+}
