@@ -207,6 +207,8 @@ group first serves. The table applies from then on. An empty journal (IRO's firs
 
 `Discover` reports Pods. `Observe` reports members, each with the Pod it runs on. The controller joins
 the two by `Member.ID()` (`dp3@idD`) and keeps each ID as candidate, admitted, excluded or rejected.
+Excluded means a round removed it, and its Pod may still be reset. Rejected means it stays out until the
+next group: a candidate that could not join, or an excluded member whose Pod is kept as it is.
 
 | Case | Controller does |
 |---|---|
@@ -247,21 +249,28 @@ flowchart TD
   X[A Pod holds only excluded members] --> M{--ft-capacity-restore}
   M -- reset-pod --> R[Reset the Pod]
   M -- reset-all --> A[ResetAll]
-  M -- release --> L[Release the Pod, serve with fewer members]
+  M -- release --> L[Release the Pod]
   R -- its new members join --> F[Full again]
-  R -- unsupported, or the join fails --> A
+  R -- unsupported, or the join fails --> K[Keep the Pod as it is, serve with fewer members]
+  L --> K
+  A --> F
 ```
 
 1. Once the members of the last round passed `Verify`, on a poll whose plan is `Healthy`, the controller
    looks for Pods that hold only excluded members. It marks them `Removing`, saves, and calls `Reset`,
    `ResetAll` or `Release`, per `--ft-capacity-restore` (C8). A Pod that is already gone is just forgotten.
 2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [round](#rounds).
-3. If the Pod cannot be reset (`ErrUnsupported`, or the engine cannot grow), or the new Pod's members are
-   rejected (the join round fails, or the new Pod restarts before joining), the controller calls `ResetAll`
-   (reason `capacity`). There is one try, no budget. A new Pod that is still starting is waited for.
-4. With `release`, `ErrUnsupported` leaves the Pod where it is, and the group serves below full.
-5. Other workload errors are not failures: the call is repeated on the next poll.
-6. There is no extra state: the `Removing` Pods, the candidates and the round in flight say where things are.
+3. There is one try, no budget. If the Pod cannot be reset (`ErrUnsupported`, or the engine cannot grow),
+   or the new Pod's members are rejected (the join round fails, or the new Pod restarts before joining),
+   the group keeps serving with fewer members. The Pod's members are marked rejected, so it is not tried
+   again. A new Pod that is still starting is waited for.
+4. With `release`, the released Pod goes and the group serves with fewer members. `ErrUnsupported` keeps
+   the Pod as it is, the same way.
+5. With `reset-all`, a Pod that holds only excluded or rejected members resets the whole group (reason
+   `capacity`), so the group never stays below full.
+6. Other workload errors are not failures: the call is repeated on the next poll.
+7. Full capacity comes back with the next group: any `ResetAll`, or a recreation by the workload.
+8. There is no extra state: the `Removing` Pods, the member states and the round in flight say where things are.
 
 ## Rules
 
@@ -279,7 +288,7 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 | C5 | Members that are not admitted are not Serving, except those the round in flight adds | a joiner must not take traffic before it is in the group |
 | C6 | A round that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
 | C7 | One round at a time. `Apply` refuses a round that names a member missing from the current observation. | a stale round cannot apply to a changed group |
-| C8 | `Reset` and `Release` name only Pods whose every member is excluded or rejected, after the round that removed them finished | the engine must no longer depend on a Pod before it goes |
+| C8 | `Reset` and `Release` name only Pods whose every member is excluded, after the round that removed them finished | the engine must no longer depend on a Pod before it goes |
 
 A plan that fails C1 to C3 resets the group. An observation that fails C4 or C5 resets the group.
 C8 limits what the controller itself sends, so it is never violated at runtime.
@@ -309,7 +318,7 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | `--ft-diagnosis-timeout` | 75s | `DiagnosisTimeout` |
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
 | `--ft-verify-timeout` | 2m | `VerifyTimeout`: how long a failed check after a round is retried. 0 resets on the first failure. |
-| `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod and falls back to `ResetAll`; `reset-all` resets the group; `release` frees the GPUs and serves below full. |
+| `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod once and serves below full if that fails; `reset-all` resets the group, so it never stays below full; `release` frees the GPUs and serves below full. |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
 
@@ -332,5 +341,6 @@ Each engine and workload implementation registers its own flags.
   release, so it can tell those from a lost one. The workload stays a plain reporter.
 - **Why reset one Pod first.** It is the smallest action that brings capacity back: only the failed Pod
   restarts, and the other members keep serving. `ResetAll` stops the whole group while the model loads
-  again. When this group is the only one serving the model, that is a full outage: use
-  `--ft-capacity-restore=release` to keep serving with fewer members instead.
+  again, and when this group is the only one serving the model, that is a full outage. So when the Pod
+  cannot come back, the default keeps serving with fewer members. `--ft-capacity-restore=reset-all` takes
+  the outage to get back to full.

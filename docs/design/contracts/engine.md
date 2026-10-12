@@ -142,7 +142,7 @@ Says what the engine can do at all.
 | **Output** | [`Capabilities`](#objects) |
 
 **Example.** An engine that cannot admit members into a running group returns `{Grow: false}`. The
-controller then never resets a single Pod, since the engine could not re-admit its members. With the default `--ft-capacity-restore`, it resets the whole group instead.
+controller then never resets a single Pod, since the engine could not re-admit its members. With the default `--ft-capacity-restore`, the group keeps serving with fewer members; with `reset-all`, IRO resets the whole group.
 
 ### Observe
 
