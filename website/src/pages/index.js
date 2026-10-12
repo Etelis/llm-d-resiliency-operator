@@ -13,7 +13,7 @@ export default function Home() {
     <Layout description="Recover LLM inference engines from hardware faults on Kubernetes.">
       <main className="container home">
         <h1>
-          Keep LLM inference serving <span>through hardware faults.</span>
+          Your GPUs and engines will fail. <span>Plan accordingly.</span>
         </h1>
         <p>
           The llm-d Resiliency Operator coordinates hardware fault events with the inference engine. It
