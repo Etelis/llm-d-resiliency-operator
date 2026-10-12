@@ -120,3 +120,41 @@
   color: #f4f4f4;
 }
 
+
+/* Home page */
+.home {
+  max-width: 1100px;
+  padding: 5rem 1rem;
+}
+.home h1 {
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  line-height: 1.15;
+}
+.home h1 span {
+  color: var(--ifm-color-primary);
+}
+.home > p {
+  font-size: 1.15rem;
+  max-width: 50rem;
+}
+.home__buttons {
+  display: flex;
+  gap: 1rem;
+  margin: 2rem 0 4rem;
+}
+.home__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  border: 1px solid var(--ifm-color-emphasis-300);
+}
+.home__steps > div {
+  padding: 1.25rem;
+  border-right: 1px solid var(--ifm-color-emphasis-300);
+}
+.home__steps b {
+  color: var(--ifm-color-primary);
+  font-size: 1.15rem;
+}
+.home__steps > div:last-child {
+  border-right: none;
+}

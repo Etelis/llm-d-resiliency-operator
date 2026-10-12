@@ -15,7 +15,7 @@ export default {
       'classic',
       {
         docs: {
-          routeBasePath: '/',
+          routeBasePath: 'docs',
           sidebarPath: './sidebars.js',
         },
         blog: false,
@@ -40,7 +40,7 @@ export default {
     footer: {
       style: 'dark',
       links: [
-        {title: 'Docs', items: [{label: 'Architecture', to: '/'}, {label: 'Recovery flow', to: '/recovery-flow'}]},
+        {title: 'Docs', items: [{label: 'Architecture', to: '/docs'}, {label: 'Recovery flow', to: '/docs/recovery-flow'}]},
         {title: 'Community', items: [{label: 'GitHub', href: repo}, {label: 'llm-d', href: 'https://llm-d.ai'}]},
       ],
       copyright: `Copyright © ${new Date().getFullYear()} llm-d Project Authors. Apache-2.0.`,
