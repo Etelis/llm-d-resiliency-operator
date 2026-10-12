@@ -31,6 +31,19 @@ type fakeRank struct {
 	applied []map[string]any
 	prompts int
 	down    bool
+	onApply func(*fakeRank, map[string]any)
+}
+
+func (fake *fakeRank) get() map[string]any {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	return fake.status
+}
+
+func (fake *fakeRank) put(status map[string]any) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.status = status
 }
 
 func (fake *fakeRank) set(status string, extra map[string]any) {
@@ -64,6 +77,10 @@ func reply(writer http.ResponseWriter, value any) {
 }
 
 func (fake *fakeRank) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Path == "/v1/fault_tolerance/apply" {
+		fake.apply(writer, request)
+		return
+	}
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
 	switch request.URL.Path {
@@ -71,14 +88,6 @@ func (fake *fakeRank) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		reply(writer, map[string]any{"schema_version": 1, "total_engines": 1, "engines": []any{fake.status}})
 	case "/health":
 		writer.WriteHeader(fake.health)
-	case "/v1/fault_tolerance/apply":
-		var payload map[string]any
-		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
-			return
-		}
-		fake.applied = append(fake.applied, payload)
-		writer.WriteHeader(http.StatusAccepted)
 	case "/v1/completions":
 		fake.prompts++
 		reply(writer, map[string]any{
@@ -87,6 +96,22 @@ func (fake *fakeRank) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		})
 	default:
 		writer.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (fake *fakeRank) apply(writer http.ResponseWriter, request *http.Request) {
+	var payload map[string]any
+	if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+		http.Error(writer, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fake.mu.Lock()
+	fake.applied = append(fake.applied, payload)
+	hook := fake.onApply
+	fake.mu.Unlock()
+	writer.WriteHeader(http.StatusAccepted)
+	if hook != nil {
+		hook(fake, payload)
 	}
 }
 
