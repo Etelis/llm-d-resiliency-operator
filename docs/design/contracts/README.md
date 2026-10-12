@@ -135,35 +135,47 @@ sequenceDiagram
   participant P as Engine policy
   participant D as Engine driver
   participant W as Workload
-  Note over C: recovering
-  C->>P: Plan(observation, admitted, candidates)
-  P-->>C: Change, remove dp3@idD
-  Note over C: recovering, round in flight
-  C->>D: Apply(round: remove dp3@idD)
-  C->>P: Progress(observation, round)
-  P-->>C: Succeeded
-  C->>D: Verify(dp0, dp1, dp2)
-  Note over C: serving below full
-  C->>W: Reset(lws-0-3, UID d1)
-  W-->>C: Discover: lws-0-3 back with UID d2, starting, then Ready
-  C->>D: Observe(pods)
-  D-->>C: dp3 on lws-0-3 (d2), Joinable
-  C->>P: Plan(observation, admitted, candidates)
-  P-->>C: Change, add dp3@idD2
-  Note over C: serving, round in flight
-  C->>D: Apply(round: add dp3@idD2)
-  C->>P: Progress(observation, round)
-  P-->>C: Succeeded
-  C->>D: Verify(dp3@idD2)
-  Note over C: serving at full
+  rect rgba(66, 133, 244, 0.12)
+    Note over C,W: 1. Remove the dead member (phase: recovering)
+    C->>D: Observe(pods)
+    D-->>C: dp3 Terminal, dp0-dp2 paused
+    C->>P: Plan(observation, admitted, candidates)
+    P-->>C: Change, remove dp3@idD
+    C->>D: Apply(round: remove dp3@idD)
+    C->>P: Progress(observation, round)
+    P-->>C: Succeeded
+    C->>D: Verify(dp0, dp1, dp2)
+  end
+  rect rgba(251, 188, 5, 0.15)
+    Note over C,W: 2. Reset the failed Pod (phase: serving, 3 members)
+    C->>W: Reset(lws-0-3, UID d1)
+    W-->>C: Discover: lws-0-3 back with UID d2, starting, then Ready
+  end
+  rect rgba(52, 168, 83, 0.12)
+    Note over C,W: 3. Admit the new member (phase: serving)
+    C->>D: Observe(pods)
+    D-->>C: dp3 on lws-0-3 (d2), Joinable
+    C->>P: Plan(observation, admitted, candidates)
+    P-->>C: Change, add dp3@idD2
+    C->>D: Apply(round: add dp3@idD2)
+    C->>P: Progress(observation, round)
+    P-->>C: Succeeded
+    C->>D: Verify(dp3@idD2)
+  end
+  Note over C,W: serving with 4 members
 ```
 
-1. **The engine decides who leaves.** The policy proposes `Remove`. `Progress` reports `Succeeded` once those members are out, and only then does the controller record them as excluded.
-2. **The controller resets the failed Pod.** Each member names its Pod, so the controller knows `lws-0-3`
-   now holds only excluded members. It calls `Reset` on it. The rest of the group keeps serving. There is
-   no deadline; scheduling and model loading take as long as they take.
-3. **The engine decides who joins.** The new Pod's members show up as candidates. The policy plans `Add` when the engine can admit them, and the round runs like any other.
-4. **Faults come first.** A fault at any point moves the group to `recovering`. The capacity work pauses and continues from the same step once the group serves again.
+1. **Remove the dead member.** The driver reports `dp3` Terminal. The policy proposes `Remove`, the round
+   runs, and `Progress` reports `Succeeded`. Only then does the controller record `dp3@idD` as excluded and
+   verify the survivors.
+2. **Reset the failed Pod.** Each member names its Pod, so the controller knows `lws-0-3` now holds only
+   excluded members. It calls `Reset` on it. The rest of the group keeps serving. There is no deadline;
+   scheduling and model loading take as long as they take.
+3. **Admit the new member.** The new Pod's members show up as candidates. The policy plans `Add` when the
+   engine can admit them, the round runs like any other, and the new member is verified.
+
+A fault at any point comes first: the group goes to `recovering`, and the capacity work continues once the
+group serves again.
 
 Capacity never comes from new Pods elsewhere: it comes back by resetting. If resetting the Pod fails in any
 way (LWS today answers `ErrUnsupported`, the engine cannot admit members, or the new Pod fails to join),
@@ -182,31 +194,6 @@ and serves below full.
 | `Plan`, `Progress` | [engine.md](engine.md#objects) | engine policy | controller |
 | `Config`, `Record`, `Phase`, `MemberState`, `PodRecord` | [controller.md](controller.md#objects) | controller | journal (as bytes), telemetry |
 | `Recorder`, `Incident`, `Outcome`, `Durations`, `ResetReason` | [telemetry.md](telemetry.md#objects), code in `internal/controller/enginefault` | controller | telemetry |
-
-## Today vs target
-
-| Where | Today | Target |
-|---|---|---|
-| `engine.Round` | `MasterIP`, `StorePort` | removed. The vLLM driver picks the store master in `Apply`. |
-| `engine.RankStatus` | copy of the vLLM status payload (status strings, `FTState`, `RequestID`, `Mask`) | `Member` plus driver-private `Observation.Engine` |
-| `Decide`, `finishRound` | controller, vLLM rules | vLLM `Policy.Plan`, `Policy.Progress` |
-| `probeDiagnosis` | controller sends a completion | `Driver.Probe` |
-| Pod-to-rank mapping | `lws.Discover` builds it and checks `rank == worker * ranksPerPod + local` | the vLLM driver reports ranks per Pod. The controller connects them. |
-| `--ft-store-port` | controller flag | vLLM driver flag |
-| `lws.Discover` | calls the rank observer, knows the API port and rank layout | returns Pods. The vLLM driver's `Observe` reports which ranks run on each. |
-| `lws.Discover` while Pods start | error, so the controller waits blind | Pods come back with their state: `Starting`, `Ready`, `Terminating` |
-| `lws.Reset` | recreates the group; finds the leader through rank 0 | `ResetAll`, leader by Pod index 0. `Reset` replaces one Pod. |
-| `Group.ID` | hash of every Pod and container identity, made by the workload | no group ID. The controller compares the reported Pods with its journal. |
-| `State.Excluded` | `[]int` ranks | members by `MemberID`: candidate, admitted, excluded, rejected |
-| Excluded Pods | stay until the next reset | reset (`Workload.Reset`), or released (`Workload.Release`), per `--ft-capacity-restore` |
-| Lost capacity | comes back only with a reset | reset the failed Pod and re-admit its members, falling back to `ResetAll` |
-| Phases `diagnosing`, `applying` | two phases that differ only by whether a round is in flight | one `recovering` phase. The round in flight is a field, so a round that re-admits members can run while `serving`. |
-| Phase `resetting` | waits for the old Pods to go after a reset | removed. `ResetAll` marks every saved Pod `Removing` and the group goes to `starting`, which waits for them to go. |
-| Reset budget, `intervention_required` | after 3 resets in 30 min IRO stops and waits for a human | removed. LWS `restartBackoff` and `maxGroupRestarts` pace resets and decide when to stop. |
-| `Workload.Load/Save` | part of `Workload` | `Journal` |
-| Logs, metrics, Events | error logs only, no IRO metrics, no Events, readiness is a ping | `Recorder`: `llm_d_iro_*` metrics, Events per incident, incident history, a readiness check on loop progress (#25, #30) |
-| `Instruction` in the journal | `retry` / `scale_down` | plan kind and round diff |
-| retry flap window | keyed on `retry` | keyed on "no membership change" (C6) |
 
 ## Open decisions
 
