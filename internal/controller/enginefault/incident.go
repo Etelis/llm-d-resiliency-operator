@@ -1,0 +1,67 @@
+// Copyright 2026 The llm-d Authors.
+// SPDX-License-Identifier: Apache-2.0
+
+package enginefault
+
+import (
+	"slices"
+	"time"
+
+	"github.com/llm-d/llm-d-resiliency-operator/internal/engine"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
+)
+
+func (fsm *controller) openIncident(next *Record, cause string, current *view, now time.Time) {
+	inc := &Incident{ID: newID("inc-", 8), Opened: now, Cause: cause}
+	if current != nil {
+		inc.Affected = current.pick(func(member *engine.Member) bool { return member != nil && member.Terminal })
+		if len(inc.Affected) == 0 {
+			inc.Affected = current.pick(func(member *engine.Member) bool { return member == nil || !member.Serving })
+		}
+	}
+	for _, id := range inc.Affected {
+		uid, saved, ok := podOf(next, id)
+		if !ok || slices.ContainsFunc(inc.Pods, func(pod workload.PodRef) bool { return pod.UID == uid }) {
+			continue
+		}
+		inc.Pods = append(inc.Pods, podRef(uid, &saved))
+		if saved.Node != "" && !slices.Contains(inc.Nodes, saved.Node) {
+			inc.Nodes = append(inc.Nodes, saved.Node)
+		}
+	}
+	next.Incident = inc
+	opened := *inc
+	fsm.later(func() { fsm.recorder.IncidentOpened(&opened) })
+}
+
+func (fsm *controller) closeIncident(next *Record, result Outcome, now time.Time) {
+	if next.Incident == nil {
+		return
+	}
+	closed := *next.Incident
+	closed.Closed, closed.Outcome, closed.Durations.Total = now, result, now.Sub(closed.Opened)
+	next.Incident = nil
+	fsm.later(func() { fsm.recorder.IncidentClosed(&closed) })
+}
+
+func (current *view) pick(match func(*engine.Member) bool) []engine.MemberID {
+	var ids []engine.MemberID
+	for _, id := range current.admitted {
+		if match(current.members[id]) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func outcome(inc *Incident) Outcome {
+	if inc == nil {
+		return Recovered
+	}
+	for index := range inc.Rounds {
+		if result := &inc.Rounds[index]; result.Progress.State == engine.Succeeded && len(result.Round.Remove) > 0 {
+			return Shrunk
+		}
+	}
+	return Recovered
+}

@@ -13,7 +13,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	inferencev1alpha1 "github.com/llm-d/llm-d-resiliency-operator/apis/inference/v1alpha1"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/enginefault"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/recoveryrequest"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/telemetry"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/workload/lws"
 )
 
 var (
@@ -27,6 +30,7 @@ func init() {
 
 func main() {
 	klog.InitFlags(nil)
+	ctrl.SetLogger(klog.Background())
 	defer klog.Flush()
 
 	var metricsAddr string
@@ -41,7 +45,15 @@ func main() {
 			"Enabling this will ensure only one active controller manager.")
 	flag.StringVar(&podNamespace, "pod-namespace", "default", "The namespace of the pod to label.")
 	flag.StringVar(&podLabelKey, "pod-label-key", "llm-d.ai/inference-serving", "The label key to match the pod.")
+	engineFT := enginefault.Options{
+		Engines:   map[string]enginefault.EngineFactory{},
+		Workloads: map[string]enginefault.WorkloadFactory{"lws": &lws.Options{}},
+	}
+	engineFT.BindFlags(flag.CommandLine)
 	flag.Parse()
+	if engineFT.Enabled && !enableLeaderElection {
+		klog.Fatal("--enable-engine-ft needs --leader-elect")
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -63,6 +75,10 @@ func main() {
 		PodLabelKey:  podLabelKey,
 	}).SetupWithManager(mgr); err != nil {
 		klog.Fatalf("unable to create controller: %v", err)
+	}
+	recorder := telemetry.New(ctrl.Log.WithName("engine-fault"), 10*engineFT.Config.ApplyTimeout)
+	if err := engineFT.Setup(mgr, recorder); err != nil {
+		klog.Fatalf("unable to set up engine FT: %v", err)
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
