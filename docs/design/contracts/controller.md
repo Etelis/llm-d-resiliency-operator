@@ -266,8 +266,8 @@ flowchart TD
    again. A new Pod that is still starting is waited for.
 4. With `release`, the released Pod goes and the group serves with fewer members. `ErrUnsupported` keeps
    the Pod as it is, the same way.
-5. With `reset-all`, a Pod that holds only excluded or rejected members resets the whole group (reason
-   `capacity`), so the group never stays below full.
+5. With `reset-all`, any excluded or rejected member resets the whole group (reason `capacity`), even when
+   its Pod still holds admitted members, so the group never stays below full.
 6. Other workload errors are not failures: the call is repeated on the next poll.
 7. Full capacity comes back with the next group: any `ResetAll`, or a recreation by the workload.
 8. There is no extra state: the `Removing` Pods, the member states and the round in flight say where things are.

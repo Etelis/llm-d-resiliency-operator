@@ -15,14 +15,18 @@ import (
 
 func (fsm *controller) restore(ctx context.Context, next *Record, current *view, now time.Time) error {
 	mode := fsm.config.CapacityRestore
-	out := []MemberState{Excluded}
 	if mode == RestoreResetAll {
-		out = append(out, Rejected)
+		for _, state := range next.Members {
+			if state == Excluded || state == Rejected {
+				return fsm.resetAll(ctx, next, ResetCapacity, "restoring capacity", now)
+			}
+		}
+		return nil
 	}
 	var targets []workload.PodRef
 	for _, uid := range slices.Sorted(maps.Keys(next.Pods)) {
 		saved := next.Pods[uid]
-		if saved.Removing || !holdsOnly(next, saved.Identity, out...) {
+		if saved.Removing || !onlyExcluded(next, saved.Identity) {
 			continue
 		}
 		if find(current.group, uid) == nil {
@@ -36,8 +40,6 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 	switch {
 	case len(targets) == 0:
 		return nil
-	case mode == RestoreResetAll:
-		return fsm.resetAll(ctx, next, ResetCapacity, "restoring capacity", now)
 	case mode == RestoreResetPod && !fsm.eng.Capabilities().Grow:
 		for _, pod := range targets {
 			keep(next, pod.UID)
@@ -90,11 +92,11 @@ func keep(next *Record, uid string) {
 	}
 }
 
-func holdsOnly(next *Record, identity string, states ...MemberState) bool {
+func onlyExcluded(next *Record, identity string) bool {
 	found := false
 	for id, state := range next.Members {
 		if identityOf(id) == identity {
-			if !slices.Contains(states, state) {
+			if state != Excluded {
 				return false
 			}
 			found = true
