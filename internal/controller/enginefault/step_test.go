@@ -530,6 +530,39 @@ func TestCapacityRestore(t *testing.T) {
 		test.poll()
 		test.wantReset(ResetCapacity)
 	})
+	for mode, reset := range map[CapacityRestore]bool{RestoreResetAll: true, RestoreResetPod: false} {
+		t.Run(string(mode)+" with a Pod that keeps a member", func(t *testing.T) {
+			t.Parallel()
+			test := newHarness(t)
+			test.config.CapacityRestore = mode
+			test.eng.members = append(test.eng.members, engine.Member{
+				Pod: workload.PodRef{Name: "lws-0-3", UID: "d1"}, PodIdentity: "idD", Name: "dp4", Serving: true,
+			})
+			test.load()
+			test.poll()
+			test.dead()
+			test.eng.plan = engine.Plan{
+				Kind: engine.Change, Participants: ids("dp0@idA", "dp1@idB", "dp2@idC", "dp4@idD"), Remove: ids("dp3@idD"),
+			}
+			test.poll()
+			test.poll()
+			test.poll()
+			test.eng.progress = engine.Progress{State: engine.Succeeded}
+			for _, name := range []string{"dp0", "dp1", "dp2", "dp4"} {
+				test.member(name).Serving = true
+			}
+			test.eng.plan = engine.Plan{Kind: engine.Healthy}
+			test.poll()
+			test.poll()
+			if reset {
+				test.wantReset(ResetCapacity)
+				return
+			}
+			if len(test.wl.resetAlls) != 0 || len(test.wl.resets) != 0 || test.record().Phase != Serving {
+				t.Fatalf("resets %v %v, record %+v", test.wl.resetAlls, test.wl.resets, test.record())
+			}
+		})
+	}
 	t.Run("release error is repeated", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)

@@ -37,6 +37,7 @@ func main() {
 
 	var metricsAddr string
 	var enableLeaderElection bool
+	var leaderElectionID string
 	var probeAddr string
 	var podNamespace string
 	var podLabelKey string
@@ -45,6 +46,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure only one active controller manager.")
+	flag.StringVar(&leaderElectionID, "leader-election-id", "llm-d-resiliency-operator-leader",
+		"Lease name for leader election; give each manager in a namespace its own.")
 	flag.StringVar(&podNamespace, "pod-namespace", "default", "The namespace of the pod to label.")
 	flag.StringVar(&podLabelKey, "pod-label-key", "llm-d.ai/inference-serving", "The label key to match the pod.")
 	engineFT := enginefault.Options{
@@ -64,7 +67,7 @@ func main() {
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "llm-d-resiliency-operator-leader",
+		LeaderElectionID:       leaderElectionID,
 	})
 	if err != nil {
 		klog.Fatalf("unable to start manager: %v", err)
