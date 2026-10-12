@@ -476,6 +476,27 @@ func TestResetCauseSurvivesUnavailableReplacementAndRestart(t *testing.T) {
 	}
 }
 
+func TestReplacementStartingTimeExcludesReset(t *testing.T) {
+	controller, adapter, workload := setup(t)
+	if err := controller.beginReset(context.Background(), controller.Snapshot(), "FT completion deadline exceeded"); err != nil {
+		t.Fatal(err)
+	}
+	// Pod deletion, scheduling and image pulls happen while resetting.
+	state := controller.Snapshot()
+	state.Since = time.Now().Add(-time.Hour)
+	controller.set(state)
+	workload.group.ID = "replacement"
+	workload.group.Endpoints = slices.Clone(workload.group.Endpoints)
+	for index := range workload.group.Endpoints {
+		workload.group.Endpoints[index].PodUID += "-new"
+	}
+	adapter.status = statuses("unknown", "unknown", "unknown", "unknown")
+	step(t, controller)
+	if state := controller.Snapshot(); state.Phase != "starting" || time.Since(state.Since) > time.Minute {
+		t.Fatalf("starting kept the reset time: %+v", state)
+	}
+}
+
 func TestDiscoveryFailureDuringVerificationPreservesRound(t *testing.T) {
 	controller, adapter, workload := setup(t)
 	adapter.status = statuses("unhealthy", "dead", "unhealthy", "unhealthy")

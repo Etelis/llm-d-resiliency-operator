@@ -296,6 +296,7 @@ func (controller *Controller) Step(ctx context.Context) error {
 		}
 		state.Group = group
 		state.Phase = "starting"
+		state.Since = now
 		state.Excluded = nil
 		state.Round = engine.Round{}
 		state.Instruction = ""
