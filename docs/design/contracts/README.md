@@ -6,9 +6,8 @@
 - **Based on:** PR #11 at `9a3a10c` (controller, LWS), PR #19 at `5a03f3e` (vLLM). "Today" in these docs means that code.
 - **Code:** the interfaces and types are in [`internal/workload`](../../../internal/workload), [`internal/engine`](../../../internal/engine),
   [`internal/journal`](../../../internal/journal) and [`internal/controller/enginefault`](../../../internal/controller/enginefault). No implementation yet.
-- **Scope:** recovery of one engine group, including getting back to full capacity after a shrink.
-  Resizing is part of the contract now. LWS and vLLM implement it later; until then the calls answer
-  `ErrUnsupported` and IRO keeps today's behavior.
+- **Scope:** recovery of one engine group, including getting back to full capacity after a shrink by
+  resetting the failed Pod or the whole group. Capacity never comes from new Pods elsewhere.
 
 ## Problem
 
@@ -41,20 +40,20 @@ flowchart LR
   C -->|Load, Save| J
   C -->|what happened| T
   T --> OBS
-  C -->|Discover, Reset, Resize| W
+  C -->|Discover, Reset, ResetAll, Release| W
   C -->|Capabilities, Observe, Probe, Apply, Verify| D
   C -->|Plan, Progress| P
-  LWS -->|read, add and remove Pods| K8S
+  LWS -->|read, replace and remove Pods| K8S
   D -->|HTTP| RT
   EPP -->|routes on native health| RT
 ```
 
 | Component | Owns | Must not know | Doc |
 |---|---|---|---|
-| Controller | phases, deadlines, durability, whether it is still the same group, connecting Pods to members, resets, the capacity target, checks on every plan | engine states, ranks, Pod layout | [controller.md](controller.md) |
+| Controller | phases, deadlines, durability, whether it is still the same group, connecting Pods to members, resets, bringing capacity back, checks on every plan | engine states, ranks, Pod layout | [controller.md](controller.md) |
 | Journal | durable controller state, one writer at a time | what the bytes mean | [journal.md](journal.md) |
 | Telemetry | logs, metrics, Events, incident records, readiness. Best-effort, never read back. | how recovery decides anything | [telemetry.md](telemetry.md) |
-| Workload | reporting the group's Pods as they are now, resetting it, resizing it | ranks, ports, engine processes, anything from before | [workload.md](workload.md) |
+| Workload | reporting the group's Pods as they are now, resetting one Pod or all of them, releasing Pods | ranks, ports, engine processes, anything from before | [workload.md](workload.md) |
 | Engine driver | reporting which members run on each Pod and their state, sending rounds, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](engine.md#interface) |
 | Engine policy | which members to remove or admit and when, how a round is going | I/O, time, Kubernetes | [engine.md](engine.md#interface) |
 
@@ -90,8 +89,8 @@ All examples use the same group. Four Pods, one engine member each (member names
 | `lws-0-3` | `d1` | `idD` | `dp3` | `dp3@idD` |
 
 The story: the group serves. `dp3` dies. The engine shrinks to `dp0`-`dp2`. IRO asks the workload to
-remove `lws-0-3` and keep 4 Pods. A new Pod `lws-0-4` (UID `e1`, identity `idE`) starts and runs `dp4`.
-The engine admits `dp4@idE`. The group is back to 4 members.
+reset `lws-0-3`. It comes back as a new Pod in the same place (UID `d2`, identity `idD2`) and runs `dp3`
+again. The engine admits `dp3@idD2`. The group is back to 4 members.
 
 ## One reconciliation step
 
@@ -116,8 +115,8 @@ sequenceDiagram
     C->>D: Apply(observation, round)
     C->>J: Save(acceptances)
   end
-  opt serving and capacity below target
-    C->>W: Resize(target, remove fully excluded Pods)
+  opt serving below full
+    C->>W: Reset(failed Pod), ResetAll or Release
   end
 ```
 
@@ -126,7 +125,7 @@ Two kinds of action, with opposite delivery rules:
 | Action | Delivery | Why |
 |---|---|---|
 | Engine round (`Apply`) | at most once. Saved first, never sent again. | a round is not idempotent. Sending it twice can break the group. |
-| Workload call (`Reset`, `Resize`) | repeated every poll until `Discover` shows the result | each call states an end state, so repeating it is harmless |
+| Workload call (`Reset`, `ResetAll`, `Release`) | saved first, repeated every poll until `Discover` shows the result | each call names Pods by UID and does nothing once they are gone, so repeating it is harmless |
 
 ## From a fault back to full capacity
 
@@ -144,39 +143,38 @@ sequenceDiagram
   C->>P: Progress(observation, round)
   P-->>C: Succeeded
   C->>D: Verify(dp0, dp1, dp2)
-  Note over C: serving below target
-  C->>W: Resize(4 Pods, remove lws-0-3)
-  W-->>C: Discover: lws-0-3 gone, lws-0-4 starting, then Ready
+  Note over C: serving below full
+  C->>W: Reset(lws-0-3, UID d1)
+  W-->>C: Discover: lws-0-3 back with UID d2, starting, then Ready
   C->>D: Observe(pods)
-  D-->>C: dp4 on lws-0-4, Joinable
+  D-->>C: dp3 on lws-0-3 (d2), Joinable
   C->>P: Plan(observation, admitted, candidates)
-  P-->>C: Change, add dp4@idE
+  P-->>C: Change, add dp3@idD2
   Note over C: serving, round in flight
-  C->>D: Apply(round: add dp4@idE)
+  C->>D: Apply(round: add dp3@idD2)
   C->>P: Progress(observation, round)
   P-->>C: Succeeded
-  C->>D: Verify(dp4@idE)
-  Note over C: serving at target
+  C->>D: Verify(dp3@idD2)
+  Note over C: serving at full
 ```
 
 1. **The engine decides who leaves.** The policy proposes `Remove`. `Progress` reports `Succeeded` once those members are out, and only then does the controller record them as excluded.
-2. **The controller asks the workload for the new shape, in one call.** Each member names its Pod, so the
-   controller knows `lws-0-3` now holds only excluded members. It calls `Resize` with that Pod in `Remove`
-   and the target in `Pods`: the Pod count the group had when it first served. The workload decides how to
-   get there. There is no deadline; scheduling and model loading take as long as they take.
-3. **The engine decides who joins.** New Pods show up as candidates. The policy plans `Add` when the engine can admit them, and the round runs like any other.
+2. **The controller resets the failed Pod.** Each member names its Pod, so the controller knows `lws-0-3`
+   now holds only excluded members. It calls `Reset` on it. The rest of the group keeps serving. There is
+   no deadline; scheduling and model loading take as long as they take.
+3. **The engine decides who joins.** The new Pod's members show up as candidates. The policy plans `Add` when the engine can admit them, and the round runs like any other.
 4. **Faults come first.** A fault at any point moves the group to `recovering`. The capacity work pauses and continues from the same step once the group serves again.
 
-A workload that cannot resize answers `ErrUnsupported`, and an engine that cannot admit members says so
-in its capabilities. Then, by default, IRO resets the group after `--ft-capacity-reset-delay` to come back
-at full size. With `--ft-capacity-restore=in-place` it keeps serving below target instead.
+Capacity never comes from new Pods elsewhere: it comes back by resetting. When the workload cannot reset
+one Pod (LWS today answers `ErrUnsupported`), the engine cannot admit members, or the new Pod keeps failing
+to join, IRO resets the whole group after `--ft-capacity-reset-delay`. With `--ft-capacity-restore=release`,
+IRO frees the failed Pod's GPUs instead and serves below full.
 
 ## Where each object lives
 
 | Object | Defined in | Made by | Read by |
 |---|---|---|---|
 | `Group`, `Pod`, `PodState`, `PodRef` | [workload.md](workload.md#objects) | workload | controller, engine driver |
-| `ResizeRequest` | [workload.md](workload.md#objects) | controller | workload |
 | `ErrUnsupported` | [workload.md](workload.md#objects) | workload | controller |
 | `Capabilities`, `Member`, `MemberID`, `Observation` | [engine.md](engine.md#objects) | engine driver | controller, engine policy |
 | `Round` | [engine.md](engine.md#objects) | controller | engine driver, engine policy |
@@ -197,12 +195,12 @@ at full size. With `--ft-capacity-restore=in-place` it keeps serving below targe
 | `--ft-store-port` | controller flag | vLLM driver flag |
 | `lws.Discover` | calls the rank observer, knows the API port and rank layout | returns Pods. The vLLM driver's `Observe` reports which ranks run on each. |
 | `lws.Discover` while Pods start | error, so the controller waits blind | Pods come back with their state: `Starting`, `Ready`, `Terminating` |
-| `lws.Reset` | finds the leader through rank 0 | Pod index 0 |
+| `lws.Reset` | recreates the group; finds the leader through rank 0 | `ResetAll`, leader by Pod index 0. `Reset` replaces one Pod. |
 | `Group.ID` | hash of every Pod and container identity, made by the workload | no group ID. The controller compares the reported Pods with its journal. |
 | `State.Excluded` | `[]int` ranks | members by `MemberID`: candidate, admitted, excluded, rejected |
-| Excluded Pods | stay until the next reset | removed through `Workload.Resize` |
-| Lost capacity | comes back only with a reset | in place (`Workload.Resize` + engine admits) when supported, otherwise a capacity reset after a delay (`--ft-capacity-restore`) |
-| Phases `diagnosing`, `applying` | two phases that differ only by whether a round is in flight | one `recovering` phase. The round in flight is a field, so a growth round can run while `serving`. |
+| Excluded Pods | stay until the next reset | reset (`Workload.Reset`), or released (`Workload.Release`), per `--ft-capacity-restore` |
+| Lost capacity | comes back only with a reset | reset the failed Pod and re-admit its members, falling back to `ResetAll` after a delay |
+| Phases `diagnosing`, `applying` | two phases that differ only by whether a round is in flight | one `recovering` phase. The round in flight is a field, so a round that re-admits members can run while `serving`. |
 | Reset budget, `intervention_required` | after 3 resets in 30 min IRO stops and waits for a human | removed. LWS `restartBackoff` and `maxGroupRestarts` pace resets and decide when to stop. |
 | `Workload.Load/Save` | part of `Workload` | `Journal` |
 | Logs, metrics, Events | error logs only, no IRO metrics, no Events, readiness is a ping | `Recorder`: `llm_d_iro_*` metrics, Events per incident, incident history, a readiness check on loop progress (#25, #30) |
@@ -213,19 +211,15 @@ at full size. With `--ft-capacity-restore=in-place` it keeps serving below targe
 
 1. **Disaggregated sets.** A prefill/decode set has several engine groups with different roles.
    Proposal: one recovery unit per engine group, each with its own Group, journal and controller loop.
-2. **Restart policy.** With per-Pod comparison, a restarted Pod's old members are lost and its new ones
-   become candidates. That only happens if LWS stops recreating the whole group on a restart
-   (`restartPolicy: None`). Today IRO requires `RecreateGroupOnPodRestart`. Which should it require?
+2. **Restart policy.** Resetting one Pod needs LWS `restartPolicy: None`: under `RecreateGroupOnPodRestart`,
+   deleting any Pod recreates the whole group, so LWS answers `Reset` with `ErrUnsupported`. Today IRO
+   requires `RecreateGroupOnPodRestart`. Which should it require?
 3. **Standby engines and C5.** Does a vLLM engine waiting to join report healthy to the router?
-4. **Where the target comes from.** Proposal: the Pod count when the group first served.
-   If an autoscaler also changes the size later, whose target wins?
-5. **vLLM rank numbering.** The FT path keeps frozen original ranks; elastic EP renumbers densely.
-   The vLLM driver bridges them, and opaque member names keep this out of the contract.
-6. **Pods with some members excluded.** With several ranks per Pod, losing one rank does not free the
-   Pod (C8), so that capacity stays lost until a reset. Should the policy be allowed to remove the
-   healthy rest of the Pod so it can be replaced?
-7. **Remove first, or add first?** The workload decides, since `Resize` carries both in one call.
-   Proposal for LWS: remove first. It frees the GPUs and the slot, and it works on a full cluster.
-8. **LWS restart limits for IRO resets.** `restartBackoff` and `maxGroupRestarts` are on LWS `main`, not in
+4. **vLLM rank numbering.** The FT path keeps frozen original ranks; elastic EP renumbers densely.
+   Re-admitting a reset Pod's rank needs the vLLM driver to bridge them. Opaque member names keep this out of the contract.
+5. **Pods with some members excluded.** With several ranks per Pod, losing one rank does not let IRO
+   reset the Pod (C8), so that capacity stays lost until `ResetAll`. Should the policy be allowed to remove
+   the healthy rest of the Pod so the Pod can be reset?
+6. **LWS restart limits for IRO resets.** `restartBackoff` and `maxGroupRestarts` are on LWS `main`, not in
    v0.11.1. Check that a recreation IRO causes, by deleting the leader, is paced and counted like any other.
    Until they ship, IRO resets are not paced at all.

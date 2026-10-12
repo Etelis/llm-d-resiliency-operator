@@ -17,8 +17,9 @@ type Recorder interface {
 	IncidentOpened(incident *Incident)
 	RoundStarted(round *engine.Round, plan *engine.Plan)
 	RoundFinished(round *engine.Round, progress engine.Progress)
-	ResetRequested(reason ResetReason, pods []workload.PodRef)
-	ResizeRequested(req workload.ResizeRequest, err error)
+	PodResetRequested(pod workload.PodRef, err error)
+	ResetAllRequested(reason ResetReason, pods []workload.PodRef)
+	ReleaseRequested(pods []workload.PodRef, err error)
 	SaveFailed(err error)
 	IncidentClosed(incident *Incident)
 	Ready() error

@@ -8,7 +8,7 @@ It owns everything that is not engine- or workload-specific:
 - whether it is still the same group,
 - connecting Pods to engine members,
 - saving state in the [journal](journal.md) before acting,
-- resets and the capacity target,
+- resets, and bringing capacity back after a shrink,
 - the checks every engine plan must pass.
 
 It reads only the engine-neutral [`Member`](engine.md#objects) fields and [`Pod`](workload.md#objects)
@@ -32,20 +32,20 @@ A runner calls `New` until the journal loads, then `Step` every `PollInterval` w
 ```go
 // Config holds the controller's settings. Flags are in Configuration below.
 type Config struct {
-    PollInterval     time.Duration // 1s
-    DiagnosisTimeout time.Duration // 75s: longest time in recovering without a round
-    ApplyTimeout     time.Duration // 90s: longest time a round may stay in flight
-    VerifyTimeout    time.Duration // 2m: how long a failed inference probe is retried
-    FlapWindow       time.Duration // 2m: check C6
-    CapacityRestore    CapacityRestore // in-place-or-reset (default) | in-place | off
-    CapacityResetDelay time.Duration   // 0: how long to serve below target before resetting to restore it
-    JoinBudget       int           // 3 failed joins per group
+    PollInterval       time.Duration   // 1s
+    DiagnosisTimeout   time.Duration   // 75s: longest time in recovering without a round
+    ApplyTimeout       time.Duration   // 90s: longest time a round may stay in flight
+    VerifyTimeout      time.Duration   // 2m: how long a failed inference probe is retried
+    FlapWindow         time.Duration   // 2m: check C6
+    CapacityRestore    CapacityRestore // reset-pod (default) | reset-all | release
+    CapacityResetDelay time.Duration   // 0: how long to serve below full before ResetAll
+    JoinBudget         int             // 3: failed attempts to bring a Pod's members back
 }
 
 type Phase string // starting | serving | recovering | resetting
 
-// CapacityRestore says how lost capacity comes back.
-type CapacityRestore string // in-place-or-reset | in-place | off
+// CapacityRestore says how capacity comes back after a shrink.
+type CapacityRestore string // reset-pod | reset-all | release
 
 type MemberState string // candidate | admitted | excluded | rejected
 
@@ -53,14 +53,13 @@ type MemberState string // candidate | admitted | excluded | rejected
 type PodRecord struct {
     Name     string
     Identity string
-    Removing bool // asked to go through Resize
+    Removing bool // asked to go, through Reset or Release
 }
 
 // Capacity is the capacity loop's state.
 type Capacity struct {
-    State        CapacityState // full | resizing | waiting | admitting | reset_pending | below_target
-    BelowSince   time.Time     // when the group went below target, for CapacityResetDelay
-    Target       int           // Pod count when the group first served
+    State        CapacityState // full | resetting_pod | waiting | admitting | reset_pending | releasing | below_full
+    BelowSince   time.Time     // when the group went below full, for CapacityResetDelay
     JoinFailures int
 }
 
@@ -72,7 +71,7 @@ type Record struct {
     Since   time.Time // when the phase started. The diagnosis deadline counts from here.
     Reason  string
 
-    Pods    map[string]PodRecord     // by UID. Also what Reset names.
+    Pods    map[string]PodRecord     // by UID. Also what ResetAll names.
     Members map[MemberID]MemberState
 
     Round       *Round    // in flight, nil when none
@@ -121,7 +120,7 @@ Runs one reconciliation: read, decide, act.
 |---|---|
 | **Input** | none |
 | **Output** | `nil`, or an error that the runner logs. An error never changes the saved phase. |
-| **Side effects** | any of `Journal.Save`, `Probe`, `Apply`, `Verify`, `Reset`, `Resize`, and [`Recorder`](telemetry.md#interface) calls for what happened |
+| **Side effects** | any of `Journal.Save`, `Probe`, `Apply`, `Verify`, `Reset`, `ResetAll`, `Release`, and [`Recorder`](telemetry.md#interface) calls for what happened |
 
 In order:
 
@@ -130,7 +129,7 @@ In order:
 3. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
 4. **Check the observation** (C4, C5). A violation resets the group.
 5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [round](#rounds) is in flight.
-   Check and send a new round, verify, or reset. In `resetting`, repeat `Reset` until the old Pods are gone.
+   Check and send a new round, verify, or reset. In `resetting`, repeat `ResetAll` until the old Pods are gone.
 6. **Move the [capacity loop](#capacity-loop)** if the group is `serving`.
 
 **Example**, the [running example](README.md#running-example) poll by poll:
@@ -142,11 +141,12 @@ In order:
 | 3 | same | same | same | waits: under 2 polls in `recovering` | recovering |
 | 4 | same | same | same | checks C1-C7, saves round `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, round in flight |
 | 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, round in flight |
-| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the round, `Verify(dp0, dp1, dp2)` | serving, resizing |
-| 7 | same | same | `Plan`: Healthy | `Resize{Pods: 4, Remove: [lws-0-3]}` | serving, resizing |
-| 8 | `lws-0-3` Terminating, `lws-0-4` Starting | `dp0`-`dp2` Serving | `Plan`: Healthy | saves `lws-0-4`, waits. No deadline. | serving, waiting |
-| ... | `lws-0-4` Ready | `dp4` Joinable | `Plan`: Change, add `dp4@idE` | checks, saves round, `Apply` | serving, admitting |
-| ... | same | `dp4` healthy | `Progress`: Succeeded | marks `dp4@idE` admitted, `Verify(dp4@idE)` | serving, full |
+| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the round, `Verify(dp0, dp1, dp2)` | serving, full |
+| 7 | same | same | `Plan`: Healthy | marks `lws-0-3` (d1) `Removing`, saves, `Reset(lws-0-3, d1)` | serving, resetting_pod |
+| 8 | `lws-0-3` (d1) Terminating | `dp0`-`dp2` Serving | `Plan`: Healthy | waits | serving, resetting_pod |
+| 9 | `lws-0-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `dp3@idD`. No deadline. | serving, waiting |
+| ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves round, `Apply` | serving, admitting |
+| ... | same | `dp3@idD2` healthy | `Progress`: Succeeded | marks `dp3@idD2` admitted, `Verify(dp3@idD2)` | serving, full |
 
 The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.Stepped` receives it:
 
@@ -155,7 +155,7 @@ Phase: recovering
 Reason: "dp3 is dead; survivors paused"
 Round: {ID: iro-ft-7c1e, Participants: [dp0@idA, dp1@idB, dp2@idC], Remove: [dp3@idD]}
 Members: {dp0@idA: admitted, dp1@idB: admitted, dp2@idC: admitted, dp3@idD: admitted}
-Capacity: {State: full, Target: 4}
+Capacity: {State: full}
 RecreateStopped: false
 ```
 
@@ -175,14 +175,14 @@ stateDiagram-v2
 ```
 
 Four phases, none terminal. Whether a round is in flight is not a phase; it is the `Round` field,
-described [below](#rounds). A round can run in `recovering` (fixing a fault) or in `serving` (adding capacity).
+described [below](#rounds). A round can run in `recovering` (fixing a fault) or in `serving` (bringing a Pod's members back).
 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
 | `starting` | new group, engine still loading | waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and Kubernetes restarts a failed start as a new group. | plan `Healthy`, then inference verified |
-| `serving` | verified and healthy, maybe below the capacity target | plans every poll and moves the [capacity loop](#capacity-loop). A round that admits candidates runs here. | a fault |
+| `serving` | verified and healthy, maybe below full | plans every poll and moves the [capacity loop](#capacity-loop). A round that admits candidates runs here. | a fault |
 | `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan or round `Succeeded`, then verified. Or reset. |
-| `resetting` | workload reset issued | repeats `Reset` with the saved Pods until they are gone. No deadline. The workload decides how fast to recreate the group, and whether to stop. | none of the old Pods are left and new ones appear |
+| `resetting` | the whole group is being recreated at IRO's request | repeats `ResetAll` with the saved Pods until they are gone. No deadline. The workload decides how fast to recreate the group, and whether to stop. | none of the old Pods are left and new ones appear |
 
 ### Reading Discover
 
@@ -201,10 +201,10 @@ flowchart TD
 | Pod compared with the journal | Meaning | Controller does |
 |---|---|---|
 | saved, same identity, not `Terminating` | unchanged | nothing |
-| saved as `Removing`, now gone or `Terminating` | the resize is happening | forgets it once it is gone |
+| saved as `Removing`, now gone or `Terminating` | the `Reset` or `Release` is happening | forgets it once it is gone |
 | saved, not `Removing`, now gone, `Terminating` or with a new identity | its members are lost | treats them as Terminal, so the policy plans as usual |
-| not saved, `Starting` | new capacity is loading | saves it and waits |
-| not saved, `Ready` | new capacity | its members, as `Observe` reports them, are candidates |
+| not saved, `Starting` | a replacement Pod is loading | saves it and waits |
+| not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
 
 While `starting`, every Pod belongs to the group being started, and its members are admitted when the
 group first serves. The table applies from then on. An empty journal (IRO's first run) is a new group.
@@ -230,9 +230,9 @@ What happens after a rank fails depends on whether Kubernetes noticed it.
 | Example | `dp3` is `dead` inside the engine, but its container keeps running | `dp3`'s container crashes or restarts |
 | Who acts | IRO | the workload (LWS recreates the whole group under `RecreateGroupOnPodRestart`) |
 | `Discover` | same Pods, same identities | `Recreating`, then all new Pods |
-| Controller | shrinks in place: `recovering`, round removes `dp3@idD`, back to `serving` with 3 members | waits: no plan, no round, no `Reset` of its own, deadlines frozen. Then a new group: clears the journal and goes to `starting`. |
-| Capacity | asks `Resize`. With LWS today the answer is `ErrUnsupported`. By default (`in-place-or-reset`) IRO then resets the group after `CapacityResetDelay` and comes back at full size. With `in-place` it stays below target. | back to the full size with the new group |
-| Incident outcome | `Shrunk`. The later capacity reset is a `GroupReset` with reason `capacity`. | `Recreated` |
+| Controller | shrinks in place: `recovering`, round removes `dp3@idD`, back to `serving` with 3 members | waits: no plan, no round, no reset of its own, deadlines frozen. Then a new group: clears the journal and goes to `starting`. |
+| Capacity | by default resets just `lws-0-3` and re-admits `dp3`. With LWS today that answers `ErrUnsupported`, so IRO falls back to `ResetAll` after `CapacityResetDelay`. With `release`, it frees `lws-0-3`'s GPUs and serves with 3 members. | back to full with the new group |
+| Incident outcome | `Shrunk`. Capacity actions after that are telemetry events of their own. | `Recreated` |
 
 The two can follow each other: a group that shrank in place is recreated later if Kubernetes then sees
 a container fail, and comes back at full size.
@@ -245,11 +245,16 @@ sequenceDiagram
   Note over C,E: Kubernetes saw nothing
   E-->>C: dp3 Terminal, survivors paused
   C->>E: round: remove dp3
-  C->>W: Resize(4 Pods, remove lws-0-3)
-  W-->>C: ErrUnsupported
-  Note over C: serving with 3 members, reset pending
-  C->>W: Reset, after CapacityResetDelay
-  Note over C: new group, starting, then serving with 4 members
+  alt the workload can reset one Pod
+    C->>W: Reset(lws-0-3)
+    W-->>C: lws-0-3 back as a new Pod
+    C->>E: round: add dp3 on the new Pod
+  else LWS today
+    C->>W: Reset(lws-0-3)
+    W-->>C: ErrUnsupported
+    C->>W: ResetAll, after CapacityResetDelay
+  end
+  Note over C: serving with 4 members
   Note over C,E: Kubernetes saw the failure
   W-->>C: Recreating
   Note over C: wait, act on nothing
@@ -275,37 +280,37 @@ and a new group drops the round in flight: the workload is already replacing eve
 
 ### Capacity loop
 
-A second, smaller state machine, saved in `Record.Capacity`. It moves only while the group is `serving`;
-a fault pauses it where it is. Admitting new members is a [round](#rounds) that runs while the group stays `serving`.
+Capacity never comes from new Pods. It comes back by resetting: one Pod, or the whole group.
+The loop is saved in `Record.Capacity` and moves only while the group is `serving`; a fault pauses it
+where it is. Admitting a reset Pod's members is a [round](#rounds) that runs while the group stays `serving`.
 
 ```mermaid
 stateDiagram-v2
   [*] --> full
-  full --> resizing: a round excluded members
-  resizing --> waiting: removed Pods gone, target requested
-  waiting --> admitting: candidates Joinable, policy plans Add
-  admitting --> full: Succeeded, verified, target reached
-  admitting --> waiting: Succeeded, more Pods still coming
-  admitting --> resizing: join failed for joiners only
-  resizing --> reset_pending: cannot resize in place, mode in-place-or-reset
-  admitting --> reset_pending: join budget used up, mode in-place-or-reset
-  reset_pending --> [*]: delay passed, IRO resets the group
-  resizing --> below_target: cannot resize in place, mode in-place or off
-  admitting --> below_target: join budget used up, mode in-place or off
-  below_target --> [*]: a new group
+  full --> resetting_pod: a round excluded members, mode reset-pod
+  resetting_pod --> waiting: the old Pod is gone
+  waiting --> admitting: its new members Joinable, policy plans Add
+  admitting --> full: Succeeded, verified
+  admitting --> resetting_pod: join failed, budget left
+  waiting --> resetting_pod: new Pod failed before joining, budget left
+  resetting_pod --> reset_pending: ErrUnsupported, or engine cannot grow
+  admitting --> reset_pending: join budget used up
+  full --> reset_pending: a round excluded members, mode reset-all
+  reset_pending --> [*]: delay passed, IRO resets all
+  full --> releasing: a round excluded members, mode release
+  releasing --> below_full: released Pods gone, or ErrUnsupported
+  below_full --> [*]: a new group
 ```
 
 | State | Meaning | Controller does | Leaves when |
 |---|---|---|---|
-| `full` | admitted Pods match the target | nothing | a round excludes members |
-| `resizing` | some Pods hold only excluded members, or the group is below the target | calls `Resize` every poll with those Pods in `Remove` and the target in `Pods` (C8, C9). If the engine cannot grow, `Pods` is lowered by the removed Pods instead. | `Discover` no longer lists the removed Pods, and lists `Pods` Pods, starting or ready |
-| `waiting` | new Pods are scheduling, starting or loading | nothing. No deadline. | the policy plans `Add` for Joinable candidates |
-| `admitting` | a round adds candidates while the group keeps serving | watches `Progress` like any round | Succeeded, or Failed |
-| `reset_pending` | capacity cannot come back in place, and the mode is `in-place-or-reset` | keeps serving below target until `CapacityResetDelay` has passed since `BelowSince`, then resets the group (reason `capacity`) | the reset, or a new group |
-| `below_target` | capacity cannot come back in place, and the mode is `in-place` or `off` | reports it and keeps serving | a new group |
-
-A failed join counts against `JoinBudget`. The rejected candidates' Pods go back through `resizing`,
-which removes them and asks for capacity again.
+| `full` | every member is admitted | nothing | a round excludes members |
+| `resetting_pod` | a Pod holds only excluded or rejected members | saves it as `Removing`, then calls `Reset` on it every poll (C8) | the old Pod is gone |
+| `waiting` | the replacement Pod is scheduling, starting or loading | nothing. No deadline. A replacement that restarts or fails before joining counts against `JoinBudget`. | the policy plans `Add` for its members |
+| `admitting` | a round adds the replacement's members while the group keeps serving | watches `Progress` like any round | Succeeded, or Failed |
+| `reset_pending` | capacity cannot come back one Pod at a time, or the mode is `reset-all` | keeps serving below full until `CapacityResetDelay` has passed since `BelowSince`, then `ResetAll` (reason `capacity`) | the reset, or a new group |
+| `releasing` | the mode is `release` | saves the Pods as `Removing`, then calls `Release` on them every poll (C8) | they are gone, or `ErrUnsupported` |
+| `below_full` | serving with fewer members, by choice or because the workload cannot release | reports it and keeps serving | a new group |
 
 ## Rules
 
@@ -323,11 +328,10 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 | C5 | Members that are not admitted are not Serving | a joiner must not take traffic before it is in the group |
 | C6 | A round that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
 | C7 | One round at a time. `Apply` refuses a round that names a member missing from the current observation. | a stale round cannot apply to a changed group |
-| C8 | `Resize.Remove` names only Pods whose every member is excluded or rejected, after the round that removed them finished | the engine must no longer depend on a Pod before it goes |
-| C9 | `Resize.Pods` is at most the target and at least the Pods the group keeps (current minus `Remove`) | no runaway growth, and a smaller size never makes the workload pick a healthy Pod to drop |
+| C8 | `Reset` and `Release` name only Pods whose every member is excluded or rejected, after the round that removed them finished | the engine must no longer depend on a Pod before it goes |
 
 A plan that fails C1 to C3 resets the group. An observation that fails C4 or C5 resets the group.
-C8 and C9 limit what the controller itself sends, so they are never violated at runtime.
+C8 limits what the controller itself sends, so it is never violated at runtime.
 
 ### Guarantees
 
@@ -335,12 +339,12 @@ C8 and C9 limit what the controller itself sends, so they are never violated at 
 |---|---|
 | One writer per group | runs only on the elected leader. Journal saves are compare-and-swap. |
 | At-most-once rounds | the round is saved before `Apply`. A new leader only watches `Progress`. |
-| Repeatable workload calls | `Reset` and `Resize` state an end state and are repeated until `Discover` shows it |
+| Repeatable workload calls | `Reset`, `ResetAll` and `Release` are saved first and repeated until `Discover` shows the result |
 | One round at a time | a new plan is asked for only when no round is in flight |
 | Faults come first | the capacity loop moves only while `serving` |
 | A failed save never advances the phase | the in-memory state keeps the last saved phase |
 | Never resets a group it cannot see | discovery failures wait |
-| Resets hit only the failed group | `Reset` names the saved Pods by UID and is repeated until none are left |
+| Resets hit only what failed | `Reset` names one Pod by UID; `ResetAll` names the saved Pods by UID. Both are repeated until those Pods are gone. |
 | Never gives up on its own | no reset budget and no terminal phase. The workload's restart policy paces resets and decides when to stop. |
 | No startup deadline, no capacity deadline | `starting` and `waiting` last as long as they need |
 
@@ -354,8 +358,8 @@ C8 and C9 limit what the controller itself sends, so they are never violated at 
 | `--ft-diagnosis-timeout` | 75s | `DiagnosisTimeout` |
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
 | `--ft-verify-timeout` | 2m | `VerifyTimeout`. 0 resets on the first failure. |
-| `--ft-capacity-restore` (target) | `in-place-or-reset` | `CapacityRestore`: how lost capacity comes back. `in-place` never resets for capacity; `off` never restores it. |
-| `--ft-capacity-reset-delay` (target) | 0s | `CapacityResetDelay`: how long to serve below target before resetting |
+| `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod and falls back to `ResetAll`; `reset-all` resets the group; `release` frees the GPUs and serves below full. |
+| `--ft-capacity-reset-delay` (target) | 0s | `CapacityResetDelay`: how long to serve below full before `ResetAll` |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
 | no flag (target) | 3 | `JoinBudget` |
@@ -373,10 +377,9 @@ Each engine and workload implementation registers its own flags (see [engine](en
   `VerifyTimeout` before it resets.
 - **No give-up state.** IRO resets whenever recovery in place cannot help. How often a group may be
   recreated, and when to stop, is the workload's restart policy (LWS `restartBackoff`, `maxGroupRestarts`).
-- **Why the controller decides "same group".** It already remembers which Pods it asked to remove, so it
-  can tell a removed Pod from a lost one. The workload stays a plain reporter.
-- **Restoring capacity by reset.** With LWS today, the only way back to full size is to recreate the group.
-  That stops the whole group while the model loads again. When other groups serve the same model, that is
-  usually better than running below capacity, so it is the default. When this group is the only one, it is a
-  full outage: use `--ft-capacity-reset-delay` to pick a later moment, or `--ft-capacity-restore=in-place`.
-  The shrink still happens first either way, so the group keeps serving until the reset.
+- **Why the controller decides "same group".** It already remembers which Pods it asked to reset or
+  release, so it can tell those from a lost one. The workload stays a plain reporter.
+- **Why reset one Pod first.** It is the smallest action that brings capacity back: only the failed Pod
+  restarts, and the other members keep serving. `ResetAll` stops the whole group while the model loads
+  again. When this group is the only one serving the model, that is a full outage: use
+  `--ft-capacity-reset-delay` to pick a later moment, or `--ft-capacity-restore=release`.

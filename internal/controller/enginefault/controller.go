@@ -29,9 +29,9 @@ type Config struct {
 type CapacityRestore string
 
 const (
-	InPlaceOrReset CapacityRestore = "in-place-or-reset"
-	InPlace        CapacityRestore = "in-place"
-	NoRestore      CapacityRestore = "off"
+	RestoreResetPod CapacityRestore = "reset-pod"
+	RestoreResetAll CapacityRestore = "reset-all"
+	RestoreRelease  CapacityRestore = "release"
 )
 
 type Phase string
@@ -62,16 +62,16 @@ type CapacityState string
 
 const (
 	Full         CapacityState = "full"
-	Resizing     CapacityState = "resizing"
+	ResettingPod CapacityState = "resetting_pod"
 	Waiting      CapacityState = "waiting"
 	Admitting    CapacityState = "admitting"
 	ResetPending CapacityState = "reset_pending"
-	BelowTarget  CapacityState = "below_target"
+	Releasing    CapacityState = "releasing"
+	BelowFull    CapacityState = "below_full"
 )
 
 type Capacity struct {
 	State        CapacityState `json:"state"`
-	Target       int           `json:"target"`
 	BelowSince   time.Time     `json:"below_since,omitzero"`
 	JoinFailures int           `json:"join_failures,omitempty"`
 }

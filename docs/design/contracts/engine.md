@@ -141,8 +141,8 @@ Says what the engine can do at all.
 | **Input** | none |
 | **Output** | [`Capabilities`](#objects) |
 
-**Example.** vLLM today returns `{Grow: false}`. The controller then never asks the workload for Pods to
-add in place. With the default `--ft-capacity-restore`, it restores capacity by resetting the group instead.
+**Example.** vLLM today returns `{Grow: false}`. The controller then never resets a single Pod, since
+the engine could not re-admit its members. With the default `--ft-capacity-restore`, it resets the whole group instead.
 
 ### Observe
 
@@ -238,9 +238,9 @@ Says what should happen now. Pure: no I/O, no clock.
 Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC dp3@idD], candidates: [])
 // {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Remove: [dp3@idD], Reason: "dp3 is dead; survivors paused"}
 
-// later, lws-0-4 is Ready and dp4 is Joinable (needs Grow):
-Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC], candidates: [dp4@idE])
-// {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Add: [dp4@idE], Reason: "candidate ready"}
+// later, lws-0-3 was reset, is back as UID d2, and dp3 on it is Joinable (needs Grow):
+Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC], candidates: [dp3@idD2])
+// {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Add: [dp3@idD2], Reason: "candidate ready"}
 
 // dp2 is unhealthy, but dp3 is not dead yet:
 // {Kind: Wait, Reason: "waiting for the engine to finish diagnosis"}
@@ -261,7 +261,7 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 // survivors still rebuilding:             {State: Running}
 // dp0-dp2 healthy, finished iro-ft-7c1e:  {State: Succeeded}
 // dp1 reports its FT operation failed:    {State: Failed, Scope: Group, Reason: "dp1@idB: FT failed: ..."}
-// a joiner failed, survivors untouched:   {State: Failed, Scope: Joiners, Reason: "dp4@idE could not join"}
+// a joiner failed, survivors untouched:   {State: Failed, Scope: Joiners, Reason: "dp3@idD2 could not join"}
 ```
 
 ## Rules
@@ -288,7 +288,7 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 | No I/O, no clock, no globals | the same input gives the same answer on any leader |
 | Return `Wait` when the engine needs time, including when candidates are Joinable but the engine cannot take them yet | the controller owns the deadlines |
 | Return `Unrecoverable` when recovery in place cannot help | the controller resets |
-| Plan `Add` only if `Capabilities().Grow` | the controller asks the workload for Pods only when the engine can use them |
+| Plan `Add` only if `Capabilities().Grow` | the controller resets a single Pod only when the engine can re-admit its members |
 | A plan may remove and add in one round (replace) if the engine supports it | fewer rounds during a fault |
 | `Change` plans must pass the controller's [checks C1 to C7](controller.md#checks-on-every-plan) | otherwise the controller resets |
 | `Progress` stays `Running` until the engine reports a result for this round | the apply deadline covers a round that never finishes |

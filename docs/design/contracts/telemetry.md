@@ -25,8 +25,9 @@ type Recorder interface {
     IncidentOpened(incident *Incident)
     RoundStarted(round *Round, plan *Plan)
     RoundFinished(round *Round, progress Progress)
-    ResetRequested(reason ResetReason, pods []PodRef)
-    ResizeRequested(req ResizeRequest, err error)
+    PodResetRequested(pod PodRef, err error)
+    ResetAllRequested(reason ResetReason, pods []PodRef)
+    ReleaseRequested(pods []PodRef, err error)
     SaveFailed(err error)
     IncidentClosed(incident *Incident)
     Ready() error
@@ -37,8 +38,8 @@ The code is in `internal/controller/enginefault/recorder.go`: the recorder repor
 lives next to it. The controller calls the recorder after each thing happens. The recorder decides which signals to emit.
 `Ready` is the only call that returns an error, and only the manager's readiness check uses it.
 
-`Record`, `Phase` and `MemberID` come from the [controller](controller.md#objects); `Round`, `Plan` and
-`Progress` from the [engine](engine.md#objects); `PodRef` and `ResizeRequest` from the [workload](workload.md#objects).
+`Record` and `Phase` come from the [controller](controller.md#objects); `Round`, `Plan`, `Progress` and
+`MemberID` from the [engine](engine.md#objects); `PodRef` from the [workload](workload.md#objects).
 
 ## Objects
 
@@ -102,7 +103,7 @@ Called at the end of every `Step`.
 
 **Example.** After poll 6: `llm_d_iro_phase{group="ns1/lws",phase="serving"} 1`,
 `llm_d_iro_members{state="admitted"} 3`, `llm_d_iro_members{state="excluded"} 1`,
-`llm_d_iro_capacity_pods{kind="target"} 4`.
+`llm_d_iro_capacity_state{state="full"} 1`.
 
 ### PhaseChanged
 
@@ -141,23 +142,32 @@ Called at the end of every `Step`.
 
 **Example.** `RoundFinished(iro-ft-7c1e, {Succeeded})` → `llm_d_iro_rounds_total{change="shrink",outcome="succeeded"}` +1
 
-### ResetRequested
+### PodResetRequested
 
 | | |
 |---|---|
-| **Input** | a fixed [`ResetReason`](#objects) and the Pods named in `Reset` |
+| **Input** | the Pod named in `Reset`, and the workload's answer |
+| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total`, once per Pod (not every poll). `ErrUnsupported` is logged; the fallback shows as `CapacityBelowFull`. |
+
+**Example.** `PodResetRequested({lws-0-3, d1}, nil)` → Event: `resetting lws-0-3 to bring dp3 back`
+
+### ResetAllRequested
+
+| | |
+|---|---|
+| **Input** | a fixed [`ResetReason`](#objects) and the Pods named in `ResetAll` |
 | **Emits** | a log line, a `GroupReset` Warning Event, `llm_d_iro_resets_total{reason}` |
 
-**Example.** `ResetRequested(round_failed, [lws-0 ... lws-0-3])` → `llm_d_iro_resets_total{reason="round_failed"}` +1
+**Example.** `ResetAllRequested(round_failed, [lws-0 ... lws-0-3])` → `llm_d_iro_resets_total{reason="round_failed"}` +1
 
-### ResizeRequested
+### ReleaseRequested
 
 | | |
 |---|---|
-| **Input** | the [`ResizeRequest`](workload.md#objects) and the workload's answer |
-| **Emits** | a log line and a `ResizeRequested` Event, once per distinct request (not every poll). `ErrUnsupported` emits `CapacityBelowTarget`. |
+| **Input** | the Pods named in `Release`, and the workload's answer |
+| **Emits** | a log line and a `PodsReleased` Event, once per request (not every poll) |
 
-**Example.** `ResizeRequested({Pods: 4, Remove: [lws-0-3]}, nil)` → Event: `inc-7c1e: asked for 4 Pods, removing lws-0-3`
+**Example.** `ReleaseRequested([{lws-0-3, d1}], nil)` → Event: `releasing lws-0-3; serving with 3 members`
 
 ### SaveFailed
 
@@ -199,7 +209,8 @@ All metrics carry `group` (`<namespace>/<workload name>`). Label values come fro
 | `llm_d_iro_phase` | gauge | `phase` | 1 for the current phase |
 | `llm_d_iro_phase_transitions_total` | counter | `from`, `to` | phase changes |
 | `llm_d_iro_members` | gauge | `state` | members by state: candidate, admitted, excluded, rejected |
-| `llm_d_iro_capacity_pods` | gauge | `kind` | `target` and `current` Pods |
+| `llm_d_iro_capacity_state` | gauge | `state` | 1 for the capacity loop's current state |
+| `llm_d_iro_pod_resets_total` | counter | | single Pods IRO reset to bring members back |
 | `llm_d_iro_rounds_total` | counter | `change`, `outcome` | rounds by shape (retry, shrink, grow, replace) and result (succeeded, failed_joiners, failed_group, deadline) |
 | `llm_d_iro_resets_total` | counter | `reason` | resets IRO asked for, by [`ResetReason`](#objects). Recreations the workload did on its own are not counted here; they close incidents as `Recreated`. |
 | `llm_d_iro_incidents_total` | counter | `outcome` | closed incidents by outcome |
@@ -207,7 +218,7 @@ All metrics carry `group` (`<namespace>/<workload name>`). Label values come fro
 | `llm_d_iro_journal_save_failures_total` | counter | | failed journal saves |
 | `llm_d_iro_last_verified_timestamp_seconds` | gauge | | when inference was last verified |
 
-Alerts this allows: recovering for more than N minutes, below target for more than N minutes,
+Alerts this allows: recovering for more than N minutes, below full for more than N minutes,
 journal saves failing, no leader.
 
 ### Events
@@ -220,9 +231,10 @@ On the workload object (the LWS). Every Event of an incident starts with its ID.
 | `PhaseChanged` | Normal | any phase change |
 | `RoundStarted` | Normal | a round is sent |
 | `RoundSucceeded` / `RoundFailed` | Normal / Warning | a round finishes |
-| `ResizeRequested` | Normal | a new resize is asked for |
+| `PodReset` | Normal | IRO resets one Pod to bring its members back |
+| `PodsReleased` | Normal | IRO releases Pods and serves below full |
 | `GroupReset` | Warning | IRO asks the workload to recreate the group |
-| `CapacityBelowTarget` | Warning | the capacity loop stops below target (`in-place` or `off`), or schedules a capacity reset |
+| `CapacityBelowFull` | Warning | the capacity loop stops below full, or schedules a `ResetAll` |
 | `RecreateStopped` | Warning | the workload reports it gave up recreating the group |
 | `IncidentClosed` | Normal | the group serves again, or was reset |
 

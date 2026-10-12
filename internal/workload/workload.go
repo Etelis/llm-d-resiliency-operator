@@ -11,8 +11,9 @@ import (
 
 type Workload interface {
 	Discover(ctx context.Context) (Group, error)
-	Reset(ctx context.Context, pods []PodRef) error
-	Resize(ctx context.Context, req ResizeRequest) error
+	Reset(ctx context.Context, pod PodRef) error
+	ResetAll(ctx context.Context, pods []PodRef) error
+	Release(ctx context.Context, pods []PodRef) error
 }
 
 var ErrUnsupported = errors.New("unsupported")
@@ -44,9 +45,4 @@ const (
 type PodRef struct {
 	Name string
 	UID  string
-}
-
-type ResizeRequest struct {
-	Pods   int
-	Remove []PodRef
 }
