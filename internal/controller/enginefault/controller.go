@@ -40,7 +40,6 @@ const (
 	Starting   Phase = "starting"
 	Serving    Phase = "serving"
 	Recovering Phase = "recovering"
-	Resetting  Phase = "resetting"
 )
 
 type MemberState string

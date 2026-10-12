@@ -42,7 +42,7 @@ type Config struct {
     JoinBudget         int             // 3: failed attempts to bring a Pod's members back
 }
 
-type Phase string // starting | serving | recovering | resetting
+type Phase string // starting | serving | recovering
 
 // CapacityRestore says how capacity comes back after a shrink.
 type CapacityRestore string // reset-pod | reset-all | release
@@ -53,7 +53,7 @@ type MemberState string // candidate | admitted | excluded | rejected
 type PodRecord struct {
     Name     string
     Identity string
-    Removing bool // asked to go, through Reset or Release
+    Removing bool // asked to go, through Reset, ResetAll or Release
 }
 
 // Capacity is the capacity loop's state.
@@ -125,11 +125,12 @@ Runs one reconciliation: read, decide, act.
 In order:
 
 1. **Discover.** If it fails, keep the phase and its deadline clock, note the time, and stop here.
-2. **Read Discover** against the journal: same group, new group, or being recreated. See [Reading Discover](#reading-discover).
+2. **Read Discover** against the journal: same group, new group, or going away. While the old group is going,
+   repeat any owed `ResetAll` and stop here. See [Reading Discover](#reading-discover).
 3. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
 4. **Check the observation** (C4, C5). A violation resets the group.
 5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [round](#rounds) is in flight.
-   Check and send a new round, verify, or reset. In `resetting`, repeat `ResetAll` until the old Pods are gone.
+   Check and send a new round, verify, or reset.
 6. **Move the [capacity loop](#capacity-loop)** if the group is `serving`.
 
 **Example**, the [running example](README.md#running-example) poll by poll:
@@ -169,20 +170,19 @@ stateDiagram-v2
   starting --> serving: plan Healthy, inference verified
   serving --> recovering: a fault is observed
   recovering --> serving: plan Healthy or round Succeeded, inference verified
-  serving --> resetting: verification fails past window, C4 or C5 broken
-  recovering --> resetting: Unrecoverable, round Failed for group, deadline, flap guard
-  resetting --> starting: none of the old Pods left, new ones appear
+  serving --> starting: ResetAll, after verification fails past window, C4 or C5 broken
+  recovering --> starting: ResetAll, after Unrecoverable, round Failed for group, deadline, flap guard
 ```
 
-Four phases, none terminal. Whether a round is in flight is not a phase; it is the `Round` field,
+Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
+and the group goes to `starting`, which waits until the old Pods are gone (see [Reading Discover](#reading-discover)). Whether a round is in flight is not a phase; it is the `Round` field,
 described [below](#rounds). A round can run in `recovering` (fixing a fault) or in `serving` (bringing a Pod's members back).
 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
-| `starting` | new group, engine still loading | waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and Kubernetes restarts a failed start as a new group. | plan `Healthy`, then inference verified |
+| `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy`, then inference verified |
 | `serving` | verified and healthy, maybe below full | plans every poll and moves the [capacity loop](#capacity-loop). A round that admits candidates runs here. | a fault |
 | `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan or round `Succeeded`, then verified. Or reset. |
-| `resetting` | the whole group is being recreated at IRO's request | repeats `ResetAll` with the saved Pods until they are gone. No deadline. The workload decides how fast to recreate the group, and whether to stop. | none of the old Pods are left and new ones appear |
 
 ### Reading Discover
 
@@ -191,8 +191,8 @@ them with the Pods saved in its journal.
 
 ```mermaid
 flowchart TD
-  A[Discover] --> R{Recreating or RecreateStopped?}
-  R -- yes --> W[Wait and act on nothing]
+  A[Discover] --> R{Recreating, RecreateStopped, or an owed ResetAll with old Pods left?}
+  R -- yes --> W[Wait and act on nothing. Repeat the owed ResetAll.]
   R -- no --> K{Any saved Pod still there with the same identity?}
   K -- no --> N[New group: clear the journal, go to starting]
   K -- yes --> P[Same group: compare Pod by Pod]
@@ -205,6 +205,9 @@ flowchart TD
 | saved, not `Removing`, now gone, `Terminating` or with a new identity | its members are lost | treats them as Terminal, so the policy plans as usual |
 | not saved, `Starting` | a replacement Pod is loading | saves it and waits |
 | not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
+
+A `ResetAll` is owed when every saved Pod is `Removing`. Once none of them remain, the first check
+fails, the second finds no saved Pod, and the new Pods form a new group.
 
 While `starting`, every Pod belongs to the group being started, and its members are admitted when the
 group first serves. The table applies from then on. An empty journal (IRO's first run) is a new group.

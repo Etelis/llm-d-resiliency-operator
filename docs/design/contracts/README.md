@@ -201,6 +201,7 @@ IRO frees the failed Pod's GPUs instead and serves below full.
 | Excluded Pods | stay until the next reset | reset (`Workload.Reset`), or released (`Workload.Release`), per `--ft-capacity-restore` |
 | Lost capacity | comes back only with a reset | reset the failed Pod and re-admit its members, falling back to `ResetAll` after a delay |
 | Phases `diagnosing`, `applying` | two phases that differ only by whether a round is in flight | one `recovering` phase. The round in flight is a field, so a round that re-admits members can run while `serving`. |
+| Phase `resetting` | waits for the old Pods to go after a reset | removed. `ResetAll` marks every saved Pod `Removing` and the group goes to `starting`, which waits for them to go. |
 | Reset budget, `intervention_required` | after 3 resets in 30 min IRO stops and waits for a human | removed. LWS `restartBackoff` and `maxGroupRestarts` pace resets and decide when to stop. |
 | `Workload.Load/Save` | part of `Workload` | `Journal` |
 | Logs, metrics, Events | error logs only, no IRO metrics, no Events, readiness is a ping | `Recorder`: `llm_d_iro_*` metrics, Events per incident, incident history, a readiness check on loop progress (#25, #30) |
