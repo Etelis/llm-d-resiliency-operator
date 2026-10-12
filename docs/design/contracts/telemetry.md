@@ -214,7 +214,7 @@ All metrics carry `group` (`<namespace>/<workload name>`). Label values come fro
 | `llm_d_iro_incidents_total` | counter | `outcome` | closed incidents by outcome |
 | `llm_d_iro_incident_duration_seconds` | histogram | `stage` | diagnose, apply, verify, total |
 | `llm_d_iro_journal_save_failures_total` | counter | | failed journal saves |
-| `llm_d_iro_last_verified_timestamp_seconds` | gauge | | when inference was last verified |
+| `llm_d_iro_last_verified_timestamp_seconds` | gauge | | when the last round's members passed `Verify` |
 
 Alerts this allows: recovering for more than N minutes, below full for more than N minutes,
 journal saves failing, no leader.

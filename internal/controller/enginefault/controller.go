@@ -67,7 +67,7 @@ type Record struct {
 	Round       *engine.Round       `json:"round,omitempty"`
 	RoundSince  time.Time           `json:"round_since,omitzero"`
 	Acceptances []engine.Acceptance `json:"acceptances,omitempty"`
-	Verified    []engine.MemberID   `json:"verified,omitempty"`
+	Verifying   []engine.MemberID   `json:"verifying,omitempty"`
 
 	LastNoChangeRound         time.Time `json:"last_no_change_round,omitzero"`
 	VerifyFailedSince         time.Time `json:"verify_failed_since,omitzero"`

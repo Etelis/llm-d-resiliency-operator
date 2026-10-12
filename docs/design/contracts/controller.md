@@ -35,7 +35,7 @@ type Config struct {
     PollInterval     time.Duration   // 1s
     DiagnosisTimeout time.Duration   // 75s: longest time in recovering without a round
     ApplyTimeout     time.Duration   // 90s: longest time a round may stay in flight
-    VerifyTimeout    time.Duration   // 2m: how long a failed inference probe is retried
+    VerifyTimeout    time.Duration   // 2m: how long a failed check after a round is retried
     FlapWindow       time.Duration   // 2m: check C6
     CapacityRestore  CapacityRestore // reset-pod (default) | reset-all | release
 }
@@ -66,7 +66,7 @@ type Record struct {
     Round       *Round    // in flight, nil when none
     RoundSince  time.Time // the apply deadline counts from here
     Acceptances []Acceptance
-    Verified    []MemberID
+    Verifying   []MemberID // members of a round that succeeded, not yet checked with Verify
 
     LastNoChangeRound         time.Time // check C6
     VerifyFailedSince         time.Time
@@ -89,7 +89,7 @@ Builds the controller and loads its state.
 |---|---|
 | **Input** | a [`Workload`](workload.md#interface), an [`Engine`](engine.md#interface), a [`Journal`](journal.md#interface), a [`Recorder`](telemetry.md#interface), a [`Config`](#objects) |
 | **Output** | a `Controller`, or an error |
-| **Side effects** | `Journal.Load`. Clears `Verified`: a new leader checks inference again before calling the group verified. |
+| **Side effects** | `Journal.Load` |
 
 **Examples.**
 
@@ -117,7 +117,7 @@ In order:
 3. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
 4. **Check the observation** (C4, C5). A violation resets the group.
 5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [round](#rounds) is in flight.
-   Check and send a new round, verify, or reset.
+   Check and send a new round, verify the members of a round that succeeded, or reset.
 6. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
 
 **Example**, the [running example](README.md#running-example) poll by poll:
@@ -153,10 +153,10 @@ RecreateStopped: false
 ```mermaid
 stateDiagram-v2
   [*] --> starting
-  starting --> serving: plan Healthy, inference verified
+  starting --> serving: plan Healthy
   serving --> recovering: a fault is observed
-  recovering --> serving: plan Healthy or round Succeeded, inference verified
-  serving --> starting: ResetAll, after verification fails past window, C4 or C5 broken
+  recovering --> serving: plan Healthy, or round Succeeded and verified
+  serving --> starting: ResetAll, after a round fails verification past window, C4 or C5 broken
   recovering --> starting: ResetAll, after Unrecoverable, round Failed for group, deadline, flap guard
 ```
 
@@ -166,9 +166,9 @@ described [below](#rounds). A round can run in `recovering` (fixing a fault) or 
 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
-| `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy`, then inference verified |
-| `serving` | verified and healthy, maybe below full | plans every poll and [restores capacity](#restoring-capacity). A round that admits candidates runs here. | a fault |
-| `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan or round `Succeeded`, then verified. Or reset. |
+| `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
+| `serving` | healthy, maybe below full | plans every poll and [restores capacity](#restoring-capacity). A round that admits candidates runs here. | a fault |
+| `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan, or round `Succeeded` and its members verified. Or reset. |
 
 ### Reading Discover
 
@@ -225,6 +225,12 @@ sent, and cleared when `Progress` reports `Succeeded` or `Failed`.
 The two deadlines catch different hangs: an engine that never reaches a state IRO can act on,
 and a round that never finishes. While the workload reports `Recreating`, both deadlines are frozen,
 and a new group drops the round in flight: the workload is already replacing everything.
+
+**After a round succeeds**, the controller saves its participants and joiners in `Verifying` and calls
+`Verify` on them. A failure is retried for `VerifyTimeout`; then the group is reset (reason `verify_failed`).
+A new leader finds `Verifying` in the journal and continues the check. Verify runs only here: IRO checks
+what it changed, nothing else. A fresh group, or one that recovered without a round, goes to `serving`
+on a `Healthy` plan.
 
 ### Restoring capacity
 
@@ -293,7 +299,7 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | `--workload` (target) | `lws` | workload implementation |
 | `--ft-diagnosis-timeout` | 75s | `DiagnosisTimeout` |
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
-| `--ft-verify-timeout` | 2m | `VerifyTimeout`. 0 resets on the first failure. |
+| `--ft-verify-timeout` | 2m | `VerifyTimeout`: how long a failed check after a round is retried. 0 resets on the first failure. |
 | `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod and falls back to `ResetAll`; `reset-all` resets the group; `release` frees the GPUs and serves below full. |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
@@ -307,8 +313,10 @@ Each engine and workload implementation registers its own flags (see [engine](en
   phase and its deadline clock and never resets on it.
 - **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry
   reports it so people can see it. Recovery resumes when the workload recreates the group.
-- **Verification fails.** One slow completion is not a fault. The controller probes again for
-  `VerifyTimeout` before it resets.
+- **Why verify only after a round.** Verify does not gate traffic: the router follows the engine's native
+  health. Its job is to catch a recovery the engine reports as done but that cannot generate. That risk
+  comes from what IRO changed, so that is when it checks. One slow completion is not a fault, so a failure
+  is retried for `VerifyTimeout` before the reset.
 - **No give-up state.** IRO resets whenever recovery in place cannot help. How often a group may be
   recreated, and when to stop, is the workload's restart policy (LWS `restartBackoff`, `maxGroupRestarts`).
 - **Why the controller decides "same group".** It already remembers which Pods it asked to reset or

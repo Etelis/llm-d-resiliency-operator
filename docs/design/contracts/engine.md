@@ -114,7 +114,7 @@ type FailureScope string  // Joiners: only the joiners failed | Group: the group
 
 | Kind | Means | Controller does |
 |---|---|---|
-| `Healthy` | nothing to do | verifies inference if not verified yet |
+| `Healthy` | nothing to do | goes to `serving`, or stays there |
 | `Wait` | something is wrong, but the engine needs time | waits, under its deadline |
 | `Change` | send this round | checks it, saves it, sends it |
 | `Unrecoverable` | recovery in place cannot help | resets the group |
@@ -206,7 +206,8 @@ A refusal means some members started the round and some did not. The controller 
 
 ### Verify
 
-Sends one real, bounded inference request through each named member.
+Sends one real, bounded inference request through each named member. The controller calls it only
+after a round succeeds, for the members that took part or joined.
 
 | | |
 |---|---|
@@ -298,7 +299,7 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 
 - **Why two halves.** The policy is pure, so recovery rules can be tested from recorded observations
   without a cluster, and a new leader reaches the same decision from the same observation.
-- **`Serving` is not "healthy".** `Serving` is what the router sees. "Healthy enough to verify" is the
+- **`Serving` is not "healthy".** `Serving` is what the router sees. "Healthy" is the
   policy's `Healthy` plan, which may also use what the router does not see, such as a process that
   already exited.
 - **Who connects Pods and members.** The driver only reports. The controller tracks which members are
