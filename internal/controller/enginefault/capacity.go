@@ -15,13 +15,14 @@ import (
 
 func (fsm *controller) restore(ctx context.Context, next *Record, current *view, now time.Time) error {
 	mode := fsm.config.CapacityRestore
-	if mode != RestoreRelease && slices.Contains(slices.Collect(maps.Values(next.Members)), Rejected) {
-		return fsm.resetAll(ctx, next, ResetCapacity, "a reset Pod's members could not join", now)
+	out := []MemberState{Excluded}
+	if mode == RestoreResetAll {
+		out = append(out, Rejected)
 	}
 	var targets []workload.PodRef
 	for _, uid := range slices.Sorted(maps.Keys(next.Pods)) {
 		saved := next.Pods[uid]
-		if saved.Removing || !onlyExcluded(next, saved.Identity) {
+		if saved.Removing || !holdsOnly(next, saved.Identity, out...) {
 			continue
 		}
 		if find(current.group, uid) == nil {
@@ -32,11 +33,16 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 		next.Pods[uid] = saved
 		targets = append(targets, podRef(uid, &saved))
 	}
-	if len(targets) == 0 {
+	switch {
+	case len(targets) == 0:
 		return nil
-	}
-	if mode == RestoreResetAll || (mode == RestoreResetPod && !fsm.eng.Capabilities().Grow) {
+	case mode == RestoreResetAll:
 		return fsm.resetAll(ctx, next, ResetCapacity, "restoring capacity", now)
+	case mode == RestoreResetPod && !fsm.eng.Capabilities().Grow:
+		for _, pod := range targets {
+			keep(next, pod.UID)
+		}
+		return nil
 	}
 	if err := fsm.save(ctx, next); err != nil {
 		return err
@@ -44,27 +50,51 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 	if mode == RestoreRelease {
 		err := fsm.wl.Release(ctx, targets)
 		fsm.recorder.ReleaseRequested(targets, err)
-		if !errors.Is(err, workload.ErrUnsupported) {
-			fsm.called(err)
+		for _, pod := range targets {
+			fsm.removed(next, pod.UID, err)
 		}
 		return nil
 	}
 	for _, pod := range targets {
 		err := fsm.wl.Reset(ctx, pod)
 		fsm.recorder.PodResetRequested(pod, err)
-		if errors.Is(err, workload.ErrUnsupported) {
-			return fsm.resetAll(ctx, next, ResetCapacity, "the workload cannot reset one Pod", now)
-		}
-		fsm.called(err)
+		fsm.removed(next, pod.UID, err)
 	}
 	return nil
 }
 
-func onlyExcluded(next *Record, identity string) bool {
+func (fsm *controller) remove(ctx context.Context, pod workload.PodRef) error {
+	if fsm.config.CapacityRestore == RestoreRelease {
+		return fsm.wl.Release(ctx, []workload.PodRef{pod})
+	}
+	return fsm.wl.Reset(ctx, pod)
+}
+
+func (fsm *controller) removed(next *Record, uid string, err error) {
+	if errors.Is(err, workload.ErrUnsupported) {
+		keep(next, uid)
+		return
+	}
+	fsm.called(err)
+}
+
+// keep leaves a Pod as it is: its members stay out until the next group.
+func keep(next *Record, uid string) {
+	saved := next.Pods[uid]
+	saved.Removing = false
+	next.Pods[uid] = saved
+	for id, state := range next.Members {
+		if identityOf(id) == saved.Identity && state == Excluded {
+			next.Members[id] = Rejected
+		}
+	}
+}
+
+func holdsOnly(next *Record, identity string, states ...MemberState) bool {
 	found := false
 	for id, state := range next.Members {
 		if identityOf(id) == identity {
-			if state != Excluded && state != Rejected {
+			if !slices.Contains(states, state) {
 				return false
 			}
 			found = true

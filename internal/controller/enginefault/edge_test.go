@@ -41,7 +41,7 @@ func TestCandidateLostBeforeJoining(t *testing.T) {
 			test.replacementCandidate()
 			lose(test)
 			test.poll()
-			test.wantReset(ResetCapacity)
+			test.wantKept("dp3@idD2")
 		})
 	}
 }
@@ -63,7 +63,7 @@ func TestWorkloadErrorsDoNotStopFaultHandling(t *testing.T) {
 	test.wantReset(ResetUnrecoverable)
 }
 
-func TestRepeatedResetUnsupportedFallsBack(t *testing.T) {
+func TestRepeatedResetUnsupportedKeepsTheGroup(t *testing.T) {
 	t.Parallel()
 	test := newHarness(t)
 	test.shrunk()
@@ -71,7 +71,7 @@ func TestRepeatedResetUnsupportedFallsBack(t *testing.T) {
 	test.pollAnyway()
 	test.wl.resetErr = workload.ErrUnsupported
 	test.poll()
-	test.wantReset(ResetCapacity)
+	test.wantKept("dp3@idD")
 }
 
 func TestVerifyHangIsAFailedCheck(t *testing.T) {

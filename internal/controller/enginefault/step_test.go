@@ -52,6 +52,26 @@ func (test *harness) wantReset(reason ResetReason) {
 	}
 }
 
+func (test *harness) wantKept(id engine.MemberID) {
+	test.t.Helper()
+	resets, releases := len(test.wl.resets), len(test.wl.releases)
+	for range 3 {
+		test.poll()
+	}
+	record := test.record()
+	if len(test.wl.resetAlls) != 0 || record.Phase != Serving || record.Members[id] != Rejected {
+		test.t.Fatalf("not kept: %d group resets, record %+v", len(test.wl.resetAlls), record)
+	}
+	for _, pod := range record.Pods {
+		if pod.Removing {
+			test.t.Fatalf("pod still Removing: %+v", record.Pods)
+		}
+	}
+	if len(test.wl.resets) != resets || len(test.wl.releases) != releases {
+		test.t.Fatalf("tried again: resets %v, releases %v", test.wl.resets, test.wl.releases)
+	}
+}
+
 func TestRunningExample(t *testing.T) {
 	t.Parallel()
 	test := newHarness(t)
@@ -480,36 +500,49 @@ func TestCapacityRestore(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
 		configure func(*harness)
-		reset     bool
 		resets    int
 		releases  int
 	}{
-		"reset-pod unsupported": {
-			configure: func(test *harness) { test.wl.resetErr = workload.ErrUnsupported }, reset: true, resets: 1,
-		},
-		"engine cannot grow": {configure: func(test *harness) { test.eng.grow = false }, reset: true},
-		"reset-all":          {configure: func(test *harness) { test.config.CapacityRestore = RestoreResetAll }, reset: true},
+		"reset-pod unsupported": {configure: func(test *harness) { test.wl.resetErr = workload.ErrUnsupported }, resets: 1},
+		"engine cannot grow":    {configure: func(test *harness) { test.eng.grow = false }},
 		"release unsupported": {configure: func(test *harness) {
 			test.config.CapacityRestore = RestoreRelease
 			test.wl.releaseErr = workload.ErrUnsupported
 		}, releases: 1},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(name+" keeps the group as it is", func(t *testing.T) {
 			t.Parallel()
 			harness := newHarness(t)
 			test.configure(harness)
 			harness.shrunk()
 			harness.poll()
-			if test.reset {
-				harness.wantReset(ResetCapacity)
-			} else if len(harness.wl.resetAlls) != 0 || harness.record().Phase != Serving {
-				t.Fatalf("reset: %v", harness.wl.resetAlls)
-			}
 			if len(harness.wl.resets) != test.resets || len(harness.wl.releases) != test.releases {
 				t.Fatalf("resets %v, releases %v", harness.wl.resets, harness.wl.releases)
 			}
+			harness.wantKept("dp3@idD")
 		})
 	}
+	t.Run("reset-all resets the group", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.config.CapacityRestore = RestoreResetAll
+		test.shrunk()
+		test.poll()
+		test.wantReset(ResetCapacity)
+	})
+	t.Run("release error is repeated", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.config.CapacityRestore = RestoreRelease
+		test.wl.releaseErr = errors.New("api timeout")
+		test.shrunk()
+		test.pollAnyway()
+		test.wl.releaseErr = nil
+		test.poll()
+		if len(test.wl.releases) != 2 || !test.record().Pods["d1"].Removing {
+			t.Fatalf("releases %v, pods %+v", test.wl.releases, test.record().Pods)
+		}
+	})
 	t.Run("gone Pod is forgotten", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)
@@ -520,7 +553,7 @@ func TestCapacityRestore(t *testing.T) {
 			t.Fatalf("pods %+v, resets %v", test.record().Pods, test.wl.resets)
 		}
 	})
-	t.Run("rejected join resets the group", func(t *testing.T) {
+	t.Run("rejected join keeps the group as it is", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)
 		test.shrunk()
@@ -535,10 +568,6 @@ func TestCapacityRestore(t *testing.T) {
 		test.eng.progress = engine.Progress{State: engine.Failed, Scope: engine.Joiners}
 		test.eng.plan = engine.Plan{Kind: engine.Healthy}
 		test.poll()
-		if test.record().Members[engine.MemberID("dp3@idD2")] != Rejected {
-			t.Fatalf("members %+v", test.record().Members)
-		}
-		test.poll()
-		test.wantReset(ResetCapacity)
+		test.wantKept("dp3@idD2")
 	})
 }

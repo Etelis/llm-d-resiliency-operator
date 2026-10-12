@@ -160,7 +160,7 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
 | All three can be repeated: once the named Pods are gone, they do nothing | the controller repeats them until `Discover` shows the result |
 | `Reset` never recreates the rest of the group. If it would have to, it returns `ErrUnsupported`. | the healthy members keep serving |
 | `Release` never adds a Pod | capacity comes back only through a reset |
-| A workload that cannot do something changes nothing and returns `ErrUnsupported` | the controller falls back, per `--ft-capacity-restore` |
+| A workload that cannot do something changes nothing and returns `ErrUnsupported` | the controller keeps the Pod as it is, and the group serves with fewer members |
 | No engine knowledge: ranks, ports, processes, endpoints | that belongs to the [engine driver](engine.md#driver) |
 
 ## Considerations
@@ -168,10 +168,10 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
 - **Who paces resets.** The workload paces recreations and decides when to stop, including ones IRO asks for.
   IRO has no reset budget of its own. A workload that stopped says so in `RecreateStopped`.
 - **Same place, maybe not the same node.** `Reset` keeps the Pod's `Index`, but the scheduler may put the new
-  Pod on the same node. If the node is the problem, the new Pod fails too, the join fails, and the controller
-  escalates. Moving work off a bad node is outside this contract.
+  Pod on the same node. If the node is the problem, the new Pod fails too, the join fails, and the group
+  serves with fewer members until the next group. Moving work off a bad node is outside this contract.
 - **Leaders.** Some workloads cannot replace or remove their leader without recreating the group. They return
-  `ErrUnsupported` for that Pod, and the controller falls back to `ResetAll`.
+  `ErrUnsupported` for that Pod, and the controller keeps it as it is.
 - **Report `Recreating` as early as possible.** A workload that will recreate the group because of what it
   sees (for example, any container restart, when its policy recreates the group for that) reports `Recreating` right away,
   not only once the leader is deleted. Otherwise the controller may plan a round for a group that is about to go.

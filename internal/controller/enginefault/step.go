@@ -267,13 +267,8 @@ func (fsm *controller) comparePods(ctx context.Context, next *Record, group *wor
 		switch {
 		case saved.Removing && pod == nil:
 			forget(next, uid)
-		case saved.Removing && pod.State != workload.PodTerminating && fsm.config.CapacityRestore == RestoreResetPod:
-			if err := fsm.wl.Reset(ctx, podRef(uid, &saved)); errors.Is(err, workload.ErrUnsupported) {
-				saved.Removing = false
-				next.Pods[uid] = saved
-			} else {
-				fsm.called(err)
-			}
+		case saved.Removing && pod.State != workload.PodTerminating:
+			fsm.removed(next, uid, fsm.remove(ctx, podRef(uid, &saved)))
 		case saved.Removing:
 		case pod == nil && !tracks(next, saved.Identity):
 			delete(next.Pods, uid)

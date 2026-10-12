@@ -146,7 +146,7 @@ Called at the end of every `Step`.
 | | |
 |---|---|
 | **Input** | the Pod named in `Reset`, and the workload's answer |
-| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total`, once per Pod (not every poll). `ErrUnsupported` is logged; the fallback shows as a `GroupReset` with reason `capacity`. |
+| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total`, once per Pod (not every poll). `ErrUnsupported` is logged, and the group keeps serving with fewer members. |
 
 **Example.** `PodResetRequested({lws-0-3, d1}, nil)` → Event: `resetting lws-0-3 to bring dp3 back`
 

@@ -178,10 +178,11 @@ sequenceDiagram
 A fault at any point comes first: the group goes to `recovering`, and the capacity work continues once the
 group serves again.
 
-Capacity never comes from new Pods elsewhere: it comes back by resetting. If resetting the Pod fails in any
-way (the workload answers `ErrUnsupported`, the engine cannot admit members, or the new Pod fails to join),
-IRO resets the whole group. With `--ft-capacity-restore=release`, IRO frees the failed Pod's GPUs instead
-and serves below full.
+Capacity never comes from new Pods elsewhere: it comes back by resetting, with one try. If resetting the
+Pod fails in any way (the workload answers `ErrUnsupported`, the engine cannot admit members, or the new Pod
+fails to join), the group keeps serving with fewer members until the next group. With
+`--ft-capacity-restore=reset-all`, IRO resets the whole group instead and never stays below full. With
+`release`, it frees the failed Pod's GPUs and serves below full.
 
 ## Where each object lives
 
