@@ -287,7 +287,8 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 | Rule | Why |
 |---|---|
 | No I/O, no clock, no globals | the same input gives the same answer on any leader |
-| Return `Wait` when the engine needs time, including when candidates are Joinable but the engine cannot take them yet | the controller owns the deadlines |
+| Return `Wait` only for a fault the engine is still working out | the controller owns the deadlines |
+| Return `Healthy` while candidates cannot be admitted yet | a candidate waiting to join is not a fault |
 | Return `Unrecoverable` when recovery in place cannot help | the controller resets |
 | Plan `Add` only if `Capabilities().Grow` | the controller resets a single Pod only when the engine can re-admit its members |
 | A plan may remove and add in one round (replace) if the engine supports it | fewer rounds during a fault |

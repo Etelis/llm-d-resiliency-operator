@@ -51,7 +51,8 @@ type MemberState string // candidate | admitted | excluded | rejected
 type PodRecord struct {
     Name     string
     Identity string
-    Removing bool // asked to go, through Reset, ResetAll or Release
+    Node     string // so an incident can name the node of a Pod that is already gone
+    Removing bool   // asked to go, through Reset, ResetAll or Release
 }
 
 // Record is the controller's whole state. It is what the journal stores.
@@ -97,6 +98,7 @@ Builds the controller and loads its state.
 New(...) // empty journal (first run):       Record{Phase: starting}
 New(...) // leader changed during a round:   Record{Phase: recovering, Round: iro-ft-7c1e, ...}. The next Step watches Progress; it never resends.
 New(...) // journal unreadable or not valid: error. The runner logs it and calls New again next poll.
+New(...) // a phase this version does not know: starts over, as with an empty journal.
 ```
 
 ### Step
@@ -155,7 +157,7 @@ stateDiagram-v2
   [*] --> starting
   starting --> serving: plan Healthy
   serving --> recovering: a fault is observed
-  recovering --> serving: plan Healthy, or round Succeeded and verified
+  recovering --> serving: plan Healthy, or round Succeeded
   serving --> starting: ResetAll, after a round fails verification past window, C4 or C5 broken
   recovering --> starting: ResetAll, after Unrecoverable, round Failed for group, deadline, flap guard
 ```
@@ -167,8 +169,11 @@ described [below](#rounds). A round can run in `recovering` (fixing a fault) or 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
 | `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
-| `serving` | healthy, maybe below full | plans every poll and [restores capacity](#restoring-capacity). A round that admits candidates runs here. | a fault |
-| `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan, or round `Succeeded` and its members verified. Or reset. |
+| `serving` | healthy, maybe below full | verifies the members of a round that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A round that admits candidates runs here. | a fault |
+| `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll, resets on `Unrecoverable`, and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan, or round `Succeeded`. Or reset. |
+
+In `serving`, a `Healthy` plan is fine and a `Change` that only adds members is a round to grow back.
+Any other plan is a fault.
 
 ### Reading Discover
 
@@ -223,8 +228,8 @@ sent, and cleared when `Progress` reports `Succeeded` or `Failed`.
 | After a leader change | plans again | watches `Progress`. Never sends the round again. |
 
 The two deadlines catch different hangs: an engine that never reaches a state IRO can act on,
-and a round that never finishes. While the workload reports `Recreating`, both deadlines are frozen,
-and a new group drops the round in flight: the workload is already replacing everything.
+and a round that never finishes. While the workload reports `Recreating`, deadlines are not checked, and
+both restart when it ends. A new group drops the round in flight: the workload is already replacing everything.
 
 **After a round succeeds**, the controller saves its participants and joiners in `Verifying` and calls
 `Verify` on them. A failure is retried for `VerifyTimeout`; then the group is reset (reason `verify_failed`).
@@ -244,15 +249,19 @@ flowchart TD
   M -- reset-all --> A[ResetAll]
   M -- release --> L[Release the Pod, serve with fewer members]
   R -- its new members join --> F[Full again]
-  R -- anything fails --> A
+  R -- unsupported, or the join fails --> A
 ```
 
-1. When a round leaves a Pod with only excluded members, the controller marks it `Removing`, saves, and
-   calls `Reset`, `ResetAll` or `Release` on it, per `--ft-capacity-restore` (C8).
+1. Once the members of the last round passed `Verify`, on a poll whose plan is `Healthy`, the controller
+   looks for Pods that hold only excluded members. It marks them `Removing`, saves, and calls `Reset`,
+   `ResetAll` or `Release`, per `--ft-capacity-restore` (C8). A Pod that is already gone is just forgotten.
 2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [round](#rounds).
-3. If resetting the Pod fails in any way (`ErrUnsupported`, the engine cannot grow, the new Pod fails before
-   or during its join), the controller calls `ResetAll` (reason `capacity`). There is one try, no budget.
-4. There is no extra state: the `Removing` Pods, the candidates and the round in flight say where things are.
+3. If the Pod cannot be reset (`ErrUnsupported`, or the engine cannot grow), or the new Pod's members are
+   rejected (the join round fails, or the new Pod restarts before joining), the controller calls `ResetAll`
+   (reason `capacity`). There is one try, no budget. A new Pod that is still starting is waited for.
+4. With `release`, `ErrUnsupported` leaves the Pod where it is, and the group serves below full.
+5. Other workload errors are not failures: the call is repeated on the next poll.
+6. There is no extra state: the `Removing` Pods, the candidates and the round in flight say where things are.
 
 ## Rules
 
@@ -267,7 +276,7 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 | C2 | `Add` holds only candidates that are Joinable, on Pods that are `Ready` and unchanged | a stale Pod must not join |
 | C3 | `Participants` and `Remove` are admitted members, `Add` holds candidates, the three are disjoint, and `Participants` is not empty | a round must name a real, consistent membership change |
 | C4 | Excluded members stay Terminal | otherwise an excluded member could take traffic again |
-| C5 | Members that are not admitted are not Serving | a joiner must not take traffic before it is in the group |
+| C5 | Members that are not admitted are not Serving, except those the round in flight adds | a joiner must not take traffic before it is in the group |
 | C6 | A round that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
 | C7 | One round at a time. `Apply` refuses a round that names a member missing from the current observation. | a stale round cannot apply to a changed group |
 | C8 | `Reset` and `Release` name only Pods whose every member is excluded or rejected, after the round that removed them finished | the engine must no longer depend on a Pod before it goes |

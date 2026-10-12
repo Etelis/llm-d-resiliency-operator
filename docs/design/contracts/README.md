@@ -161,7 +161,7 @@ sequenceDiagram
     C->>D: Apply(round: add dp3@idD2)
     C->>P: Progress(observation, round)
     P-->>C: Succeeded
-    C->>D: Verify(dp3@idD2)
+    C->>D: Verify(dp0, dp1, dp2, dp3@idD2)
   end
   Note over C,W: serving with 4 members
 ```
@@ -173,7 +173,7 @@ sequenceDiagram
    excluded members. It calls `Reset` on it. The rest of the group keeps serving. There is no deadline;
    scheduling and model loading take as long as they take.
 3. **Admit the new member.** The new Pod's members show up as candidates. The policy plans `Add` when the
-   engine can admit them, the round runs like any other, and the new member is verified.
+   engine can admit them, the round runs like any other, and the round's members are verified.
 
 A fault at any point comes first: the group goes to `recovering`, and the capacity work continues once the
 group serves again.

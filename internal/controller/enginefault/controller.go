@@ -52,6 +52,7 @@ const (
 type PodRecord struct {
 	Name     string `json:"name"`
 	Identity string `json:"identity"`
+	Node     string `json:"node,omitempty"`
 	Removing bool   `json:"removing,omitempty"`
 }
 
