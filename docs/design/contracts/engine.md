@@ -1,0 +1,374 @@
+# Engine
+
+One plugin per inference engine. It has two halves:
+
+- **Driver** does I/O. It reports which members run on each Pod and their state, sends recovery
+  rounds and runs inference probes. It keeps no memory.
+- **Policy** decides. Given what the driver saw, it says which members should leave or join, and how
+  the round in flight is going. It does no I/O.
+
+The engine never talks to the workload, and knows nothing about phases, deadlines or Kubernetes.
+The first implementation is [vLLM](#vllm).
+
+```mermaid
+flowchart LR
+  C[Controller] -->|Capabilities, Observe, Probe, Apply, Verify| D[Driver]
+  C -->|Plan, Progress| P[Policy]
+  D -->|HTTP| R[Engine runtime]
+  D -.->|private engine data| P
+```
+
+## Interface
+
+```go
+type Engine interface {
+    Capabilities() Capabilities
+    Driver
+    Policy
+}
+
+type Driver interface {
+    Observe(ctx context.Context, pods []Pod) Observation
+    Probe(ctx context.Context, observation Observation) error
+    Apply(ctx context.Context, observation Observation, round Round) ([]Acceptance, error)
+    Verify(ctx context.Context, observation Observation, members []MemberID) error
+}
+
+type Policy interface {
+    Plan(observation Observation, admitted, candidates []MemberID) Plan
+    Progress(observation Observation, round Round) Progress
+}
+```
+
+`Pod` and `PodRef` come from the [workload](workload.md#objects).
+
+## Objects
+
+```go
+// Capabilities says what the engine can do at all.
+type Capabilities struct {
+    Grow bool // can admit new members into a running group
+}
+
+// Member is one engine member (a rank, a worker...) as the driver sees it now.
+type Member struct {
+    Pod         PodRef
+    PodIdentity string // copied from the Pod, so the ID changes when the Pod restarts
+    Name        string // the engine's name for it, unique within the Pod, e.g. "dp3"
+    Serving     bool   // the router may send it traffic: the engine's native health
+    Terminal    bool   // will never serve again
+    Joinable    bool   // for candidates only: can be admitted now
+    Detail      string // for status and logs only
+}
+
+// MemberID names one engine member in one Pod's life.
+type MemberID string
+
+// ID is the same for anyone who computes it: Name@PodIdentity.
+func (member *Member) ID() MemberID { return MemberID(member.Name + "@" + member.PodIdentity) }
+
+// Observation is everything the driver saw in one Observe call.
+type Observation struct {
+    Members []Member
+    Engine  any // driver-private: addresses and raw state, for the same engine's driver and policy
+}
+
+// Round is one recovery or resize action. The controller builds it from a Plan.
+type Round struct {
+    ID           string     // unique, assigned by the controller
+    Participants []MemberID // admitted members that take part
+    Remove       []MemberID // admitted members that leave
+    Add          []MemberID // candidates that join
+}
+
+// Acceptance is one member's answer to Apply. Accepted means "started", not "done".
+type Acceptance struct {
+    Member   MemberID
+    Accepted bool
+    Error    string
+}
+
+// Plan is the policy's answer to "what now?".
+type Plan struct {
+    Kind         PlanKind
+    Participants []MemberID
+    Remove       []MemberID
+    Add          []MemberID
+    Reason       string
+}
+
+type PlanKind string // Healthy | Wait | Change | Unrecoverable
+
+// Progress is the policy's answer to "how is the round going?".
+type Progress struct {
+    State  ProgressState
+    Scope  FailureScope // set when State is Failed
+    Reason string
+}
+
+type ProgressState string // Running | Succeeded | Failed
+type FailureScope string  // Joiners: only the joiners failed | Group: the group may be broken
+```
+
+`PlanKind` values:
+
+| Kind | Means | Controller does |
+|---|---|---|
+| `Healthy` | nothing to do | verifies inference if not verified yet |
+| `Wait` | something is wrong, but the engine needs time | waits, under its deadline |
+| `Change` | send this round | checks it, saves it, sends it |
+| `Unrecoverable` | recovery in place cannot help | resets the group |
+
+Every `Change` is one of four shapes:
+
+| Change | Remove | Add |
+|---|---|---|
+| retry | empty | empty |
+| shrink | Terminal members | empty |
+| grow | empty | Joinable candidates |
+| replace | Terminal members | Joinable candidates |
+
+## Functions
+
+All examples use the [running example](README.md#running-example).
+
+### Capabilities
+
+Says what the engine can do at all.
+
+| | |
+|---|---|
+| **Input** | none |
+| **Output** | [`Capabilities`](#objects) |
+
+**Example.** vLLM today returns `{Grow: false}`. The controller then never asks the workload for Pods to
+add in place. With the default `--ft-capacity-restore`, it restores capacity by resetting the group instead.
+
+### Observe
+
+Reports the members running on the given Pods and their state.
+
+| | |
+|---|---|
+| **Input** | `pods []Pod` from [`Discover`](workload.md#discover) |
+| **Output** | [`Observation`](#objects). Never fails: a Pod the driver cannot reach gives no members. |
+| **Side effects** | none |
+
+**Example**, right after `dp3` dies:
+
+```yaml
+Members:
+- {Pod: lws-0/a1,   PodIdentity: idA, Name: dp0, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
+- {Pod: lws-0-1/b1, PodIdentity: idB, Name: dp1, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
+- {Pod: lws-0-2/c1, PodIdentity: idC, Name: dp2, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
+- {Pod: lws-0-3/d1, PodIdentity: idD, Name: dp3, Serving: false, Terminal: true,  Detail: "dead"}
+Engine: <driver-private: API addresses, raw engine status>
+```
+
+### Probe
+
+Nudges the engine to notice a fault it has not seen yet. May do nothing.
+
+| | |
+|---|---|
+| **Input** | the latest [`Observation`](#objects) |
+| **Output** | `nil`, or an error. The controller only adds the error to its reason. |
+| **Side effects** | engine-specific, bounded, never user-visible |
+
+**Example.** `dp3`'s process has exited, but `dp0`-`dp2` are idle and still report healthy: they only
+notice a dead peer inside a collective operation. The controller calls `Probe(obs)` once when it enters
+`recovering`. vLLM sends one short completion through a healthy member. The collective fails, and on
+the next `Observe`, `dp3` is `Terminal` and the others are paused.
+
+### Apply
+
+Sends a round to every participant and joiner.
+
+| | |
+|---|---|
+| **Input** | the [`Observation`](#objects) the round was planned on, and the [`Round`](#objects) |
+| **Output** | one [`Acceptance`](#objects) per member it sent to. An error unless every one accepted. |
+| **Side effects** | the engine starts the round. Never repeated by the controller. |
+
+**Example.**
+
+```go
+Apply(ctx, obs, Round{
+    ID:           "iro-ft-7c1e",
+    Participants: []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"},
+    Remove:       []MemberID{"dp3@idD"},
+})
+// all accept:  [{dp0@idA true} {dp1@idB true} {dp2@idC true}], nil
+// one refuses: [{dp0@idA true} {dp1@idB false "expected 202, got 409"} {dp2@idC true}], error
+```
+
+A refusal means some members started the round and some did not. The controller resets the group.
+
+### Verify
+
+Sends one real, bounded inference request through each named member.
+
+| | |
+|---|---|
+| **Input** | the latest [`Observation`](#objects), and the members to check |
+| **Output** | `nil` when every member produced tokens. An error naming the first that did not. |
+| **Side effects** | a few tokens of inference, marked so they are not counted as user traffic |
+
+**Example.**
+
+```go
+Verify(ctx, obs, []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"})
+// nil
+// or: error "dp1@idB: no tokens generated". The controller retries for --ft-verify-timeout, then resets.
+```
+
+### Plan
+
+Says what should happen now. Pure: no I/O, no clock.
+
+| | |
+|---|---|
+| **Input** | the latest [`Observation`](#objects), the admitted members, the candidates |
+| **Output** | [`Plan`](#objects) |
+
+**Examples.**
+
+```go
+// dp3 dead, dp0-dp2 paused:
+Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC dp3@idD], candidates: [])
+// {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Remove: [dp3@idD], Reason: "dp3 is dead; survivors paused"}
+
+// later, lws-0-4 is Ready and dp4 is Joinable (needs Grow):
+Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC], candidates: [dp4@idE])
+// {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Add: [dp4@idE], Reason: "candidate ready"}
+
+// dp2 is unhealthy, but dp3 is not dead yet:
+// {Kind: Wait, Reason: "waiting for the engine to finish diagnosis"}
+```
+
+### Progress
+
+Says how the round in flight is going. Pure: no I/O, no clock.
+
+| | |
+|---|---|
+| **Input** | the latest [`Observation`](#objects), and the [`Round`](#objects) in flight |
+| **Output** | [`Progress`](#objects) |
+
+**Examples**, for round `iro-ft-7c1e`:
+
+```go
+// survivors still rebuilding:             {State: Running}
+// dp0-dp2 healthy, finished iro-ft-7c1e:  {State: Succeeded}
+// dp1 reports its FT operation failed:    {State: Failed, Scope: Group, Reason: "dp1@idB: FT failed: ..."}
+// a joiner failed, survivors untouched:   {State: Failed, Scope: Joiners, Reason: "dp4@idE could not join"}
+```
+
+## Rules
+
+### Driver
+
+| Rule | Why |
+|---|---|
+| Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod restarts, so exclusions and rounds name exactly one process |
+| No memory. Addresses and anything else the driver needs travel in `Observation.Engine`. | a new leader needs no warm-up. The driver may still cache internally, keyed by Pod identity. |
+| Pods that are not `Ready` give no members, or members that are not Joinable | a loading Pod is not a candidate yet |
+| Once Terminal, always Terminal for that member | the controller's check C4 depends on it |
+| `Serving` means what the router uses: the engine's native health | checks C1 and C5 reason about traffic |
+| Candidates do not report `Serving` | check C5 |
+| The engine reports which round each member is working on | `Progress` can tell its round from another one |
+| `Apply` refuses a round that names a member missing from the observation it is given | check C7 |
+| `Apply` need not be idempotent | the controller never sends a round twice |
+| Every call is bounded by a timeout | a hung engine must not stall the loop |
+
+### Policy
+
+| Rule | Why |
+|---|---|
+| No I/O, no clock, no globals | the same input gives the same answer on any leader |
+| Return `Wait` when the engine needs time, including when candidates are Joinable but the engine cannot take them yet | the controller owns the deadlines |
+| Return `Unrecoverable` when recovery in place cannot help | the controller resets |
+| Plan `Add` only if `Capabilities().Grow` | the controller asks the workload for Pods only when the engine can use them |
+| A plan may remove and add in one round (replace) if the engine supports it | fewer rounds during a fault |
+| `Change` plans must pass the controller's [checks C1 to C7](controller.md#checks-on-every-plan) | otherwise the controller resets |
+| `Progress` stays `Running` until the engine reports a result for this round | the apply deadline covers a round that never finishes |
+| `Failed` with scope `Joiners` only when admitted members are untouched | otherwise the group may be broken and must be reset |
+
+## Considerations
+
+- **Why two halves.** The policy is pure, so recovery rules can be tested from recorded observations
+  without a cluster, and a new leader reaches the same decision from the same observation.
+- **`Serving` is not "healthy".** `Serving` is what the router sees. "Healthy enough to verify" is the
+  policy's `Healthy` plan, which may also use what the router does not see, such as a process that
+  already exited.
+- **Who connects Pods and members.** The driver only reports. The controller tracks which members are
+  candidates, admitted, excluded or rejected, and which Pods to remove.
+- **Shrinking needs no capability.** A policy that cannot shrink never plans `Remove`.
+
+## vLLM
+
+### Capabilities
+
+| Capability | vLLM today |
+|---|---|
+| `Grow` | no. The FT path has no scale-up. See [growth](#growth-in-vllm). Shrinking works through FT `scale_down`. |
+
+### Driver
+
+| Contract | vLLM |
+|---|---|
+| Members per Pod | process observer `GET :9257/status` on each Pod lists its ranks and its Pod UID. API port is `8000 + local index`. The `worker * ranksPerPod + local` check from `lws.Discover` moves here. |
+| `Name` | `dp<rank>` |
+| `Observe` | `GET /v1/fault_tolerance/status` on each rank, plus process-exit evidence from the observer |
+| `Serving` | native status `healthy` (what the router sees) |
+| `Terminal` | native status `dead` only. A process exit alone cannot prove the API server rejects requests. |
+| `Probe` | one bounded completion to healthy ranks. An idle peer notices a dead worker only inside a collective. |
+| `Apply` | `POST /v1/fault_tolerance/apply` to each participant with `instruction` (`retry` when `Remove` is empty, else `scale_down`), `request_id` = `Round.ID`, and `params` |
+| `params` | `removed_dp_ranks`, plus `dp_master_ip` and `dp_store_port` when the store master is removed |
+| Store master | the lowest alive rank hosts the TCPStore. If a round removes it, the new master is the lowest surviving rank's Pod IP on `--vllm-store-port`. |
+| `Verify` | `POST /v1/completions` with the `X-IRO-Verification` header |
+| Round in progress | `last_ft_request_id` in the status |
+
+### Policy
+
+This is today's `Decide` and `finishRound`, moved out of the controller.
+
+| Observation | Plan |
+|---|---|
+| any rank reports a failed FT operation | `Unrecoverable` |
+| all active ranks `healthy`, no FT operation running, no process-exit evidence, and no Joinable candidates to add | `Healthy` |
+| no fault signal yet | `Wait` |
+| no rank `dead`, all `unhealthy` (waiting for an instruction) | `Change`: everyone participates, nothing removed (retry) |
+| some ranks faulted, none `dead`, not all `unhealthy` | `Wait` |
+| some ranks `dead`, every survivor `unhealthy` | `Change`: remove the dead ranks (shrink) |
+| some ranks `dead`, survivors not all `unhealthy` yet | `Wait` |
+| no survivors | `Unrecoverable` |
+| all active ranks healthy as above, candidates Joinable (needs `Grow`) | `Change`: add the candidates (grow) |
+
+| During a round | Progress |
+|---|---|
+| a participant `dead` or its FT operation failed | `Failed`, scope `Group` |
+| a participant works on a different request ID | `Failed`, scope `Group` |
+| all participants `healthy` | `Succeeded` |
+| otherwise | `Running` |
+
+### Flags (target)
+
+| Flag | Default |
+|---|---|
+| `--vllm-api-port` | 8000 |
+| `--vllm-observer-port` | 9257 |
+| `--vllm-store-port` | 29600 |
+
+### Growth in vLLM
+
+There are two resize paths today, and they do not agree:
+
+| | FT path (`fault_tolerance`) | Elastic EP |
+|---|---|---|
+| Ranks | frozen original numbers (`_initial_dp_size` minus dead ranks) | dense, renumbered (`new_data_parallel_rank`) |
+| Request | `removed_dp_ranks` | `new_data_parallel_size` |
+| Scale-up | none | yes, and existing engines pause during the commit (`COMMIT_SCALE_UP`) |
+
+To set `Grow`, the vLLM driver has to bridge the two. Because elastic EP scale-up pauses existing
+engines, a failed join may need scope `Group`, not `Joiners`.
