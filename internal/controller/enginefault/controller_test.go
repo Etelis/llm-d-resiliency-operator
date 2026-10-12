@@ -608,11 +608,40 @@ func TestPersistenceFailurePreventsDispatch(t *testing.T) {
 	step(t, controller)
 	ageDiagnosis(controller)
 	workload.saveErr = errors.New("storage unavailable")
-	if err := controller.Step(context.Background()); err == nil {
-		t.Fatal("persistence failure ignored")
-	}
+	failedStep(t, controller)
 	if len(adapter.dispatches) != 0 || len(controller.Snapshot().Verified) != 0 {
 		t.Fatal("dispatched or verified without durable intent")
+	}
+	// The unsaved round was never sent, so the next Step retries it instead of
+	// waiting for it to complete.
+	failedStep(t, controller)
+	if state := controller.Snapshot(); state.Phase != "diagnosing" || len(adapter.dispatches) != 0 {
+		t.Fatalf("unsaved round was treated as dispatched: %+v", state)
+	}
+	workload.saveErr = nil
+	step(t, controller)
+	if controller.Snapshot().Phase != "applying" || len(adapter.dispatches) != 1 {
+		t.Fatal("round was not dispatched once its intent was saved")
+	}
+}
+
+func TestPersistenceFailurePreventsReset(t *testing.T) {
+	controller, adapter, workload := setup(t)
+	adapter.status = statuses("unhealthy", "dead", "unhealthy", "unhealthy")
+	step(t, controller)
+	state := controller.Snapshot()
+	state.Since = time.Now().Add(-2 * controller.Config.DiagnosisTimeout)
+	controller.set(state)
+	workload.saveErr = errors.New("storage unavailable")
+	failedStep(t, controller)
+	failedStep(t, controller)
+	if controller.Snapshot().Phase != "diagnosing" || len(workload.resets) != 0 {
+		t.Fatal("group was reset without a saved resetting phase")
+	}
+	workload.saveErr = nil
+	step(t, controller)
+	if controller.Snapshot().Phase != "resetting" || len(workload.resets) != 1 {
+		t.Fatal("reset was not issued once it was saved")
 	}
 }
 
@@ -696,5 +725,12 @@ func step(t *testing.T, controller *Controller) {
 	t.Helper()
 	if err := controller.Step(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func failedStep(t *testing.T, controller *Controller) {
+	t.Helper()
+	if err := controller.Step(context.Background()); err == nil {
+		t.Fatal("persistence failure ignored")
 	}
 }

@@ -117,8 +117,11 @@ func (controller *Controller) persist(ctx context.Context, state State) error {
 		return err
 	}
 	if err := controller.Workload.Save(ctx, b); err != nil {
-		state.Verified = nil
-		controller.set(state)
+		// Keep the previous state so the next Step retries this transition
+		// instead of acting as if it had been saved.
+		previous := controller.Snapshot()
+		previous.Verified = nil
+		controller.set(previous)
 		return fmt.Errorf("state persistence failed; verification invalidated: %w", err)
 	}
 	controller.set(state)
