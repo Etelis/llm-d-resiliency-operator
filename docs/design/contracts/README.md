@@ -165,10 +165,10 @@ sequenceDiagram
 3. **The engine decides who joins.** The new Pod's members show up as candidates. The policy plans `Add` when the engine can admit them, and the round runs like any other.
 4. **Faults come first.** A fault at any point moves the group to `recovering`. The capacity work pauses and continues from the same step once the group serves again.
 
-Capacity never comes from new Pods elsewhere: it comes back by resetting. When the workload cannot reset
-one Pod (LWS today answers `ErrUnsupported`), the engine cannot admit members, or the new Pod keeps failing
-to join, IRO resets the whole group after `--ft-capacity-reset-delay`. With `--ft-capacity-restore=release`,
-IRO frees the failed Pod's GPUs instead and serves below full.
+Capacity never comes from new Pods elsewhere: it comes back by resetting. If resetting the Pod fails in any
+way (LWS today answers `ErrUnsupported`, the engine cannot admit members, or the new Pod fails to join),
+IRO resets the whole group. With `--ft-capacity-restore=release`, IRO frees the failed Pod's GPUs instead
+and serves below full.
 
 ## Where each object lives
 
@@ -180,7 +180,7 @@ IRO frees the failed Pod's GPUs instead and serves below full.
 | `Round` | [engine.md](engine.md#objects) | controller | engine driver, engine policy |
 | `Acceptance` | [engine.md](engine.md#objects) | engine driver | controller |
 | `Plan`, `Progress` | [engine.md](engine.md#objects) | engine policy | controller |
-| `Config`, `Record`, `Phase`, `MemberState`, `Capacity` | [controller.md](controller.md#objects) | controller | journal (as bytes), telemetry |
+| `Config`, `Record`, `Phase`, `MemberState`, `PodRecord` | [controller.md](controller.md#objects) | controller | journal (as bytes), telemetry |
 | `Recorder`, `Incident`, `Outcome`, `Durations`, `ResetReason` | [telemetry.md](telemetry.md#objects), code in `internal/controller/enginefault` | controller | telemetry |
 
 ## Today vs target
@@ -199,7 +199,7 @@ IRO frees the failed Pod's GPUs instead and serves below full.
 | `Group.ID` | hash of every Pod and container identity, made by the workload | no group ID. The controller compares the reported Pods with its journal. |
 | `State.Excluded` | `[]int` ranks | members by `MemberID`: candidate, admitted, excluded, rejected |
 | Excluded Pods | stay until the next reset | reset (`Workload.Reset`), or released (`Workload.Release`), per `--ft-capacity-restore` |
-| Lost capacity | comes back only with a reset | reset the failed Pod and re-admit its members, falling back to `ResetAll` after a delay |
+| Lost capacity | comes back only with a reset | reset the failed Pod and re-admit its members, falling back to `ResetAll` |
 | Phases `diagnosing`, `applying` | two phases that differ only by whether a round is in flight | one `recovering` phase. The round in flight is a field, so a round that re-admits members can run while `serving`. |
 | Phase `resetting` | waits for the old Pods to go after a reset | removed. `ResetAll` marks every saved Pod `Removing` and the group goes to `starting`, which waits for them to go. |
 | Reset budget, `intervention_required` | after 3 resets in 30 min IRO stops and waits for a human | removed. LWS `restartBackoff` and `maxGroupRestarts` pace resets and decide when to stop. |

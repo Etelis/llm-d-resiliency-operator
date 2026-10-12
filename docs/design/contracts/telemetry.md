@@ -102,8 +102,7 @@ Called at the end of every `Step`.
 | **Emits** | refreshes the gauges (phase, members, capacity). Remembers the time, for `Ready`. Logs the error, if any. |
 
 **Example.** After poll 6: `llm_d_iro_phase{group="ns1/lws",phase="serving"} 1`,
-`llm_d_iro_members{state="admitted"} 3`, `llm_d_iro_members{state="excluded"} 1`,
-`llm_d_iro_capacity_state{state="full"} 1`.
+`llm_d_iro_members{state="admitted"} 3`, `llm_d_iro_members{state="excluded"} 1`.
 
 ### PhaseChanged
 
@@ -147,7 +146,7 @@ Called at the end of every `Step`.
 | | |
 |---|---|
 | **Input** | the Pod named in `Reset`, and the workload's answer |
-| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total`, once per Pod (not every poll). `ErrUnsupported` is logged; the fallback shows as `CapacityBelowFull`. |
+| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total`, once per Pod (not every poll). `ErrUnsupported` is logged; the fallback shows as a `GroupReset` with reason `capacity`. |
 
 **Example.** `PodResetRequested({lws-0-3, d1}, nil)` → Event: `resetting lws-0-3 to bring dp3 back`
 
@@ -209,7 +208,6 @@ All metrics carry `group` (`<namespace>/<workload name>`). Label values come fro
 | `llm_d_iro_phase` | gauge | `phase` | 1 for the current phase |
 | `llm_d_iro_phase_transitions_total` | counter | `from`, `to` | phase changes |
 | `llm_d_iro_members` | gauge | `state` | members by state: candidate, admitted, excluded, rejected |
-| `llm_d_iro_capacity_state` | gauge | `state` | 1 for the capacity loop's current state |
 | `llm_d_iro_pod_resets_total` | counter | | single Pods IRO reset to bring members back |
 | `llm_d_iro_rounds_total` | counter | `change`, `outcome` | rounds by shape (retry, shrink, grow, replace) and result (succeeded, failed_joiners, failed_group, deadline) |
 | `llm_d_iro_resets_total` | counter | `reason` | resets IRO asked for, by [`ResetReason`](#objects). Recreations the workload did on its own are not counted here; they close incidents as `Recreated`. |
@@ -234,7 +232,6 @@ On the workload object (the LWS). Every Event of an incident starts with its ID.
 | `PodReset` | Normal | IRO resets one Pod to bring its members back |
 | `PodsReleased` | Normal | IRO releases Pods and serves below full |
 | `GroupReset` | Warning | IRO asks the workload to recreate the group |
-| `CapacityBelowFull` | Warning | the capacity loop stops below full, or schedules a `ResetAll` |
 | `RecreateStopped` | Warning | the workload reports it gave up recreating the group |
 | `IncidentClosed` | Normal | the group serves again, or was reset |
 

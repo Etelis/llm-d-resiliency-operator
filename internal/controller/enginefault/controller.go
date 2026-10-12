@@ -16,14 +16,12 @@ type Controller interface {
 }
 
 type Config struct {
-	PollInterval       time.Duration
-	DiagnosisTimeout   time.Duration
-	ApplyTimeout       time.Duration
-	VerifyTimeout      time.Duration
-	FlapWindow         time.Duration
-	CapacityRestore    CapacityRestore
-	CapacityResetDelay time.Duration
-	JoinBudget         int
+	PollInterval     time.Duration
+	DiagnosisTimeout time.Duration
+	ApplyTimeout     time.Duration
+	VerifyTimeout    time.Duration
+	FlapWindow       time.Duration
+	CapacityRestore  CapacityRestore
 }
 
 type CapacityRestore string
@@ -57,24 +55,6 @@ type PodRecord struct {
 	Removing bool   `json:"removing,omitempty"`
 }
 
-type CapacityState string
-
-const (
-	Full         CapacityState = "full"
-	ResettingPod CapacityState = "resetting_pod"
-	Waiting      CapacityState = "waiting"
-	Admitting    CapacityState = "admitting"
-	ResetPending CapacityState = "reset_pending"
-	Releasing    CapacityState = "releasing"
-	BelowFull    CapacityState = "below_full"
-)
-
-type Capacity struct {
-	State        CapacityState `json:"state"`
-	BelowSince   time.Time     `json:"below_since,omitzero"`
-	JoinFailures int           `json:"join_failures,omitempty"`
-}
-
 // Record is what the journal stores.
 type Record struct {
 	Phase  Phase     `json:"phase"`
@@ -95,5 +75,4 @@ type Record struct {
 	RecreateStopped           bool      `json:"recreate_stopped,omitempty"`
 
 	Incident *Incident `json:"incident,omitempty"`
-	Capacity Capacity  `json:"capacity"`
 }

@@ -32,14 +32,12 @@ A runner calls `New` until the journal loads, then `Step` every `PollInterval` w
 ```go
 // Config holds the controller's settings. Flags are in Configuration below.
 type Config struct {
-    PollInterval       time.Duration   // 1s
-    DiagnosisTimeout   time.Duration   // 75s: longest time in recovering without a round
-    ApplyTimeout       time.Duration   // 90s: longest time a round may stay in flight
-    VerifyTimeout      time.Duration   // 2m: how long a failed inference probe is retried
-    FlapWindow         time.Duration   // 2m: check C6
-    CapacityRestore    CapacityRestore // reset-pod (default) | reset-all | release
-    CapacityResetDelay time.Duration   // 0: how long to serve below full before ResetAll
-    JoinBudget         int             // 3: failed attempts to bring a Pod's members back
+    PollInterval     time.Duration   // 1s
+    DiagnosisTimeout time.Duration   // 75s: longest time in recovering without a round
+    ApplyTimeout     time.Duration   // 90s: longest time a round may stay in flight
+    VerifyTimeout    time.Duration   // 2m: how long a failed inference probe is retried
+    FlapWindow       time.Duration   // 2m: check C6
+    CapacityRestore  CapacityRestore // reset-pod (default) | reset-all | release
 }
 
 type Phase string // starting | serving | recovering
@@ -55,15 +53,6 @@ type PodRecord struct {
     Identity string
     Removing bool // asked to go, through Reset, ResetAll or Release
 }
-
-// Capacity is the capacity loop's state.
-type Capacity struct {
-    State        CapacityState // full | resetting_pod | waiting | admitting | reset_pending | releasing | below_full
-    BelowSince   time.Time     // when the group went below full, for CapacityResetDelay
-    JoinFailures int
-}
-
-type CapacityState string
 
 // Record is the controller's whole state. It is what the journal stores.
 type Record struct {
@@ -85,8 +74,6 @@ type Record struct {
     RecreateStopped           bool // from the last Discover, so people can see the workload gave up
 
     Incident *Incident // the open incident, nil when none. Closed ones go to telemetry.
-
-    Capacity Capacity
 }
 ```
 
@@ -131,23 +118,23 @@ In order:
 4. **Check the observation** (C4, C5). A violation resets the group.
 5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [round](#rounds) is in flight.
    Check and send a new round, verify, or reset.
-6. **Move the [capacity loop](#capacity-loop)** if the group is `serving`.
+6. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
 
 **Example**, the [running example](README.md#running-example) poll by poll:
 
-| Poll | Discover | Observe | Policy says | Controller does | Phase, round, capacity |
+| Poll | Discover | Observe | Policy says | Controller does | Phase, round |
 |---|---|---|---|---|---|
-| 1 | 4 Pods `Ready` | all `Serving` | `Plan`: Healthy | nothing | serving, full |
+| 1 | 4 Pods `Ready` | all `Serving` | `Plan`: Healthy | nothing | serving |
 | 2 | same | `dp3` Terminal, `dp0`-`dp2` paused | `Plan`: Change, remove `dp3@idD` | enters `recovering`, saves, calls `Probe` once | recovering |
 | 3 | same | same | same | waits: under 2 polls in `recovering` | recovering |
 | 4 | same | same | same | checks C1-C7, saves round `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, round in flight |
 | 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, round in flight |
-| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the round, `Verify(dp0, dp1, dp2)` | serving, full |
-| 7 | same | same | `Plan`: Healthy | marks `lws-0-3` (d1) `Removing`, saves, `Reset(lws-0-3, d1)` | serving, resetting_pod |
-| 8 | `lws-0-3` (d1) Terminating | `dp0`-`dp2` Serving | `Plan`: Healthy | waits | serving, resetting_pod |
-| 9 | `lws-0-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `dp3@idD`. No deadline. | serving, waiting |
-| ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves round, `Apply` | serving, admitting |
-| ... | same | `dp3@idD2` healthy | `Progress`: Succeeded | marks `dp3@idD2` admitted, `Verify(dp3@idD2)` | serving, full |
+| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the round, `Verify(dp0, dp1, dp2)` | serving |
+| 7 | same | same | `Plan`: Healthy | `lws-0-3` holds only excluded members: marks it `Removing`, saves, `Reset(lws-0-3, d1)` | serving |
+| 8 | `lws-0-3` (d1) Terminating | `dp0`-`dp2` Serving | `Plan`: Healthy | waits | serving |
+| 9 | `lws-0-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `dp3@idD`. No deadline. | serving |
+| ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves round, `Apply` | serving, round in flight |
+| ... | same | `dp3@idD2` healthy | `Progress`: Succeeded | marks `dp3@idD2` admitted, `Verify(dp3@idD2)` | serving |
 
 The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.Stepped` receives it:
 
@@ -156,7 +143,6 @@ Phase: recovering
 Reason: "dp3 is dead; survivors paused"
 Round: {ID: iro-ft-7c1e, Participants: [dp0@idA, dp1@idB, dp2@idC], Remove: [dp3@idD]}
 Members: {dp0@idA: admitted, dp1@idB: admitted, dp2@idC: admitted, dp3@idD: admitted}
-Capacity: {State: full}
 RecreateStopped: false
 ```
 
@@ -181,7 +167,7 @@ described [below](#rounds). A round can run in `recovering` (fixing a fault) or 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
 | `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy`, then inference verified |
-| `serving` | verified and healthy, maybe below full | plans every poll and moves the [capacity loop](#capacity-loop). A round that admits candidates runs here. | a fault |
+| `serving` | verified and healthy, maybe below full | plans every poll and [restores capacity](#restoring-capacity). A round that admits candidates runs here. | a fault |
 | `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan or round `Succeeded`, then verified. Or reset. |
 
 ### Reading Discover
@@ -240,39 +226,27 @@ The two deadlines catch different hangs: an engine that never reaches a state IR
 and a round that never finishes. While the workload reports `Recreating`, both deadlines are frozen,
 and a new group drops the round in flight: the workload is already replacing everything.
 
-### Capacity loop
+### Restoring capacity
 
-Capacity never comes from new Pods. It comes back by resetting: one Pod, or the whole group.
-The loop is saved in `Record.Capacity` and moves only while the group is `serving`; a fault pauses it
-where it is. Admitting a reset Pod's members is a [round](#rounds) that runs while the group stays `serving`.
+Capacity never comes from new Pods. It comes back by resetting the failed Pod, or the whole group.
+This runs only while the group is `serving`; a fault comes first.
 
 ```mermaid
-stateDiagram-v2
-  [*] --> full
-  full --> resetting_pod: a round excluded members, mode reset-pod
-  resetting_pod --> waiting: the old Pod is gone
-  waiting --> admitting: its new members Joinable, policy plans Add
-  admitting --> full: Succeeded, verified
-  admitting --> resetting_pod: join failed, budget left
-  waiting --> resetting_pod: new Pod failed before joining, budget left
-  resetting_pod --> reset_pending: ErrUnsupported, or engine cannot grow
-  admitting --> reset_pending: join budget used up
-  full --> reset_pending: a round excluded members, mode reset-all
-  reset_pending --> [*]: delay passed, IRO resets all
-  full --> releasing: a round excluded members, mode release
-  releasing --> below_full: released Pods gone, or ErrUnsupported
-  below_full --> [*]: a new group
+flowchart TD
+  X[A Pod holds only excluded members] --> M{--ft-capacity-restore}
+  M -- reset-pod --> R[Reset the Pod]
+  M -- reset-all --> A[ResetAll]
+  M -- release --> L[Release the Pod, serve with fewer members]
+  R -- its new members join --> F[Full again]
+  R -- anything fails --> A
 ```
 
-| State | Meaning | Controller does | Leaves when |
-|---|---|---|---|
-| `full` | every member is admitted | nothing | a round excludes members |
-| `resetting_pod` | a Pod holds only excluded or rejected members | saves it as `Removing`, then calls `Reset` on it every poll (C8) | the old Pod is gone |
-| `waiting` | the replacement Pod is scheduling, starting or loading | nothing. No deadline. A replacement that restarts or fails before joining counts against `JoinBudget`. | the policy plans `Add` for its members |
-| `admitting` | a round adds the replacement's members while the group keeps serving | watches `Progress` like any round | Succeeded, or Failed |
-| `reset_pending` | capacity cannot come back one Pod at a time, or the mode is `reset-all` | keeps serving below full until `CapacityResetDelay` has passed since `BelowSince`, then `ResetAll` (reason `capacity`) | the reset, or a new group |
-| `releasing` | the mode is `release` | saves the Pods as `Removing`, then calls `Release` on them every poll (C8) | they are gone, or `ErrUnsupported` |
-| `below_full` | serving with fewer members, by choice or because the workload cannot release | reports it and keeps serving | a new group |
+1. When a round leaves a Pod with only excluded members, the controller marks it `Removing`, saves, and
+   calls `Reset`, `ResetAll` or `Release` on it, per `--ft-capacity-restore` (C8).
+2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [round](#rounds).
+3. If resetting the Pod fails in any way (`ErrUnsupported`, the engine cannot grow, the new Pod fails before
+   or during its join), the controller calls `ResetAll` (reason `capacity`). There is one try, no budget.
+4. There is no extra state: the `Removing` Pods, the candidates and the round in flight say where things are.
 
 ## Rules
 
@@ -303,12 +277,12 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | At-most-once rounds | the round is saved before `Apply`. A new leader only watches `Progress`. |
 | Repeatable workload calls | `Reset`, `ResetAll` and `Release` are saved first and repeated until `Discover` shows the result |
 | One round at a time | a new plan is asked for only when no round is in flight |
-| Faults come first | the capacity loop moves only while `serving` |
+| Faults come first | capacity is restored only while `serving` |
 | A failed save never advances the phase | the in-memory state keeps the last saved phase |
 | Never resets a group it cannot see | discovery failures wait |
 | Resets hit only what failed | `Reset` names one Pod by UID; `ResetAll` names the saved Pods by UID. Both are repeated until those Pods are gone. |
 | Never gives up on its own | no reset budget and no terminal phase. The workload's restart policy paces resets and decides when to stop. |
-| No startup deadline, no capacity deadline | `starting` and `waiting` last as long as they need |
+| No startup deadline | `starting`, and a reset Pod coming back, take as long as they need |
 
 ## Configuration
 
@@ -321,10 +295,8 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
 | `--ft-verify-timeout` | 2m | `VerifyTimeout`. 0 resets on the first failure. |
 | `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod and falls back to `ResetAll`; `reset-all` resets the group; `release` frees the GPUs and serves below full. |
-| `--ft-capacity-reset-delay` (target) | 0s | `CapacityResetDelay`: how long to serve below full before `ResetAll` |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
-| no flag (target) | 3 | `JoinBudget` |
 
 Each engine and workload implementation registers its own flags (see [engine](engine.md#vllm), [workload](workload.md#lws)).
 `--ft-store-port` moves to the vLLM driver.
@@ -344,4 +316,4 @@ Each engine and workload implementation registers its own flags (see [engine](en
 - **Why reset one Pod first.** It is the smallest action that brings capacity back: only the failed Pod
   restarts, and the other members keep serving. `ResetAll` stops the whole group while the model loads
   again. When this group is the only one serving the model, that is a full outage: use
-  `--ft-capacity-reset-delay` to pick a later moment, or `--ft-capacity-restore=release`.
+  `--ft-capacity-restore=release` to keep serving with fewer members instead.
