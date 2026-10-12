@@ -55,13 +55,14 @@ func (current *view) pick(match func(*engine.Member) bool) []engine.MemberID {
 }
 
 func outcome(inc *Incident) Outcome {
-	if inc == nil {
-		return Recovered
-	}
-	for index := range inc.Rounds {
-		if result := &inc.Rounds[index]; result.Progress.State == engine.Succeeded && len(result.Round.Remove) > 0 {
-			return Shrunk
+	removed := 0
+	for index := 0; inc != nil && index < len(inc.Rounds); index++ {
+		if result := &inc.Rounds[index]; result.Progress.State == engine.Succeeded {
+			removed += len(result.Round.Remove) - len(result.Round.Add)
 		}
+	}
+	if removed > 0 {
+		return Shrunk
 	}
 	return Recovered
 }

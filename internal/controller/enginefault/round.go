@@ -27,6 +27,9 @@ func (fsm *controller) watch(ctx context.Context, next *Record, current *view, n
 		next.Verifying = append(slices.Clone(round.Participants), round.Add...)
 		next.VerifyFailedSince = time.Time{}
 		enter(next, Serving, "round "+round.ID+" succeeded", now)
+		if err := fsm.save(ctx, next); err != nil {
+			return err
+		}
 		return fsm.verify(ctx, next, current, now)
 	case engine.Failed:
 		fsm.finishRound(next, &progress, now)
@@ -116,12 +119,15 @@ func checkPlan(next *Record, current *view, plan *engine.Plan) string {
 }
 
 func (fsm *controller) verify(ctx context.Context, next *Record, current *view, now time.Time) error {
-	err := fsm.eng.Verify(ctx, current.obs, next.Verifying)
+	// A Verify that outlives its share of the step is a failed check, not a stall.
+	verifyCtx, cancel := context.WithTimeout(ctx, fsm.config.ApplyTimeout/2)
+	err := fsm.eng.Verify(verifyCtx, current.obs, next.Verifying)
+	cancel()
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 	if err == nil {
-		next.Verifying, next.VerifyFailedSince = nil, time.Time{}
+		next.Verifying, next.VerifyFailedSince, next.Reason = nil, time.Time{}, "verified"
 		if inc := next.Incident; inc != nil {
 			inc.Durations.Verify = now.Sub(next.Since)
 			fsm.closeIncident(next, outcome(inc), now)
@@ -146,7 +152,7 @@ func (fsm *controller) resetAll(ctx context.Context, next *Record, reason ResetR
 		pod.Removing = true
 		next.Pods[uid] = pod
 	}
-	next.Members, next.Verifying, next.VerifyFailedSince = nil, nil, time.Time{}
+	next.Members, next.Verifying, next.VerifyFailedSince, next.LastNoChangeRound = nil, nil, time.Time{}, time.Time{}
 	if inc := next.Incident; inc != nil && inc.Durations.Diagnose == 0 {
 		inc.Durations.Diagnose = now.Sub(inc.Opened)
 	}
@@ -156,9 +162,9 @@ func (fsm *controller) resetAll(ctx context.Context, next *Record, reason ResetR
 		return err
 	}
 	pods := refs(next)
-	err := fsm.wl.ResetAll(ctx, pods)
+	fsm.called(fsm.wl.ResetAll(ctx, pods))
 	fsm.recorder.ResetAllRequested(reason, pods)
-	return err
+	return nil
 }
 
 func (fsm *controller) finishRound(next *Record, progress *engine.Progress, now time.Time) {

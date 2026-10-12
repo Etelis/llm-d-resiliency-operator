@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"net/http"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -84,7 +85,11 @@ func main() {
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		klog.Fatalf("unable to set up health check: %v", err)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	ready := healthz.Ping
+	if engineFT.Enabled {
+		ready = func(*http.Request) error { return recorder.Ready() }
+	}
+	if err := mgr.AddReadyzCheck("readyz", ready); err != nil {
 		klog.Fatalf("unable to set up ready check: %v", err)
 	}
 

@@ -30,6 +30,10 @@ type controller struct {
 	now      func() time.Time
 	saved    []byte
 	pending  []func()
+	// callErr collects workload errors that do not stop the step: the call is repeated next poll.
+	callErr error
+	// waited restarts the deadlines on the first poll after a wait for the workload, or after a load.
+	waited bool
 }
 
 type view struct {
@@ -73,16 +77,19 @@ func load(ctx context.Context, wl workload.Workload, eng engine.Engine, store jo
 	if len(data) == 0 {
 		saved = nil
 	}
-	return &controller{wl: wl, eng: eng, store: store, recorder: recorder, config: config, now: now, saved: saved}, nil
+	return &controller{
+		wl: wl, eng: eng, store: store, recorder: recorder, config: config, now: now, saved: saved, waited: true,
+	}, nil
 }
 
 func (fsm *controller) Step(ctx context.Context) error {
-	fsm.pending = nil
+	fsm.pending, fsm.callErr = nil, nil
 	next := fsm.record()
 	err := fsm.step(ctx, &next)
 	if err == nil {
 		err = fsm.save(ctx, &next)
 	}
+	err = errors.Join(err, fsm.callErr)
 	current := fsm.record()
 	fsm.recorder.Stepped(&current, err)
 	return err
@@ -125,6 +132,8 @@ func (fsm *controller) save(ctx context.Context, next *Record) error {
 
 func (fsm *controller) later(emit func()) { fsm.pending = append(fsm.pending, emit) }
 
+func (fsm *controller) called(err error) { fsm.callErr = errors.Join(fsm.callErr, err) }
+
 func (fsm *controller) step(ctx context.Context, next *Record) error {
 	now := fsm.now().UTC()
 	group, err := fsm.wl.Discover(ctx)
@@ -152,9 +161,7 @@ func (fsm *controller) step(ctx context.Context, next *Record) error {
 	if next.Pods == nil {
 		next.Pods = map[string]PodRecord{}
 	}
-	if err := fsm.comparePods(ctx, next, &group); err != nil {
-		return err
-	}
+	fsm.comparePods(ctx, next, &group)
 	current := fsm.connect(ctx, next, &group)
 	if reason := violation(next, current); reason != "" {
 		return fsm.resetAll(ctx, next, ResetExclusionBroken, reason, now)
@@ -177,14 +184,16 @@ func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group 
 	}
 	owed = owed && present
 	if !group.Recreating && !group.RecreateStopped && !owed {
+		if fsm.waited && next.Phase == Recovering {
+			next.Since = now
+		}
+		if fsm.waited && next.Round != nil {
+			next.RoundSince = now
+		}
+		fsm.waited = false
 		return false, nil
 	}
-	if next.Phase == Recovering {
-		next.Since = now
-	}
-	if next.Round != nil {
-		next.RoundSince = now
-	}
+	fsm.waited = true
 	if (group.Recreating || group.RecreateStopped) && next.Phase == Serving && next.Incident == nil {
 		cause := "workload is recreating the group"
 		if group.RecreateStopped {
@@ -195,7 +204,8 @@ func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group 
 	if err := fsm.save(ctx, next); err != nil || !owed {
 		return true, err
 	}
-	return true, fsm.wl.ResetAll(ctx, refs(next))
+	fsm.called(fsm.wl.ResetAll(ctx, refs(next)))
+	return true, nil
 }
 
 func sameGroup(next *Record, group *workload.Group) bool {
@@ -223,14 +233,23 @@ func (fsm *controller) start(ctx context.Context, next *Record, group *workload.
 		}
 	}
 	obs := fsm.eng.Observe(ctx, group.Pods)
-	var reported []engine.MemberID
-	for index := range obs.Members {
-		if member := &obs.Members[index]; !member.Terminal {
-			reported = append(reported, member.ID())
+	for index := range group.Pods {
+		pod := &group.Pods[index]
+		hasMember := slices.ContainsFunc(obs.Members, func(member engine.Member) bool { return member.Pod.UID == pod.UID })
+		if pod.State == workload.PodStarting || (pod.State == workload.PodReady && !hasMember) {
+			return nil
 		}
 	}
-	slices.Sort(reported)
-	plan := fsm.eng.Plan(obs, reported, nil)
+	var reported, live []engine.MemberID
+	for index := range obs.Members {
+		member := &obs.Members[index]
+		reported = append(reported, member.ID())
+		if !member.Terminal {
+			live = append(live, member.ID())
+		}
+	}
+	slices.Sort(live)
+	plan := fsm.eng.Plan(obs, live, nil)
 	if plan.Kind != engine.Healthy {
 		return nil
 	}
@@ -242,15 +261,18 @@ func (fsm *controller) start(ctx context.Context, next *Record, group *workload.
 	return nil
 }
 
-func (fsm *controller) comparePods(ctx context.Context, next *Record, group *workload.Group) error {
+func (fsm *controller) comparePods(ctx context.Context, next *Record, group *workload.Group) {
 	for _, uid := range slices.Sorted(maps.Keys(next.Pods)) {
 		saved, pod := next.Pods[uid], find(group, uid)
 		switch {
 		case saved.Removing && pod == nil:
 			forget(next, uid)
-		case saved.Removing && pod.State != workload.PodTerminating:
-			if err := fsm.remove(ctx, podRef(uid, &saved)); err != nil && !errors.Is(err, workload.ErrUnsupported) {
-				return err
+		case saved.Removing && pod.State != workload.PodTerminating && fsm.config.CapacityRestore == RestoreResetPod:
+			if err := fsm.wl.Reset(ctx, podRef(uid, &saved)); errors.Is(err, workload.ErrUnsupported) {
+				saved.Removing = false
+				next.Pods[uid] = saved
+			} else {
+				fsm.called(err)
 			}
 		case saved.Removing:
 		case pod == nil && !tracks(next, saved.Identity):
@@ -265,7 +287,6 @@ func (fsm *controller) comparePods(ctx context.Context, next *Record, group *wor
 			next.Pods[pod.UID] = PodRecord{Name: pod.Name, Identity: pod.Identity, Node: pod.Node}
 		}
 	}
-	return nil
 }
 
 func (fsm *controller) connect(ctx context.Context, next *Record, group *workload.Group) *view {
@@ -291,8 +312,14 @@ func (fsm *controller) connect(ctx context.Context, next *Record, group *workloa
 		current.members[id] = member
 	}
 	for _, id := range slices.Sorted(maps.Keys(next.Members)) {
-		if _, reported := current.members[id]; !reported && next.Members[id] == Admitted && isLost(next, group, id) {
+		if _, reported := current.members[id]; reported || !isLost(next, group, id) {
+			continue
+		}
+		switch next.Members[id] {
+		case Admitted:
 			current.obs.Members = append(current.obs.Members, lostMember(next, id))
+		case Candidate:
+			next.Members[id] = Rejected
 		}
 	}
 	for index := range current.obs.Members {

@@ -56,6 +56,7 @@ type fakeEngine struct {
 	progress   engine.Progress
 	applyErr   error
 	verifyErr  error
+	hangVerify bool
 	probes     int
 	applied    []engine.Round
 	verified   [][]engine.MemberID
@@ -95,8 +96,12 @@ func (fake *fakeEngine) Apply(_ context.Context, _ engine.Observation, round eng
 	return nil, fake.applyErr
 }
 
-func (fake *fakeEngine) Verify(_ context.Context, _ engine.Observation, members []engine.MemberID) error {
+func (fake *fakeEngine) Verify(ctx context.Context, _ engine.Observation, members []engine.MemberID) error {
 	fake.verified = append(fake.verified, slices.Clone(members))
+	if fake.hangVerify {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	return fake.verifyErr
 }
 
@@ -240,6 +245,12 @@ func (test *harness) load() {
 func (test *harness) pollErr() error {
 	test.clock = test.clock.Add(test.config.PollInterval)
 	return test.fsm.Step(test.t.Context())
+}
+
+func (test *harness) pollAnyway() {
+	if err := test.pollErr(); err != nil {
+		test.t.Log(err)
+	}
 }
 
 func (test *harness) poll() {

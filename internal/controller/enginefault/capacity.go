@@ -13,15 +13,9 @@ import (
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
 )
 
-func (fsm *controller) remove(ctx context.Context, pod workload.PodRef) error {
-	if fsm.config.CapacityRestore == RestoreRelease {
-		return fsm.wl.Release(ctx, []workload.PodRef{pod})
-	}
-	return fsm.wl.Reset(ctx, pod)
-}
-
 func (fsm *controller) restore(ctx context.Context, next *Record, current *view, now time.Time) error {
-	if slices.Contains(slices.Collect(maps.Values(next.Members)), Rejected) {
+	mode := fsm.config.CapacityRestore
+	if mode != RestoreRelease && slices.Contains(slices.Collect(maps.Values(next.Members)), Rejected) {
 		return fsm.resetAll(ctx, next, ResetCapacity, "a reset Pod's members could not join", now)
 	}
 	var targets []workload.PodRef
@@ -41,7 +35,6 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 	if len(targets) == 0 {
 		return nil
 	}
-	mode := fsm.config.CapacityRestore
 	if mode == RestoreResetAll || (mode == RestoreResetPod && !fsm.eng.Capabilities().Grow) {
 		return fsm.resetAll(ctx, next, ResetCapacity, "restoring capacity", now)
 	}
@@ -51,10 +44,10 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 	if mode == RestoreRelease {
 		err := fsm.wl.Release(ctx, targets)
 		fsm.recorder.ReleaseRequested(targets, err)
-		if errors.Is(err, workload.ErrUnsupported) {
-			return nil
+		if !errors.Is(err, workload.ErrUnsupported) {
+			fsm.called(err)
 		}
-		return err
+		return nil
 	}
 	for _, pod := range targets {
 		err := fsm.wl.Reset(ctx, pod)
@@ -62,9 +55,7 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 		if errors.Is(err, workload.ErrUnsupported) {
 			return fsm.resetAll(ctx, next, ResetCapacity, "the workload cannot reset one Pod", now)
 		}
-		if err != nil {
-			return err
-		}
+		fsm.called(err)
 	}
 	return nil
 }

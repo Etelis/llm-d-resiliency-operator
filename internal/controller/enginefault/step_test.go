@@ -471,6 +471,9 @@ func TestFlapGuard(t *testing.T) {
 		test.poll()
 	}
 	test.wantReset(ResetFlap)
+	if !test.record().LastNoChangeRound.IsZero() {
+		t.Fatal("the flap window carried into the new group")
+	}
 }
 
 func TestCapacityRestore(t *testing.T) {
