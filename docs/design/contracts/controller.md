@@ -224,47 +224,6 @@ the two by `Member.ID()` (`dp3@idD`) and keeps each ID as candidate, admitted, e
 | admitted member not reported (its Pod is unreachable) | treats it as unknown: not Serving, not Terminal |
 | admitted member on a Pod that is gone, `Terminating` or restarted | lost: treated as Terminal |
 
-### Two ways a fault ends
-
-What happens after a rank fails depends on whether Kubernetes noticed it.
-
-| | The engine lost a rank, Kubernetes saw nothing | Kubernetes saw the failure |
-|---|---|---|
-| Example | `dp3` is `dead` inside the engine, but its container keeps running | `dp3`'s container crashes or restarts |
-| Who acts | IRO | the workload (LWS recreates the whole group under `RecreateGroupOnPodRestart`) |
-| `Discover` | same Pods, same identities | `Recreating`, then all new Pods |
-| Controller | shrinks in place: `recovering`, round removes `dp3@idD`, back to `serving` with 3 members | waits: no plan, no round, no reset of its own, deadlines frozen. Then a new group: clears the journal and goes to `starting`. |
-| Capacity | by default resets just `lws-0-3` and re-admits `dp3`. With LWS today that answers `ErrUnsupported`, so IRO falls back to `ResetAll` after `CapacityResetDelay`. With `release`, it frees `lws-0-3`'s GPUs and serves with 3 members. | back to full with the new group |
-| Incident outcome | `Shrunk`. Capacity actions after that are telemetry events of their own. | `Recreated` |
-
-The two can follow each other: a group that shrank in place is recreated later if Kubernetes then sees
-a container fail, and comes back at full size.
-
-```mermaid
-sequenceDiagram
-  participant C as Controller
-  participant W as Workload
-  participant E as Engine
-  Note over C,E: Kubernetes saw nothing
-  E-->>C: dp3 Terminal, survivors paused
-  C->>E: round: remove dp3
-  alt the workload can reset one Pod
-    C->>W: Reset(lws-0-3)
-    W-->>C: lws-0-3 back as a new Pod
-    C->>E: round: add dp3 on the new Pod
-  else LWS today
-    C->>W: Reset(lws-0-3)
-    W-->>C: ErrUnsupported
-    C->>W: ResetAll, after CapacityResetDelay
-  end
-  Note over C: serving with 4 members
-  Note over C,E: Kubernetes saw the failure
-  W-->>C: Recreating
-  Note over C: wait, act on nothing
-  W-->>C: all Pods new
-  Note over C: new group, starting, then serving with 4 members
-```
-
 ### Rounds
 
 A round is the one engine action IRO can have in flight. It is saved in the journal before it is
