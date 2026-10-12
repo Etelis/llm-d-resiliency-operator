@@ -81,13 +81,3 @@ B.Save(ctx, recordB) // ErrConflict. B's state is not saved, so B does not act o
 - **Why not part of the workload.** The workload keeps no memory; the journal is all memory. A set with several
   engine groups needs one record per group, and tests can fake the journal alone. The implementation can still
   come from the workload module, because it needs the workload object for the owner reference.
-
-## LWS
-
-| Rule | LWS |
-|---|---|
-| Storage | ConfigMap `<lws-name>-ft-state`, key `state.json` |
-| Compare-and-swap | `resourceVersion` on update. A Kubernetes conflict is `ErrConflict`. |
-| Metadata-only conflict | re-read. If `state.json` is unchanged, retry once on the new version. |
-| Recreate if deleted | `NotFound` on update creates it again |
-| Lifetime | owner reference to the LWS |

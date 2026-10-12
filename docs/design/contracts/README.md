@@ -75,7 +75,8 @@ Every component doc has the same parts, in this order:
 3. **Objects**: every type the component owns.
 4. **Functions**: one section per function, with its input, output and an example.
 5. **Behavior**, **Rules** and **Considerations**.
-6. **Implementations**: LWS or vLLM today, and what has to change.
+
+Implementations (LWS, vLLM) are not part of these docs. Each is documented with its own PR.
 
 ## Running example
 
@@ -178,7 +179,7 @@ A fault at any point comes first: the group goes to `recovering`, and the capaci
 group serves again.
 
 Capacity never comes from new Pods elsewhere: it comes back by resetting. If resetting the Pod fails in any
-way (LWS today answers `ErrUnsupported`, the engine cannot admit members, or the new Pod fails to join),
+way (the workload answers `ErrUnsupported`, the engine cannot admit members, or the new Pod fails to join),
 IRO resets the whole group. With `--ft-capacity-restore=release`, IRO frees the failed Pod's GPUs instead
 and serves below full.
 
@@ -199,15 +200,6 @@ and serves below full.
 
 1. **Disaggregated sets.** A prefill/decode set has several engine groups with different roles.
    Proposal: one recovery unit per engine group, each with its own Group, journal and controller loop.
-2. **Restart policy.** Resetting one Pod needs LWS `restartPolicy: None`: under `RecreateGroupOnPodRestart`,
-   deleting any Pod recreates the whole group, so LWS answers `Reset` with `ErrUnsupported`. Today IRO
-   requires `RecreateGroupOnPodRestart`. Which should it require?
-3. **Standby engines and C5.** Does a vLLM engine waiting to join report healthy to the router?
-4. **vLLM rank numbering.** The FT path keeps frozen original ranks; elastic EP renumbers densely.
-   Re-admitting a reset Pod's rank needs the vLLM driver to bridge them. Opaque member names keep this out of the contract.
-5. **Pods with some members excluded.** With several ranks per Pod, losing one rank does not let IRO
+2. **Pods with some members excluded.** With several ranks per Pod, losing one rank does not let IRO
    reset the Pod (C8), so that capacity stays lost until `ResetAll`. Should the policy be allowed to remove
    the healthy rest of the Pod so the Pod can be reset?
-6. **LWS restart limits for IRO resets.** `restartBackoff` and `maxGroupRestarts` are on LWS `main`, not in
-   v0.11.1. Check that a recreation IRO causes, by deleting the leader, is paced and counted like any other.
-   Until they ship, IRO resets are not paced at all.

@@ -304,8 +304,8 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
 
-Each engine and workload implementation registers its own flags (see [engine](engine.md#vllm), [workload](workload.md#lws)).
-`--ft-store-port` moves to the vLLM driver.
+Each engine and workload implementation registers its own flags.
+`--ft-store-port` moves to the engine driver that needs it.
 
 ## Considerations
 

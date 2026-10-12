@@ -9,7 +9,7 @@ The workload owns the Pods of one engine group. It does four things:
 
 It remembers nothing: no earlier calls, no earlier groups. Deciding whether this is still the same group
 is the [controller's](controller.md#reading-discover) job. It knows nothing about engines: no ranks, ports
-or processes. The first implementation is [LWS](#lws).
+or processes. The first implementation, LWS, comes with its own PR and doc.
 
 ## Interface
 
@@ -105,7 +105,7 @@ Replaces one Pod with a new Pod in the same place. The rest of the group keeps r
 Reset(ctx, PodRef{"lws-0-3", "d1"})
 // a workload that supports it: lws-0-3 (d1) is deleted and comes back as lws-0-3 (d2). Returns nil.
 // the same call again: no Pod with UID d1 exists. Returns nil, changes nothing.
-// LWS today: returns ErrUnsupported, changes nothing.
+// a workload that cannot: returns ErrUnsupported, changes nothing.
 ```
 
 ### ResetAll
@@ -145,7 +145,7 @@ Removes the named Pods and frees their GPUs. Nothing is added in their place.
 Release(ctx, []PodRef{{"lws-0-3", "d1"}})
 // a workload that supports it: lws-0-3 starts terminating and is not replaced. Returns nil.
 // the same call again: no Pod with UID d1 exists. Returns nil, changes nothing.
-// LWS today: returns ErrUnsupported, changes nothing.
+// a workload that cannot: returns ErrUnsupported, changes nothing.
 ```
 
 ## Rules
@@ -173,43 +173,10 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
 - **Leaders.** Some workloads cannot replace or remove their leader without recreating the group. They return
   `ErrUnsupported` for that Pod, and the controller falls back to `ResetAll`.
 - **Report `Recreating` as early as possible.** A workload that will recreate the group because of what it
-  sees (for LWS, any container restart under `RecreateGroupOnPodRestart`) reports `Recreating` right away,
+  sees (for example, any container restart, when its policy recreates the group for that) reports `Recreating` right away,
   not only once the leader is deleted. Otherwise the controller may plan a round for a group that is about to go.
 - **Recreating vs. stopped.** `Recreating` is temporary: the controller waits. `RecreateStopped` is
   the workload saying it gave up: the controller waits too, and telemetry reports it.
-
-## LWS
-
-| Contract | LWS |
-|---|---|
-| Group | one LWS with `replicas: 1`, Pods with label `group-index=0` |
-| Required spec | `groupIdentity: Ordinal` or unset, `size >= 1`. Today also `RecreateGroupOnPodRestart` (open decision 2). |
-| `Pod.Index` | label `leaderworkerset.sigs.k8s.io/worker-index`. Names are `<lws>-0` and `<lws>-0-<i>`. |
-| `Pod.Node` | `spec.nodeName` |
-| `Pod.State` | `Terminating` when the Pod is being deleted. `Ready` when every container runs and the Pod has an IP. Otherwise `Starting`. |
-| `Recreating` | the leader Pod is missing or terminating, or carries `leaderworkerset.sigs.k8s.io/group-recreate-pending` (recreation held back by `restartBackoff`), or, under `RecreateGroupOnPodRestart`, any Pod has a restarted or failed container: LWS is about to recreate the group |
-| `RecreateStopped` | the leader Pod carries `leaderworkerset.sigs.k8s.io/group-restart-budget-exhausted` (`maxGroupRestarts` used up) |
-| `Discover` fails | the LWS cannot be read, or its spec is not supported |
-| `Reset` | under `RecreateGroupOnPodRestart`: `ErrUnsupported`, because deleting any Pod recreates the whole group. Under `restartPolicy: None`: delete the worker Pod with a UID precondition, and LWS recreates just that Pod. The leader: `ErrUnsupported`, because deleting it takes its workers with it. |
-| `ResetAll` | delete the leader among the named Pods, with a UID precondition. `NotFound` or `Conflict` count as done. LWS recreates the group. |
-| Reset pacing, giving up | `restartBackoff` and `maxGroupRestarts`, on LWS `main` and not in v0.11.1 |
-| `Release` | returns `ErrUnsupported` until LWS can remove a chosen Pod from a running group |
-| Journal | see [journal.md](journal.md#lws) |
-| Flags | `--lws-namespace`, `--lws-name` |
-
-**Today** `lws.Discover` does more than report. It fails while Pods start, terminate or differ in count
-from `size`, and it hashes every Pod and container identity into a group ID. Both go: Pod states are
-reported instead, and the controller compares Pods with its journal.
-
-Leaving LWS for the [vLLM driver](engine.md#vllm):
-
-| Today in `lws.Discover` | Why it is vLLM |
-|---|---|
-| calls the rank observer `GET :9257/status` | a vLLM process observer that matches vLLM process names |
-| one API endpoint per rank at `8000 + local index` | vLLM's one API server per DP rank |
-| requires `rank == worker * ranksPerPod + local` | vLLM's DP start-rank layout |
-| fills `Endpoint.DiagnosticsURL` | read only by the vLLM driver |
-| flags `--engine-api-port`, `--engine-observer-port` | vLLM settings |
 
 ## Later: disaggregated sets
 

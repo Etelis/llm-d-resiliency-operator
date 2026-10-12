@@ -8,7 +8,7 @@ One plugin per inference engine. It has two halves:
   the round in flight is going. It does no I/O.
 
 The engine never talks to the workload, and knows nothing about phases, deadlines or Kubernetes.
-The first implementation is [vLLM](#vllm).
+The first implementation, vLLM, comes with its own PR and doc.
 
 ```mermaid
 flowchart LR
@@ -141,8 +141,8 @@ Says what the engine can do at all.
 | **Input** | none |
 | **Output** | [`Capabilities`](#objects) |
 
-**Example.** vLLM today returns `{Grow: false}`. The controller then never resets a single Pod, since
-the engine could not re-admit its members. With the default `--ft-capacity-restore`, it resets the whole group instead.
+**Example.** An engine that cannot admit members into a running group returns `{Grow: false}`. The
+controller then never resets a single Pod, since the engine could not re-admit its members. With the default `--ft-capacity-restore`, it resets the whole group instead.
 
 ### Observe
 
@@ -177,7 +177,7 @@ Nudges the engine to notice a fault it has not seen yet. May do nothing.
 
 **Example.** `dp3`'s process has exited, but `dp0`-`dp2` are idle and still report healthy: they only
 notice a dead peer inside a collective operation. The controller calls `Probe(obs)` once when it enters
-`recovering`. vLLM sends one short completion through a healthy member. The collective fails, and on
+`recovering`. The driver sends one short completion through a healthy member. The collective fails, and on
 the next `Observe`, `dp3` is `Terminal` and the others are paused.
 
 ### Apply
@@ -305,71 +305,3 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 - **Who connects Pods and members.** The driver only reports. The controller tracks which members are
   candidates, admitted, excluded or rejected, and which Pods to remove.
 - **Shrinking needs no capability.** A policy that cannot shrink never plans `Remove`.
-
-## vLLM
-
-### Capabilities
-
-| Capability | vLLM today |
-|---|---|
-| `Grow` | no. The FT path has no scale-up. See [growth](#growth-in-vllm). Shrinking works through FT `scale_down`. |
-
-### Driver
-
-| Contract | vLLM |
-|---|---|
-| Members per Pod | process observer `GET :9257/status` on each Pod lists its ranks and its Pod UID. API port is `8000 + local index`. The `worker * ranksPerPod + local` check from `lws.Discover` moves here. |
-| `Name` | `dp<rank>` |
-| `Observe` | `GET /v1/fault_tolerance/status` on each rank, plus process-exit evidence from the observer |
-| `Serving` | native status `healthy` (what the router sees) |
-| `Terminal` | native status `dead` only. A process exit alone cannot prove the API server rejects requests. |
-| `Probe` | one bounded completion to healthy ranks. An idle peer notices a dead worker only inside a collective. |
-| `Apply` | `POST /v1/fault_tolerance/apply` to each participant with `instruction` (`retry` when `Remove` is empty, else `scale_down`), `request_id` = `Round.ID`, and `params` |
-| `params` | `removed_dp_ranks`, plus `dp_master_ip` and `dp_store_port` when the store master is removed |
-| Store master | the lowest alive rank hosts the TCPStore. If a round removes it, the new master is the lowest surviving rank's Pod IP on `--vllm-store-port`. |
-| `Verify` | `POST /v1/completions` with the `X-IRO-Verification` header |
-| Round in progress | `last_ft_request_id` in the status |
-
-### Policy
-
-This is today's `Decide` and `finishRound`, moved out of the controller.
-
-| Observation | Plan |
-|---|---|
-| any rank reports a failed FT operation | `Unrecoverable` |
-| all active ranks `healthy`, no FT operation running, no process-exit evidence, and no Joinable candidates to add | `Healthy` |
-| no fault signal yet | `Wait` |
-| no rank `dead`, all `unhealthy` (waiting for an instruction) | `Change`: everyone participates, nothing removed (retry) |
-| some ranks faulted, none `dead`, not all `unhealthy` | `Wait` |
-| some ranks `dead`, every survivor `unhealthy` | `Change`: remove the dead ranks (shrink) |
-| some ranks `dead`, survivors not all `unhealthy` yet | `Wait` |
-| no survivors | `Unrecoverable` |
-| all active ranks healthy as above, candidates Joinable (needs `Grow`) | `Change`: add the candidates (grow) |
-
-| During a round | Progress |
-|---|---|
-| a participant `dead` or its FT operation failed | `Failed`, scope `Group` |
-| a participant works on a different request ID | `Failed`, scope `Group` |
-| all participants `healthy` | `Succeeded` |
-| otherwise | `Running` |
-
-### Flags (target)
-
-| Flag | Default |
-|---|---|
-| `--vllm-api-port` | 8000 |
-| `--vllm-observer-port` | 9257 |
-| `--vllm-store-port` | 29600 |
-
-### Growth in vLLM
-
-There are two resize paths today, and they do not agree:
-
-| | FT path (`fault_tolerance`) | Elastic EP |
-|---|---|---|
-| Ranks | frozen original numbers (`_initial_dp_size` minus dead ranks) | dense, renumbered (`new_data_parallel_rank`) |
-| Request | `removed_dp_ranks` | `new_data_parallel_size` |
-| Scale-up | none | yes, and existing engines pause during the commit (`COMMIT_SCALE_UP`) |
-
-To set `Grow`, the vLLM driver has to bridge the two. Because elastic EP scale-up pauses existing
-engines, a failed join may need scope `Group`, not `Joiners`.
