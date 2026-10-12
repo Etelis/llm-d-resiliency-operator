@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Architecture
 
-The llm-d Resiliency Operator (IRO) provides automated failure detection and recovery for distributed
+The llm-d Inference Resiliency Operator (IRO) provides automated failure detection and recovery for distributed
 LLM inference on Kubernetes. It sequences the engine-side response and the infrastructure-side recovery
 so serving keeps going and full capacity comes back without manual intervention.
 

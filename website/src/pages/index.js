@@ -16,7 +16,7 @@ export default function Home() {
           Your GPUs and engines will fail. <span>Plan accordingly.</span>
         </h1>
         <p>
-          The llm-d Resiliency Operator provides automated failure detection and recovery for distributed
+          The llm-d Inference Resiliency Operator (IRO) provides automated failure detection and recovery for distributed
           LLM inference on Kubernetes. It shrinks the engine around the failure, keeps it serving, and
           brings it back to full capacity without manual intervention.
         </p>
