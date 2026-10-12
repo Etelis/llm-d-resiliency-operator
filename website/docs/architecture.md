@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Architecture
 
-The llm-d Inference Resilience Operator (IRO) coordinates hardware fault events with the inference engine.
+The llm-d Inference Resilience Operator (IRO) coordinates hardware and engine fault events with the inference engine.
 It sequences the engine-side response and the infrastructure-side recovery so serving keeps going and
 full capacity comes back without manual intervention.
 

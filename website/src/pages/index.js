@@ -16,7 +16,7 @@ export default function Home() {
           Your GPUs and engines will fail. <span>Plan accordingly.</span>
         </h1>
         <p>
-          The llm-d Resiliency Operator coordinates hardware fault events with the inference engine. It
+          The llm-d Resiliency Operator coordinates hardware and engine fault events with the inference engine. It
           shrinks the engine around the failure, keeps it serving, and brings it back to full capacity
           without manual intervention.
         </p>
