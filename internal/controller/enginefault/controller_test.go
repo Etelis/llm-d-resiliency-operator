@@ -38,7 +38,7 @@ func TestFaultDecisionsPreserveOriginalMembership(t *testing.T) {
 		{"multiple deaths", statuses("unhealthy", "dead", "unhealthy", "dead"), nil, "scale_down", []int{1, 3}, []int{0, 2}},
 		{"repeated loss", statuses("unhealthy", "dead", "unhealthy", "unknown"), []int{3}, "scale_down", []int{1}, []int{0, 2}},
 		{
-			"single survivor delegates capacity to vLLM", statuses("unhealthy", "dead", "dead", "dead"), nil,
+			"single survivor delegates capacity to the engine", statuses("unhealthy", "dead", "dead", "dead"), nil,
 			"scale_down",
 			[]int{1, 2, 3},
 			[]int{0},
@@ -95,7 +95,7 @@ func TestSingleSurvivorRecoveryUsesRuntimeResult(t *testing.T) {
 			step(t, controller)
 			if len(adapter.dispatches) != 1 || !slices.Equal(adapter.dispatches[0].Participants, []int{0}) ||
 				!slices.Equal(adapter.dispatches[0].Removed, []int{1, 2, 3}) {
-				t.Fatal("controller did not delegate single-survivor recovery to vLLM")
+				t.Fatal("controller did not delegate single-survivor recovery to the engine")
 			}
 			switch outcome {
 			case "capacity failure":

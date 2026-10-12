@@ -45,7 +45,7 @@ func Decide(allStatuses []engine.RankStatus, excluded []int) Decision {
 		allUnhealthy = allUnhealthy && status.Status == "unhealthy" && eligible
 		allHealthy = allHealthy && status.Status == "healthy" && eligible
 		if status.FTState == "failed" {
-			return Decision{Action: "reset", Reason: "vLLM reports failed FT: " + status.FTError}
+			return Decision{Action: "reset", Reason: "engine reports failed FT: " + status.FTError}
 		}
 	}
 	if allHealthy {
@@ -76,7 +76,7 @@ func Decide(allStatuses []engine.RankStatus, excluded []int) Decision {
 	if len(participants) == 0 {
 		return Decision{Action: "reset", Reason: "no surviving ranks"}
 	}
-	// vLLM validates expert capacity during scale_down. Reconcile its result
+	// The engine validates expert capacity during scale_down. Reconcile its result
 	// rather than predicting recovery from a configured survivor count.
 	for _, status := range active {
 		if !slices.Contains(removed, status.Rank) &&
