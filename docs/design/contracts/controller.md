@@ -21,12 +21,11 @@ func New(ctx context.Context, workload Workload, engine Engine, journal Journal,
 
 type Controller interface {
     Step(ctx context.Context) error
-    Status() Record
 }
 ```
 
 A runner calls `New` until the journal loads, then `Step` every `PollInterval` while this process leads.
-`New` comes with the implementation; the code defines `Controller`, its objects and `Defaults`.
+`New` and the defaults below come with the implementation; the code defines `Controller` and its objects.
 
 ## Objects
 
@@ -149,17 +148,7 @@ In order:
 | ... | `lws-0-4` Ready | `dp4` Joinable | `Plan`: Change, add `dp4@idE` | checks, saves round, `Apply` | serving, admitting |
 | ... | same | `dp4` healthy | `Progress`: Succeeded | marks `dp4@idE` admitted, `Verify(dp4@idE)` | serving, full |
 
-### Status
-
-Returns a copy of the current [`Record`](#objects), for debugging and tests. Telemetry gets the same record through `Recorder.Stepped`.
-
-| | |
-|---|---|
-| **Input** | none |
-| **Output** | `Record` |
-| **Side effects** | none |
-
-**Example**, at poll 5 above:
+The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.Stepped` receives it:
 
 ```yaml
 Phase: recovering
@@ -378,8 +367,8 @@ Each engine and workload implementation registers its own flags (see [engine](en
 
 - **Discovery fails.** A failed read does not prove the group changed, so the controller keeps the
   phase and its deadline clock and never resets on it.
-- **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. It is shown
-  in `Status` so people can see it. Recovery resumes when the workload recreates the group.
+- **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry
+  reports it so people can see it. Recovery resumes when the workload recreates the group.
 - **Verification fails.** One slow completion is not a fault. The controller probes again for
   `VerifyTimeout` before it resets.
 - **No give-up state.** IRO resets whenever recovery in place cannot help. How often a group may be

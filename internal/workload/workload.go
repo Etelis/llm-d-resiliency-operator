@@ -33,8 +33,6 @@ type Pod struct {
 	State    PodState
 }
 
-func (pod *Pod) Ref() PodRef { return PodRef{Name: pod.Name, UID: pod.UID} }
-
 type PodState string
 
 const (

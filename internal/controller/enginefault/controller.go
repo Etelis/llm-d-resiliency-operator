@@ -13,7 +13,6 @@ import (
 
 type Controller interface {
 	Step(ctx context.Context) error
-	Status() Record
 }
 
 type Config struct {
@@ -27,24 +26,12 @@ type Config struct {
 	JoinBudget         int
 }
 
-func Defaults() Config {
-	return Config{
-		PollInterval:     time.Second,
-		DiagnosisTimeout: 75 * time.Second,
-		ApplyTimeout:     90 * time.Second,
-		VerifyTimeout:    2 * time.Minute,
-		FlapWindow:       2 * time.Minute,
-		CapacityRestore:  InPlaceOrReset,
-		JoinBudget:       3,
-	}
-}
-
 type CapacityRestore string
 
 const (
 	InPlaceOrReset CapacityRestore = "in-place-or-reset"
 	InPlace        CapacityRestore = "in-place"
-	Off            CapacityRestore = "off"
+	NoRestore      CapacityRestore = "off"
 )
 
 type Phase string
