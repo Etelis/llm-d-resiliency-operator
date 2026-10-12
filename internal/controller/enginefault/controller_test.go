@@ -265,6 +265,61 @@ func ageDiagnosis(controller *Controller) {
 	controller.set(s)
 }
 
+func ageVerification(controller *Controller) {
+	s := controller.Snapshot()
+	s.VerifyFailedSince = time.Now().Add(-2 * controller.Config.VerifyTimeout)
+	controller.set(s)
+}
+
+func TestFailedVerificationIsRetriedBeforeReset(t *testing.T) {
+	_, adapter, workload := setup(t)
+	// A new leader reverifies the serving group. A probe that times out under
+	// load is retried instead of resetting a group whose engines are healthy.
+	adapter.verifyErr = errors.New("rank 2 inference: context deadline exceeded")
+	controller, err := New(context.Background(), adapter, workload, Defaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	step(t, controller)
+	step(t, controller)
+	state := controller.Snapshot()
+	if state.Phase != "serving" || len(state.Verified) != 0 || state.VerifyFailedSince.IsZero() || len(workload.resets) != 0 {
+		t.Fatalf("failed probe reset the group or was not recorded: %+v", state)
+	}
+	adapter.verifyErr = nil
+	step(t, controller)
+	if state := controller.Snapshot(); len(state.Verified) != 4 || !state.VerifyFailedSince.IsZero() {
+		t.Fatalf("group was not verified once inference recovered: %+v", state)
+	}
+	// Inference that keeps failing past the window still resets the group.
+	adapter.verifyErr = errors.New("no inference")
+	controller, err = New(context.Background(), adapter, workload, Defaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	step(t, controller)
+	ageVerification(controller)
+	step(t, controller)
+	if controller.Snapshot().Phase != "resetting" || len(workload.resets) != 1 {
+		t.Fatalf("persistent verification failure did not reset: %+v", controller.Snapshot())
+	}
+}
+
+func TestDiagnosisEndsVerificationRetry(t *testing.T) {
+	_, adapter, workload := setup(t)
+	adapter.verifyErr = errors.New("rank 2 inference: context deadline exceeded")
+	controller, err := New(context.Background(), adapter, workload, Defaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	step(t, controller)
+	adapter.status = statuses("unhealthy", "dead", "unhealthy", "unhealthy")
+	step(t, controller)
+	if state := controller.Snapshot(); state.Phase != "diagnosing" || !state.VerifyFailedSince.IsZero() {
+		t.Fatalf("a new fault kept the old verification window: %+v", state)
+	}
+}
+
 func TestScaleDownRequiresInferenceBeforeReportingRecovery(t *testing.T) {
 	controller, adapter, workload := setup(t)
 	adapter.status = statuses("unhealthy", "dead", "unhealthy", "unhealthy")
@@ -688,6 +743,12 @@ func TestFailureAndTimeoutHandOffToReset(t *testing.T) {
 			case "inference":
 				adapter.status = statuses("healthy", "dead", "healthy", "healthy")
 				adapter.verifyErr = errors.New("no inference")
+				// The first failed probe is retried; one that keeps failing resets.
+				step(t, controller)
+				if controller.Snapshot().Phase != "applying" || len(workload.resets) != 0 {
+					t.Fatalf("first failed probe reset the group: %+v", controller.Snapshot())
+				}
+				ageVerification(controller)
 			}
 			if kind != "rejected" {
 				step(t, controller)

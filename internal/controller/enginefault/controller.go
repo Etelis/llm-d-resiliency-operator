@@ -27,6 +27,7 @@ type Config struct {
 	PollInterval         time.Duration
 	DiagnosisTimeout     time.Duration
 	ApplyTimeout         time.Duration
+	VerifyTimeout        time.Duration
 	RetryStabilityWindow time.Duration
 	StorePort            int
 }
@@ -34,7 +35,7 @@ type Config struct {
 func Defaults() Config {
 	return Config{
 		PollInterval: time.Second, DiagnosisTimeout: 75 * time.Second, ApplyTimeout: 90 * time.Second,
-		RetryStabilityWindow: 2 * time.Minute, StorePort: 29600,
+		VerifyTimeout: 2 * time.Minute, RetryStabilityWindow: 2 * time.Minute, StorePort: 29600,
 	}
 }
 
@@ -51,6 +52,7 @@ type State struct {
 	Acceptances               []engine.Acceptance `json:"acceptances,omitempty"`
 	Since                     time.Time           `json:"since"`
 	DiscoveryUnavailableSince time.Time           `json:"discovery_unavailable_since,omitempty"`
+	VerifyFailedSince         time.Time           `json:"verify_failed_since,omitempty"`
 	LastRetry                 time.Time           `json:"last_retry"`
 	Resets                    []time.Time         `json:"resets"`
 	Reason                    string              `json:"reason"`
@@ -217,7 +219,7 @@ func (controller *Controller) verify(ctx context.Context, state State, ranks []i
 		return ctx.Err()
 	}
 	if err != nil {
-		return controller.beginReset(ctx, state, "inference verification failed: "+err.Error())
+		return controller.verificationFailed(ctx, state, err)
 	}
 	// Verify against current workload identities as well as engine outputs.
 	group, err := controller.Workload.Discover(ctx)
@@ -240,9 +242,26 @@ func (controller *Controller) verify(ctx context.Context, state State, ranks []i
 	state.Phase = "serving"
 	state.Since = time.Now().UTC()
 	state.DiscoveryUnavailableSince = time.Time{}
+	state.VerifyFailedSince = time.Time{}
 	state.Verified = slices.Clone(ranks)
 	state.Reason = "inference verified"
 	return controller.persist(ctx, state)
+}
+
+//nolint:gocritic // A failed probe is retried for VerifyTimeout before the group is reset.
+func (controller *Controller) verificationFailed(ctx context.Context, state State, err error) error {
+	now := time.Now().UTC()
+	if state.VerifyFailedSince.IsZero() && controller.Config.VerifyTimeout > 0 {
+		// One slow completion, for example under load after a leader change, is
+		// not a fault. Record when failures started and probe again next Step.
+		state.VerifyFailedSince = now
+		state.Reason = "inference verification failed; retrying: " + err.Error()
+		return controller.persist(ctx, state)
+	}
+	if !state.VerifyFailedSince.IsZero() && now.Sub(state.VerifyFailedSince) < controller.Config.VerifyTimeout {
+		return nil
+	}
+	return controller.beginReset(ctx, state, "inference verification failed: "+err.Error())
 }
 
 //nolint:gocritic // Discovery uncertainty must preserve the previous reconciliation snapshot.
@@ -303,6 +322,7 @@ func (controller *Controller) Step(ctx context.Context) error {
 		state.Acceptances = nil
 		state.LastRetry = time.Time{}
 		state.DiscoveryUnavailableSince = time.Time{}
+		state.VerifyFailedSince = time.Time{}
 		state.Reason = "replacement group discovered"
 		if err := controller.persist(ctx, state); err != nil {
 			return err
@@ -329,6 +349,7 @@ func (controller *Controller) Step(ctx context.Context) error {
 		state.Acceptances = nil
 		state.LastRetry = time.Time{}
 		state.DiscoveryUnavailableSince = time.Time{}
+		state.VerifyFailedSince = time.Time{}
 		state.Phase = "starting"
 		state.Since = now
 		state.Reason = "new group discovered"
@@ -369,6 +390,7 @@ func (controller *Controller) Step(ctx context.Context) error {
 	if state.Phase != "diagnosing" {
 		state.Phase = "diagnosing"
 		state.Since = now
+		state.VerifyFailedSince = time.Time{}
 		state.Reason = decision.Reason
 		if err := controller.persist(ctx, state); err != nil {
 			return err

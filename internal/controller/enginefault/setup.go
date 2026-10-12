@@ -34,6 +34,8 @@ func (options *Options) BindFlags(flags *flag.FlagSet) {
 		options.Controller.DiagnosisTimeout, "engine diagnosis deadline")
 	flags.DurationVar(&options.Controller.ApplyTimeout, "ft-apply-timeout",
 		options.Controller.ApplyTimeout, "FT completion deadline")
+	flags.DurationVar(&options.Controller.VerifyTimeout, "ft-verify-timeout",
+		options.Controller.VerifyTimeout, "retry window for failed inference verification (0 resets on the first failure)")
 }
 
 // Setup registers the fault handler with the adapter selected by --engine.
@@ -51,6 +53,7 @@ func (options *Options) Setup(mgr ctrl.Manager, adapters map[string]engine.Adapt
 		return fmt.Errorf("unknown engine %q; available: %v", options.Engine, names)
 	}
 	if options.Controller.DiagnosisTimeout <= 0 || options.Controller.ApplyTimeout <= 0 ||
+		options.Controller.VerifyTimeout < 0 ||
 		options.Controller.StorePort < 1 || options.Controller.StorePort > 65535 {
 		return fmt.Errorf("invalid FT deadline or store port")
 	}
