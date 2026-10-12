@@ -196,6 +196,27 @@ and serves below full.
 | `Config`, `Record`, `Phase`, `MemberState`, `PodRecord` | [controller.md](controller.md#objects) | controller | journal (as bytes), telemetry |
 | `Recorder`, `Incident`, `Outcome`, `Durations`, `ResetReason` | [telemetry.md](telemetry.md#objects), code in `internal/controller/enginefault` | controller | telemetry |
 
+## Code layout
+
+Every file the design needs. This PR adds the contracts; each implementation comes with its own PR.
+
+| File | Holds | Comes with |
+|---|---|---|
+| `internal/workload/workload.go` | `Workload` and its objects | this PR |
+| `internal/engine/engine.go` | `Engine`, `Driver`, `Policy` and their objects | this PR |
+| `internal/journal/journal.go` | `Journal` | this PR |
+| `internal/controller/enginefault/controller.go` | `Controller`, `Config`, `Record` | this PR |
+| `internal/controller/enginefault/recorder.go` | `Recorder`, `Incident` | this PR |
+| `internal/controller/enginefault/step.go` | `New` and `Step`: phases, reading Discover, checks, restoring capacity | controller PR |
+| `internal/controller/enginefault/runner.go` | the leader-elected loop that calls `Step` | controller PR |
+| `internal/controller/enginefault/setup.go` | flags; picks the engine and workload | controller PR |
+| `cmd/main.go` | registers engines and workloads, starts the manager | controller PR |
+| `internal/workload/lws/workload.go` | LWS `Workload` | LWS PR |
+| `internal/journal/configmap/journal.go` | ConfigMap `Journal`, owned by the workload object | LWS PR |
+| `internal/engine/vllm/driver.go` | vLLM `Driver` | vLLM PR |
+| `internal/engine/vllm/policy.go` | vLLM `Policy` | vLLM PR |
+| `internal/telemetry/recorder.go` | `Recorder`: logs, metrics, Events, incident history | telemetry PR |
+
 ## Open decisions
 
 1. **Disaggregated sets.** A prefill/decode set has several engine groups with different roles.
