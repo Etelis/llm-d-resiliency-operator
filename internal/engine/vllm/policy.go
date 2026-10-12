@@ -5,6 +5,7 @@ package vllm
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/llm-d/llm-d-resiliency-operator/internal/engine"
@@ -39,7 +40,12 @@ func (*Engine) Plan(observation engine.Observation, admitted, _ []engine.MemberI
 	case len(waiting) > 0:
 		return engine.Plan{Kind: engine.Wait, Reason: "waiting for " + describe(members, waiting)}
 	case len(healthy) > 0:
-		return engine.Plan{Kind: engine.Wait, Reason: "waiting for " + list(healthy) + " to detect the fault"}
+		faulted := slices.DeleteFunc(slices.Concat(dead, survivors), func(id engine.MemberID) bool {
+			return slices.Contains(healthy, id)
+		})
+		return engine.Plan{
+			Kind: engine.Wait, Reason: describe(members, faulted) + "; waiting for " + list(healthy) + " to detect it",
+		}
 	case len(dead) > 0:
 		return engine.Plan{
 			Kind: engine.Change, Participants: survivors, Remove: dead, Reason: "remove dead " + describe(members, dead),

@@ -304,6 +304,9 @@ func TestPlan(t *testing.T) {
 			if plan.Kind != test.kind || !slices.Equal(plan.Remove, test.remove) || len(plan.Participants) != test.joined {
 				t.Fatalf("plan %+v", plan)
 			}
+			if name == "survivor healthy" && !strings.HasPrefix(plan.Reason, "dp1@id1 (dead)") {
+				t.Fatalf("the reason does not name the fault: %s", plan.Reason)
+			}
 		})
 	}
 }
