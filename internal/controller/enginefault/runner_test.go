@@ -6,6 +6,8 @@ package enginefault
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,11 +62,59 @@ func TestRunnerRevalidatesSavedStateAndCancelsVerification(t *testing.T) {
 	}
 }
 
-func TestRunnerRejectsInvalidSavedState(t *testing.T) {
+func TestRunnerWaitsOnInvalidSavedState(t *testing.T) {
 	_, adapter, workload := setup(t)
 	workload.saved = []byte("invalid")
-	runner := &Runner{Adapter: adapter, Workload: workload, Config: Defaults()}
-	if err := runner.Start(context.Background()); err == nil {
-		t.Fatal("accepted invalid state")
+	verifications := adapter.verifications
+	config := Defaults()
+	config.PollInterval = 10 * time.Millisecond
+	runner := &Runner{Adapter: adapter, Workload: workload, Config: config}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	// Invalid state is never used, and returning would stop the manager and
+	// every other controller in it.
+	if err := runner.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if adapter.verifications != verifications || len(adapter.dispatches) != 0 || len(workload.resets) != 0 ||
+		string(workload.saved) != "invalid" {
+		t.Fatal("runner acted on invalid saved state")
+	}
+}
+
+type unreadableJournal struct {
+	*fakeWorkload
+	failures atomic.Int32
+}
+
+func (workload *unreadableJournal) Load(ctx context.Context) ([]byte, error) {
+	if workload.failures.Add(-1) >= 0 {
+		return nil, errors.New("Kubernetes API unavailable")
+	}
+	return workload.fakeWorkload.Load(ctx)
+}
+
+func TestRunnerRetriesUnreadableJournal(t *testing.T) {
+	_, adapter, workload := setup(t)
+	journal := &unreadableJournal{fakeWorkload: workload}
+	journal.failures.Store(3)
+	held := &heldVerification{fakeAdapter: adapter, entered: make(chan struct{}), release: make(chan struct{})}
+	config := Defaults()
+	config.PollInterval = 10 * time.Millisecond
+	runner := &Runner{Adapter: held, Workload: journal, Config: config}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopped := make(chan error, 1)
+	go func() { stopped <- runner.Start(ctx) }()
+	select {
+	case <-held.entered:
+	case err := <-stopped:
+		t.Fatalf("runner stopped instead of retrying the journal: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner did not resume once the journal was readable")
+	}
+	cancel()
+	if err := <-stopped; err != nil {
+		t.Fatal(err)
 	}
 }

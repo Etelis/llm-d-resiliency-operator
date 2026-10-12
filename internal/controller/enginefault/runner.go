@@ -22,15 +22,22 @@ type Runner struct {
 func (*Runner) NeedLeaderElection() bool { return true }
 
 func (runner *Runner) Start(ctx context.Context) error {
-	controller, err := New(ctx, runner.Adapter, runner.Workload, runner.Config)
-	if err != nil {
-		return err
-	}
 	ticker := time.NewTicker(runner.Config.PollInterval)
 	defer ticker.Stop()
+	var controller *Controller
 	for {
-		if err := controller.Step(ctx); err != nil && ctx.Err() == nil {
-			ctrl.LoggerFrom(ctx).Error(err, "reconcile engine fault")
+		// Returning would stop the manager and every controller in it. Retry
+		// until the journal is readable and valid instead.
+		if controller == nil {
+			var err error
+			if controller, err = New(ctx, runner.Adapter, runner.Workload, runner.Config); err != nil && ctx.Err() == nil {
+				ctrl.LoggerFrom(ctx).Error(err, "load engine fault state")
+			}
+		}
+		if controller != nil {
+			if err := controller.Step(ctx); err != nil && ctx.Err() == nil {
+				ctrl.LoggerFrom(ctx).Error(err, "reconcile engine fault")
+			}
 		}
 		select {
 		case <-ctx.Done():
