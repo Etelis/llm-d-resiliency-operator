@@ -1,0 +1,424 @@
+// Copyright 2026 The llm-d Authors.
+// SPDX-License-Identifier: Apache-2.0
+
+//nolint:testpackage // Tests reach the driver-private observation.
+package vllm
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/llm-d/llm-d-resiliency-operator/internal/engine"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
+)
+
+type fakeRank struct {
+	mu      sync.Mutex
+	rank    int
+	status  map[string]any
+	health  int
+	text    string
+	applied []map[string]any
+	prompts int
+	down    bool
+}
+
+func (fake *fakeRank) set(status string, extra map[string]any) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.status = map[string]any{"id": fake.rank, "status": status}
+	for key, value := range extra {
+		fake.status[key] = value
+	}
+}
+
+func (fake *fakeRank) unhealthy() {
+	fake.set("unhealthy", map[string]any{"fault_info": "RuntimeError"})
+}
+
+func (fake *fakeRank) isDown() bool {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	return fake.down
+}
+
+func reply(writer http.ResponseWriter, value any) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := writer.Write(data); err != nil {
+		return
+	}
+}
+
+func (fake *fakeRank) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	switch request.URL.Path {
+	case "/v1/fault_tolerance/status":
+		reply(writer, map[string]any{"schema_version": 1, "total_engines": 1, "engines": []any{fake.status}})
+	case "/health":
+		writer.WriteHeader(fake.health)
+	case "/v1/fault_tolerance/apply":
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			http.Error(writer, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fake.applied = append(fake.applied, payload)
+		writer.WriteHeader(http.StatusAccepted)
+	case "/v1/completions":
+		fake.prompts++
+		reply(writer, map[string]any{
+			"choices": []any{map[string]any{"text": fake.text}},
+			"usage":   map[string]any{"completion_tokens": len(fake.text)},
+		})
+	default:
+		writer.WriteHeader(http.StatusNotFound)
+	}
+}
+
+type fleet struct {
+	eng   *Engine
+	pods  []workload.Pod
+	ranks []*fakeRank
+}
+
+func newFleet(t *testing.T, pods, perPod int) *fleet {
+	t.Helper()
+	test := &fleet{}
+	routes := map[string]*fakeRank{}
+	servers := map[*fakeRank]string{}
+	for index := range pods {
+		ip := fmt.Sprintf("10.0.0.%d", index+1)
+		test.pods = append(test.pods, workload.Pod{
+			Name: fmt.Sprintf("lws-%d", index), UID: fmt.Sprintf("uid%d", index), IP: ip, Index: index,
+			Identity: fmt.Sprintf("id%d", index), State: workload.PodReady,
+		})
+		for local := range perPod {
+			fake := &fakeRank{rank: index*perPod + local, health: http.StatusOK, text: " two"}
+			fake.set("healthy", nil)
+			server := httptest.NewServer(fake)
+			t.Cleanup(server.Close)
+			routes[net.JoinHostPort(ip, fmt.Sprint(8000+local))] = fake
+			servers[fake] = server.Listener.Addr().String()
+			test.ranks = append(test.ranks, fake)
+		}
+	}
+	dialer := &net.Dialer{}
+	options := Options{APIPort: 8000, RanksPerPod: perPod, StorePort: 29600, Timeout: time.Second}
+	test.eng = &Engine{options: options, client: &http.Client{Transport: &http.Transport{
+		DisableKeepAlives: true,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			fake := routes[address]
+			if fake == nil || fake.isDown() {
+				return nil, errors.New("connection refused")
+			}
+			return dialer.DialContext(ctx, network, servers[fake])
+		},
+	}}}
+	return test
+}
+
+func (test *fleet) observe(t *testing.T) engine.Observation {
+	t.Helper()
+	return test.eng.Observe(t.Context(), test.pods)
+}
+
+func ids(list ...string) []engine.MemberID {
+	result := make([]engine.MemberID, 0, len(list))
+	for _, id := range list {
+		result = append(result, engine.MemberID(id))
+	}
+	return result
+}
+
+func params(t *testing.T, payload map[string]any) map[string]any {
+	t.Helper()
+	found, ok := payload["params"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload %v has no params", payload)
+	}
+	return found
+}
+
+var four = ids("dp0@id0", "dp1@id1", "dp2@id2", "dp3@id3")
+
+func TestObserve(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 4, 1)
+	test.ranks[1].set("dead", nil)
+	test.ranks[2].health = http.StatusServiceUnavailable
+	test.ranks[3].down = true
+	obs := test.observe(t)
+	want := map[engine.MemberID][2]bool{
+		"dp0@id0": {true, false}, "dp1@id1": {false, true}, "dp2@id2": {false, true}, "dp3@id3": {false, false},
+	}
+	if len(obs.Members) != 4 {
+		t.Fatalf("members %+v", obs.Members)
+	}
+	for _, member := range obs.Members {
+		if got := [2]bool{member.Serving, member.Terminal}; got != want[member.ID()] {
+			t.Errorf("%s serving, terminal = %v, want %v (%s)", member.ID(), got, want[member.ID()], member.Detail)
+		}
+	}
+}
+
+func TestObserveSkipsPodsWithoutAddress(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 2, 1)
+	test.pods[0].State = workload.PodTerminating
+	test.pods[1].IP = ""
+	if obs := test.observe(t); len(obs.Members) != 0 {
+		t.Fatalf("members %+v", obs.Members)
+	}
+}
+
+func TestObserveRanksPerPod(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 2, 2)
+	test.ranks[3].set("unhealthy", map[string]any{"fault_info": "RuntimeError", "mask": []int{0, 0, 1, 0}})
+	obs := test.observe(t)
+	names := make([]string, 0, len(obs.Members))
+	for _, member := range obs.Members {
+		names = append(names, string(member.ID()))
+	}
+	if !slices.Equal(names, []string{"dp0@id0", "dp1@id0", "dp2@id1", "dp3@id1"}) || obs.Members[3].Serving {
+		t.Fatalf("members %+v", obs.Members)
+	}
+}
+
+func TestObserveRejectsWrongRank(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 2, 1)
+	test.ranks[1].status["id"] = 5
+	obs := test.observe(t)
+	if member := obs.Members[1]; member.Serving || member.Terminal || !strings.Contains(member.Detail, "rank 5") {
+		t.Fatalf("member %+v", member)
+	}
+}
+
+func TestPlan(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		setup  func([]*fakeRank)
+		kind   engine.PlanKind
+		remove []engine.MemberID
+		joined int
+	}{
+		"healthy": {setup: func([]*fakeRank) {}, kind: engine.Healthy},
+		"dead rank": {
+			setup: func(r []*fakeRank) { r[1].set("dead", nil); r[0].unhealthy(); r[2].unhealthy(); r[3].unhealthy() },
+			kind:  engine.Change, remove: ids("dp1@id1"), joined: 3,
+		},
+		"survivor healthy": {
+			setup: func(r []*fakeRank) { r[1].set("dead", nil); r[0].unhealthy(); r[2].unhealthy() },
+			kind:  engine.Wait,
+		},
+		"survivor diagnoses": {
+			setup: func(r []*fakeRank) {
+				r[1].set("dead", nil)
+				r[0].unhealthy()
+				r[2].unhealthy()
+				r[3].set("diagnosing", nil)
+			},
+			kind: engine.Wait,
+		},
+		"retry": {
+			setup: func(r []*fakeRank) { r[0].unhealthy(); r[1].unhealthy(); r[2].unhealthy(); r[3].unhealthy() },
+			kind:  engine.Change, joined: 4,
+		},
+		"unreachable": {
+			setup: func(r []*fakeRank) { r[2].down = true; r[0].unhealthy(); r[1].unhealthy(); r[3].unhealthy() },
+			kind:  engine.Wait,
+		},
+		"round in flight": {
+			setup: func(r []*fakeRank) {
+				r[0].unhealthy()
+				r[1].unhealthy()
+				r[2].unhealthy()
+				r[3].set("unhealthy", map[string]any{"ft_state": "recovering", "last_ft_request_id": "x"})
+			},
+			kind: engine.Wait,
+		},
+		"process exited": {
+			setup: func(r []*fakeRank) {
+				r[0].health = http.StatusServiceUnavailable
+				r[1].unhealthy()
+				r[2].unhealthy()
+				r[3].unhealthy()
+			},
+			kind: engine.Change, remove: ids("dp0@id0"), joined: 3,
+		},
+		"no survivors": {
+			setup: func(r []*fakeRank) {
+				for _, fake := range r {
+					fake.set("dead", nil)
+				}
+			},
+			kind: engine.Unrecoverable,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fleet := newFleet(t, 4, 1)
+			test.setup(fleet.ranks)
+			plan := fleet.eng.Plan(fleet.observe(t), four, nil)
+			if plan.Kind != test.kind || !slices.Equal(plan.Remove, test.remove) || len(plan.Participants) != test.joined {
+				t.Fatalf("plan %+v", plan)
+			}
+		})
+	}
+}
+
+func TestPlanSeesControllerLostMembers(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 4, 1)
+	for _, fake := range test.ranks[:3] {
+		fake.unhealthy()
+	}
+	obs := test.eng.Observe(t.Context(), test.pods[:3])
+	obs.Members = append(obs.Members, engine.Member{Name: "dp3", PodIdentity: "id3", Terminal: true, Detail: "pod lost"})
+	if plan := test.eng.Plan(obs, four, nil); plan.Kind != engine.Change || !slices.Equal(plan.Remove, ids("dp3@id3")) {
+		t.Fatalf("plan %+v", plan)
+	}
+}
+
+func TestProgress(t *testing.T) {
+	t.Parallel()
+	round := engine.Round{ID: "iro-ft-1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
+	ft := func(state, request string) map[string]any {
+		return map[string]any{"ft_state": state, "last_ft_request_id": request, "ft_error": "status is HEALTHY"}
+	}
+	for name, test := range map[string]struct {
+		setup func([]*fakeRank)
+		state engine.ProgressState
+	}{
+		"succeeded":     {setup: func(r []*fakeRank) { r[1].set("dead", nil) }, state: engine.Succeeded},
+		"running":       {setup: func(r []*fakeRank) { r[2].set("unhealthy", ft("recovering", "iro-ft-1")) }, state: engine.Running},
+		"rejected":      {setup: func(r []*fakeRank) { r[2].set("healthy", ft("failed", "iro-ft-1")) }, state: engine.Failed},
+		"other request": {setup: func(r []*fakeRank) { r[3].set("unhealthy", ft("recovering", "other")) }, state: engine.Failed},
+		"stale failure": {setup: func(r []*fakeRank) { r[3].set("unhealthy", ft("failed", "older")) }, state: engine.Running},
+		"vote failed":   {setup: func(r []*fakeRank) { r[0].set("dead", nil) }, state: engine.Failed},
+		"unreachable":   {setup: func(r []*fakeRank) { r[3].down = true }, state: engine.Running},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fleet := newFleet(t, 4, 1)
+			test.setup(fleet.ranks)
+			progress := fleet.eng.Progress(fleet.observe(t), round)
+			if progress.State != test.state || (progress.State == engine.Failed) != (progress.Scope == engine.Group) {
+				t.Fatalf("progress %+v", progress)
+			}
+		})
+	}
+}
+
+func TestApply(t *testing.T) {
+	t.Parallel()
+	t.Run("scale down", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 4, 1)
+		round := engine.Round{ID: "r1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
+		acceptances, err := test.eng.Apply(t.Context(), test.observe(t), round)
+		if err != nil || len(acceptances) != 3 || len(test.ranks[1].applied) != 0 {
+			t.Fatalf("acceptances %+v, err %v", acceptances, err)
+		}
+		payload := test.ranks[0].applied[0]
+		found := params(t, payload)
+		if payload["instruction"] != "scale_down" || payload["request_id"] != "r1" ||
+			fmt.Sprint(found["removed_dp_ranks"]) != "[1]" || found["dp_master_ip"] != nil {
+			t.Fatalf("payload %v", payload)
+		}
+	})
+	t.Run("store host removed", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 4, 1)
+		round := engine.Round{ID: "r2", Participants: ids("dp2@id2", "dp1@id1"), Remove: ids("dp3@id3", "dp0@id0")}
+		if _, err := test.eng.Apply(t.Context(), test.observe(t), round); err != nil {
+			t.Fatal(err)
+		}
+		found := params(t, test.ranks[2].applied[0])
+		if fmt.Sprint(found["removed_dp_ranks"]) != "[0 3]" || found["dp_master_ip"] != "10.0.0.2" ||
+			found["dp_store_port"] != 29600.0 {
+			t.Fatalf("params %v", found)
+		}
+	})
+	t.Run("retry", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 2, 1)
+		round := engine.Round{ID: "r3", Participants: ids("dp0@id0", "dp1@id1")}
+		if _, err := test.eng.Apply(t.Context(), test.observe(t), round); err != nil {
+			t.Fatal(err)
+		}
+		if payload := test.ranks[1].applied[0]; payload["instruction"] != "retry" || len(params(t, payload)) != 0 {
+			t.Fatalf("payload %v", payload)
+		}
+	})
+	t.Run("one rank does not accept", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 2, 1)
+		obs := test.observe(t)
+		test.ranks[1].down = true
+		acceptances, err := test.eng.Apply(t.Context(), obs, engine.Round{ID: "r4", Participants: ids("dp0@id0", "dp1@id1")})
+		if err == nil || !acceptances[0].Accepted || acceptances[1].Accepted {
+			t.Fatalf("acceptances %+v, err %v", acceptances, err)
+		}
+	})
+	t.Run("add", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 2, 1)
+		round := engine.Round{ID: "r5", Participants: ids("dp0@id0"), Add: ids("dp1@id9")}
+		if _, err := test.eng.Apply(t.Context(), test.observe(t), round); err == nil {
+			t.Fatal("vLLM cannot add members")
+		}
+	})
+}
+
+func TestVerify(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 2, 1)
+	obs := test.observe(t)
+	if err := test.eng.Verify(t.Context(), obs, ids("dp0@id0", "dp1@id1")); err != nil {
+		t.Fatal(err)
+	}
+	test.ranks[1].text = ""
+	if err := test.eng.Verify(t.Context(), obs, ids("dp0@id0", "dp1@id1")); err == nil || !strings.Contains(err.Error(), "dp1") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestProbeWakesServingRanks(t *testing.T) {
+	t.Parallel()
+	test := newFleet(t, 3, 1)
+	test.ranks[1].set("dead", nil)
+	if err := test.eng.Probe(t.Context(), test.observe(t)); err != nil {
+		t.Fatal(err)
+	}
+	if test.ranks[0].prompts != 1 || test.ranks[1].prompts != 0 || test.ranks[2].prompts != 1 {
+		t.Fatalf("prompts %d %d %d", test.ranks[0].prompts, test.ranks[1].prompts, test.ranks[2].prompts)
+	}
+}
+
+func TestOptions(t *testing.T) {
+	t.Parallel()
+	if _, err := (&Options{APIPort: 8000, RanksPerPod: 0, StorePort: 29600, Timeout: time.Second}).New(); err == nil {
+		t.Fatal("zero ranks per Pod accepted")
+	}
+	eng, err := (&Options{APIPort: 8000, RanksPerPod: 1, StorePort: 29600, Timeout: time.Second}).New()
+	if err != nil || eng.Capabilities().Grow {
+		t.Fatalf("engine %v, err %v", eng, err)
+	}
+}

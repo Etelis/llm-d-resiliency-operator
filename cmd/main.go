@@ -16,6 +16,7 @@ import (
 	inferencev1alpha1 "github.com/llm-d/llm-d-resiliency-operator/apis/inference/v1alpha1"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/enginefault"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/recoveryrequest"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/engine/vllm"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/telemetry"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload/lws"
 )
@@ -47,7 +48,7 @@ func main() {
 	flag.StringVar(&podNamespace, "pod-namespace", "default", "The namespace of the pod to label.")
 	flag.StringVar(&podLabelKey, "pod-label-key", "llm-d.ai/inference-serving", "The label key to match the pod.")
 	engineFT := enginefault.Options{
-		Engines:   map[string]enginefault.EngineFactory{},
+		Engines:   map[string]enginefault.EngineFactory{"vllm": &vllm.Options{}},
 		Workloads: map[string]enginefault.WorkloadFactory{"lws": &lws.Options{}},
 	}
 	engineFT.BindFlags(flag.CommandLine)
