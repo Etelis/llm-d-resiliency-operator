@@ -67,8 +67,11 @@ func (fsm *controller) send(ctx context.Context, next *Record, current *view, pl
 	if noChange {
 		next.LastNoChangeRound = now
 	}
-	if inc := next.Incident; inc != nil && inc.Durations.Diagnose == 0 {
-		inc.Durations.Diagnose = now.Sub(inc.Opened)
+	if inc := next.Incident; inc != nil {
+		if inc.Durations.Diagnose == 0 {
+			inc.Durations.Diagnose = now.Sub(inc.Opened)
+		}
+		affect(next, inc, round.Remove)
 	}
 	if err := fsm.save(ctx, next); err != nil {
 		return err

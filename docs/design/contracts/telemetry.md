@@ -51,7 +51,8 @@ type Incident struct {
     Opened    time.Time
     Closed    time.Time     // zero while open
     Cause     string        // the reason of the first plan that was not Healthy
-    Affected  []MemberID    // members that were Terminal when it opened; if none, those not Serving
+    Affected  []MemberID    // Terminal members when it opened (if none, those not Serving),
+                            // plus every member a round removes
     Pods      []PodRef      // their Pods
     Nodes     []string      // their nodes
     Rounds    []RoundResult // every round sent for it
