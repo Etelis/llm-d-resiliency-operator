@@ -316,6 +316,12 @@ func (workload *Client) Save(ctx context.Context, data []byte) error {
 	workload.mu.Lock()
 	defer workload.mu.Unlock()
 	err := workload.write(ctx, data)
+	if apierrors.IsNotFound(err) && workload.state != nil {
+		// The journal was deleted while this coordinator ran. Recreate it from
+		// the state being saved.
+		workload.state = nil
+		return workload.write(ctx, data)
+	}
 	if !apierrors.IsConflict(err) || workload.state == nil {
 		return err
 	}

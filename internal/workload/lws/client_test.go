@@ -620,6 +620,31 @@ func TestStateConflicts(t *testing.T) {
 	}
 }
 
+func TestStateRecreatedAfterDeletion(t *testing.T) {
+	t.Parallel()
+	api, config := fixture(t)
+	workload := newWorkload(t, api, config)
+	if _, err := workload.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := workload.Save(t.Context(), []byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	key := client.ObjectKey{Namespace: config.Namespace, Name: config.Name + "-ft-state"}
+	if err := api.Delete(t.Context(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Namespace: key.Namespace, Name: key.Name,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := workload.Save(t.Context(), []byte("second")); err != nil {
+		t.Fatalf("save after the journal was deleted: %v", err)
+	}
+	var state corev1.ConfigMap
+	if err := api.Get(t.Context(), key, &state); err != nil || state.Data["state.json"] != "second" {
+		t.Fatalf("journal was not recreated: %v, %v", state.Data, err)
+	}
+}
+
 func TestStateSurvivesMetadataEdit(t *testing.T) {
 	t.Parallel()
 	api, config := fixture(t)
