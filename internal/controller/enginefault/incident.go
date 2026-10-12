@@ -19,7 +19,17 @@ func (fsm *controller) openIncident(next *Record, cause string, current *view, n
 			inc.Affected = current.pick(func(member *engine.Member) bool { return member == nil || !member.Serving })
 		}
 	}
-	for _, id := range inc.Affected {
+	affect(next, inc, inc.Affected)
+	next.Incident = inc
+	opened := *inc
+	fsm.later(func() { fsm.recorder.IncidentOpened(&opened) })
+}
+
+func affect(next *Record, inc *Incident, ids []engine.MemberID) {
+	for _, id := range ids {
+		if !slices.Contains(inc.Affected, id) {
+			inc.Affected = append(inc.Affected, id)
+		}
 		uid, saved, ok := podOf(next, id)
 		if !ok || slices.ContainsFunc(inc.Pods, func(pod workload.PodRef) bool { return pod.UID == uid }) {
 			continue
@@ -29,9 +39,6 @@ func (fsm *controller) openIncident(next *Record, cause string, current *view, n
 			inc.Nodes = append(inc.Nodes, saved.Node)
 		}
 	}
-	next.Incident = inc
-	opened := *inc
-	fsm.later(func() { fsm.recorder.IncidentOpened(&opened) })
 }
 
 func (fsm *controller) closeIncident(next *Record, result Outcome, now time.Time) {

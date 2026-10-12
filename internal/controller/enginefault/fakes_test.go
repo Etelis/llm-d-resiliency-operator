@@ -146,7 +146,8 @@ func (fake *fakeJournal) Save(_ context.Context, data []byte) error {
 }
 
 type fakeRecorder struct {
-	calls []string
+	calls  []string
+	closed *Incident
 }
 
 func (fake *fakeRecorder) add(format string, args ...any) {
@@ -186,6 +187,7 @@ func (fake *fakeRecorder) ReleaseRequested(pods []workload.PodRef, _ error) {
 func (fake *fakeRecorder) SaveFailed(error) { fake.add("SaveFailed") }
 
 func (fake *fakeRecorder) IncidentClosed(incident *Incident) {
+	fake.closed = incident
 	fake.add("IncidentClosed %s", incident.Outcome)
 }
 

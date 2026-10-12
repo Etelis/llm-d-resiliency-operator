@@ -186,3 +186,28 @@ func TestOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestIncidentNamesTheRemovedMember(t *testing.T) {
+	t.Parallel()
+	test := newHarness(t)
+	test.serving()
+	for _, name := range []string{"dp0", "dp1", "dp2"} {
+		test.member(name).Serving = false
+	}
+	test.eng.plan = engine.Plan{Kind: engine.Wait, Reason: "survivors faulted first"}
+	test.poll()
+	test.dead()
+	test.eng.plan = test.shrinkPlan()
+	test.poll()
+	test.poll()
+	test.eng.progress = engine.Progress{State: engine.Succeeded}
+	for _, name := range []string{"dp0", "dp1", "dp2"} {
+		test.member(name).Serving = true
+	}
+	test.eng.plan = engine.Plan{Kind: engine.Healthy}
+	test.poll()
+	closed := test.rec.closed
+	if closed == nil || !slices.Contains(closed.Affected, "dp3@idD") || !slices.Contains(closed.Nodes, "gpu-node-4") {
+		t.Fatalf("closed incident %+v", closed)
+	}
+}
