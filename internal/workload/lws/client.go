@@ -315,6 +315,23 @@ func (workload *Client) Load(ctx context.Context) ([]byte, error) {
 func (workload *Client) Save(ctx context.Context, data []byte) error {
 	workload.mu.Lock()
 	defer workload.mu.Unlock()
+	err := workload.write(ctx, data)
+	if !apierrors.IsConflict(err) || workload.state == nil {
+		return err
+	}
+	// An edit that leaves state.json alone, such as a new annotation, only moves
+	// the resourceVersion. Retry on the current version. A different state.json
+	// means another writer, so the conflict stands.
+	var current corev1.ConfigMap
+	if getErr := workload.reader.Get(ctx, client.ObjectKeyFromObject(workload.state), &current); getErr != nil ||
+		current.Data["state.json"] != workload.state.Data["state.json"] {
+		return err
+	}
+	workload.state = &current
+	return workload.write(ctx, data)
+}
+
+func (workload *Client) write(ctx context.Context, data []byte) error {
 	state := workload.state.DeepCopy()
 	if state == nil {
 		state = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{

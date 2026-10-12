@@ -619,3 +619,33 @@ func TestStateConflicts(t *testing.T) {
 		t.Fatalf("newer state overwritten: %s, %v", data, err)
 	}
 }
+
+func TestStateSurvivesMetadataEdit(t *testing.T) {
+	t.Parallel()
+	api, config := fixture(t)
+	workload := newWorkload(t, api, config)
+	if _, err := workload.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := workload.Save(t.Context(), []byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	// An edit that leaves state.json alone, such as kubectl annotate, must not
+	// block later saves.
+	var state corev1.ConfigMap
+	key := client.ObjectKey{Namespace: config.Namespace, Name: config.Name + "-ft-state"}
+	if err := api.Get(t.Context(), key, &state); err != nil {
+		t.Fatal(err)
+	}
+	state.Annotations = map[string]string{"example.com/owner": "platform"}
+	if err := api.Update(t.Context(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if err := workload.Save(t.Context(), []byte("second")); err != nil {
+		t.Fatalf("save after a metadata-only edit: %v", err)
+	}
+	if err := api.Get(t.Context(), key, &state); err != nil || state.Data["state.json"] != "second" ||
+		state.Annotations["example.com/owner"] != "platform" {
+		t.Fatalf("saved %v with annotations %v: %v", state.Data, state.Annotations, err)
+	}
+}
