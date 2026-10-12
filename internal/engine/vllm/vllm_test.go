@@ -341,6 +341,7 @@ func TestProgress(t *testing.T) {
 		"stale failure": {setup: func(r []*fakeRank) { r[3].set("unhealthy", ft("failed", "older")) }, state: engine.Running},
 		"vote failed":   {setup: func(r []*fakeRank) { r[0].set("dead", nil) }, state: engine.Failed},
 		"unreachable":   {setup: func(r []*fakeRank) { r[3].down = true }, state: engine.Running},
+		"faulted again": {setup: func(r []*fakeRank) { r[0].unhealthy() }, state: engine.Failed},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

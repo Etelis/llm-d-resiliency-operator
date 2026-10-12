@@ -65,6 +65,10 @@ func (*Engine) Progress(observation engine.Observation, round engine.Round) engi
 		case member != nil && member.Terminal:
 			return failed(fmt.Sprintf("%s died during the round: %s", id, member.Detail))
 		case member == nil || r == nil || !r.Reached:
+		case r.RequestID == "" && (r.Status == "unhealthy" || r.Status == "diagnosing"):
+			// The status keeps the round's request ID until the engine reports a new state, so a fault
+			// without it came after the round ended.
+			return failed(fmt.Sprintf("%s faulted again after the round: %s", id, member.Detail))
 		case r.FTState == "failed" && r.RequestID == round.ID:
 			return failed(fmt.Sprintf("%s failed the round: %s", id, r.FTError))
 		case r.FTState == "recovering" && r.RequestID != round.ID:

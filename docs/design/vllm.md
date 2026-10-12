@@ -1,0 +1,107 @@
+# vLLM engine
+
+How vLLM implements the [engine contract](contracts/engine.md), on top of the vLLM fault tolerance API
+from [vllm-project/vllm#46370](https://github.com/vllm-project/vllm/pull/46370). Code: `internal/engine/vllm`.
+
+## What vLLM gives
+
+Each data parallel rank runs its own API server (external load balancing, `--data-parallel-size-local 1`).
+On `--enable-fault-tolerance`, a rank that hits a fault stops serving and waits for an instruction:
+
+```mermaid
+stateDiagram-v2
+  [*] --> healthy
+  healthy --> diagnosing: fault in the busy loop
+  diagnosing --> unhealthy: mask of unreachable peers known
+  healthy --> dead: own worker died
+  diagnosing --> dead: own worker died
+  unhealthy --> healthy: retry or scale_down succeeded
+  unhealthy --> dead: scale_down failed, or no instruction for engine_recovery_timeout_sec
+```
+
+| Endpoint | Use |
+|---|---|
+| `GET /v1/fault_tolerance/status` | `status`, `fault_info`, `mask`, and for the last instruction `ft_state`, `last_ft_request_id`, `ft_error` |
+| `POST /v1/fault_tolerance/apply` | `retry` or `scale_down`; `202` means started, the result shows in the status |
+| `GET /health` | `503` once the engine process is gone |
+
+Rules that shape the driver:
+
+- An instruction is accepted only while the rank is `unhealthy`.
+- Every alive rank must get the same `request_id` within 10 seconds, or the round fails.
+- `scale_down` keeps the original rank numbers. Removing the lowest alive rank also moves the store it
+  hosts, so the request carries the next lowest rank's address and a port.
+- A failed `scale_down` is final: the ranks report `dead`.
+- The status is cached by the API server. If the engine process is killed, it can still say `healthy`;
+  `/health` is what notices.
+
+## Driver
+
+| Contract | vLLM |
+|---|---|
+| Members per Pod | `--vllm-ranks-per-pod` ranks; rank `i` of Pod `Index` is `dp<Index × ranks + i>` on port `--vllm-api-port + i` |
+| `Observe` | status and `/health` of every rank of every Pod that has an IP and is not terminating |
+| `Serving` | status `healthy` and `/health` 200 |
+| `Terminal` | status `dead`, or `/health` 503 |
+| unknown | the API does not answer, or answers for another rank: neither serving nor terminal |
+| `Probe` | one short completion to each serving rank, so idle peers run a step and notice a dead rank |
+| `Apply` | `retry` when nothing is removed, else `scale_down` with `removed_dp_ranks`; `request_id` is the round ID |
+| Store host | when the round removes the lowest alive rank: `dp_master_ip` of the lowest participant and `--vllm-store-port` |
+| `Verify` | an 8-token completion on each member |
+| `Grow` | no: the fault tolerance API cannot add ranks |
+
+## Policy
+
+| Admitted ranks | Plan |
+|---|---|
+| all serving | `Healthy` |
+| none left alive | `Unrecoverable` |
+| one unknown, `diagnosing`, or running an instruction | `Wait` |
+| some faulted, some still `healthy` | `Wait`: vLLM rejects instructions until every survivor reports `unhealthy` |
+| some terminal, every survivor `unhealthy` | `Change`: remove the terminal ranks |
+| none terminal, all `unhealthy` | `Change`: retry |
+
+A rank that stays `healthy` while its peers fault (stuck in a collective) never accepts an instruction.
+The plan stays `Wait` and the diagnosis deadline resets the group.
+
+| During a round | Progress |
+|---|---|
+| a participant is terminal | `Failed`, scope `Group` |
+| `ft_state` is `failed` for this round | `Failed`, scope `Group` |
+| a participant runs another `request_id` | `Failed`, scope `Group` |
+| a participant is `unhealthy` again with no `request_id`: it finished the round and faulted after it | `Failed`, scope `Group` |
+| every participant serving | `Succeeded` |
+| otherwise | `Running` |
+
+## Flags
+
+| Flag | Default |
+|---|---|
+| `--vllm-api-port` | 8000 |
+| `--vllm-ranks-per-pod` | 1 |
+| `--vllm-store-port` | 29600 |
+| `--vllm-timeout` | 5s per status, health or apply request |
+
+## Deploying vLLM for IRO
+
+- Set `VLLM_KEEP_ALIVE_ON_ENGINE_DEATH=1`. Otherwise the API server exits with its engine, the container
+  restarts, and the workload recreates the whole group: IRO never gets to shrink it.
+- Do not add a liveness probe that restarts a rank whose engine died: a container restart makes the
+  workload recreate the group.
+- `/health` stays 200 for a rank that is `dead` while its engine process lives, so a `/health` readiness
+  probe keeps sending traffic to it, and it answers 503. Readiness that routes well checks the status
+  endpoint for `healthy`.
+- `engine_recovery_timeout_sec` must leave room for detection plus IRO's diagnosis deadline.
+- `scale_down` needs EPLB with redundant experts and an all2all backend with timeouts
+  (`nixl_ep` or `deepep_low_latency`).
+
+## Known engine issues
+
+Found on 4 H200 ranks (DeepSeek-V2-Lite, DP/EP 4, `nixl_ep` from NIXL 1.3.2) with vllm#46370 at `384ba19`.
+IRO recovers from each, but not in place.
+
+| Issue | What IRO does |
+|---|---|
+| Removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep` | `Progress` fails the round on the new fault; the group is reset |
+| The DP coordinator (rank 0) dying goes unnoticed under load; the first request after an idle period faults the group | the probe wakes the idle rank, then a retry; a second one within `FlapWindow` resets the group |
+| NIXL 1.5.0, which vLLM pins, fails `prepMemView` when ranks connect on these nodes; 1.3.2 works | none: the group does not start |

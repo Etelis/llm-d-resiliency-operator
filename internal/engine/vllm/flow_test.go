@@ -27,6 +27,7 @@ import (
 // that every alive rank must receive, and a store that moves when the lowest alive rank is removed.
 type cluster struct {
 	mu       sync.Mutex
+	refault  bool
 	ranks    []*fakeRank
 	dead     map[int]bool
 	received map[string]map[int]map[string]any
@@ -78,6 +79,9 @@ func (sim *cluster) apply(fake *fakeRank, payload map[string]any) {
 	}
 	for _, rank := range alive {
 		sim.ranks[rank].put(map[string]any{"id": rank, "status": "healthy"})
+		if sim.refault {
+			sim.ranks[rank].put(map[string]any{"id": rank, "status": "unhealthy", "fault_info": "RuntimeError"})
+		}
 	}
 }
 
@@ -159,10 +163,15 @@ type flow struct {
 
 func newFlow(t *testing.T) *flow {
 	t.Helper()
+	return newFlowWith(t, time.Second)
+}
+
+func newFlowWith(t *testing.T, applyTimeout time.Duration) *flow {
+	t.Helper()
 	test := newFleet(t, 4, 1)
 	run := &flow{t: t, fleet: test, sim: newCluster(test), wl: &lwsToday{pods: test.pods}, store: &memoryJournal{}}
 	config := enginefault.Defaults()
-	config.PollInterval, config.DiagnosisTimeout, config.ApplyTimeout = time.Millisecond, time.Second, time.Second
+	config.PollInterval, config.DiagnosisTimeout, config.ApplyTimeout = time.Millisecond, time.Second, applyTimeout
 	fsm, err := enginefault.New(t.Context(), run.wl, test.eng, run.store, telemetry.New(logr.Discard(), time.Minute), config)
 	if err != nil {
 		t.Fatal(err)
@@ -285,4 +294,16 @@ func TestFlowEngineProcessGone(t *testing.T) {
 	run.fleet.ranks[2].set("healthy", nil)
 	run.fleet.ranks[2].health = http.StatusServiceUnavailable
 	run.until("shrunk and kept below full", kept("dp2@id2"))
+}
+
+func TestFlowFaultAfterTheRoundResetsAtOnce(t *testing.T) {
+	t.Parallel()
+	run := newFlowWith(t, 30*time.Second)
+	run.sim.refault = true
+	run.fault(3)
+	started := time.Now()
+	run.until("reset", func(record enginefault.Record) bool { return record.Phase == enginefault.Starting })
+	if run.wl.resetAlls == 0 || time.Since(started) > 5*time.Second {
+		t.Fatalf("group resets %d after %v", run.wl.resetAlls, time.Since(started))
+	}
 }
