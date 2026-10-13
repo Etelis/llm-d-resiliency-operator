@@ -92,7 +92,7 @@ continues the same incident and its timings. Closed incidents leave the record a
 
 ## Functions
 
-All examples use the [running example](README.md#running-example). The group label is `ns1/group`.
+All examples use the [example group](../../examples/index.md). The group label is `ns1/group`.
 
 ### Stepped
 

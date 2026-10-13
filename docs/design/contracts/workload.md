@@ -74,7 +74,7 @@ Reports the group as it is now.
 | **Errors** | only when the workload cannot be read, or its spec is not supported. Starting, terminating and missing Pods are facts, not errors. |
 | **Side effects** | none |
 
-**Example**, while `pod-3` is reset in the [running example](README.md#running-example):
+**Example**, while `pod-3` is reset in [a member dies](../../examples/member-dies.mdx):
 
 ```yaml
 Recreating: false

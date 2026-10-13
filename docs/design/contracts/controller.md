@@ -132,7 +132,7 @@ In order:
    Check and send a new reconfig, verify the members of a reconfig that succeeded, or reset.
 7. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
 
-**Example**, the [running example](README.md#running-example) poll by poll:
+**Example**, [a member dies](../../examples/member-dies.mdx), poll by poll:
 
 | Poll | Discover | Observe | Policy says | Controller does | Phase, reconfig |
 |---|---|---|---|---|---|

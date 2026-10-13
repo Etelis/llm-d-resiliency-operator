@@ -125,7 +125,7 @@ Every `Change` is one of four shapes:
 
 ## Functions
 
-All examples use the [running example](README.md#running-example).
+All examples use the [example group](../../examples/index.md).
 
 ### Capabilities
 

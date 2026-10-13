@@ -33,20 +33,10 @@ Outside IRO, but the contracts depend on them:
 | Traffic router (EPP) | routes on the engine's native health. IRO never steers traffic. |
 | Leader election | one controller acts on a group at a time |
 
-## Running example
+## Examples
 
-All examples use the same group. Four Pods, one engine member each. Pod names come from the workload, member names from the engine:
-
-| Pod | UID | Identity | Member | MemberID |
-|---|---|---|---|---|
-| `pod-0` (leader) | `a1` | `idA` | `m0` | `m0@idA` |
-| `pod-1` | `b1` | `idB` | `m1` | `m1@idB` |
-| `pod-2` | `c1` | `idC` | `m2` | `m2@idC` |
-| `pod-3` | `d1` | `idD` | `m3` | `m3@idD` |
-
-The story: the group serves. `m3` dies. The engine shrinks to `m0`-`m2`. IRO asks the workload to
-reset `pod-3`. It comes back as a new Pod in the same place (UID `d2`, identity `idD2`) and runs `m3`
-again. The engine admits `m3@idD2`. The group is back to 4 members.
+The examples in these docs use one group: four Pods, `pod-0` to `pod-3` (UIDs `a1` to `d1`, identities `idA` to
+`idD`), with one member each, `m0` to `m3`. Step through it, fault by fault, in [Examples](../../examples/index.md).
 
 ## One reconciliation step
 
