@@ -192,7 +192,7 @@ func (fsm *controller) resetAll(ctx context.Context, next *Record, reason ResetR
 		next.Pods[uid] = pod
 	}
 	next.Members, next.Verifying, next.VerifyFailedSince, next.LastNoChangeReconfig = nil, nil, time.Time{}, time.Time{}
-	next.UnseenSince = time.Time{}
+	next.UnseenSince, next.UnseenByDiscover = time.Time{}, false
 	if inc := next.Incident; inc != nil && inc.Durations.Diagnose == 0 {
 		inc.Durations.Diagnose = now.Sub(inc.Opened)
 	}
