@@ -26,7 +26,7 @@ export default function examples() {
           attributes: [{type: 'mdxJsxAttribute', name: 'name', value: match[1]}],
           children: [],
         };
-        while (onlyImage(parent.children[i - 1])) {
+        while (onlyImage(parent.children[i - 1]) || (parent.children[i - 1] && parent.children[i - 1].type === 'table')) {
           parent.children.splice(i - 1, 1);
           i--;
         }

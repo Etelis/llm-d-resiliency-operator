@@ -148,6 +148,8 @@ In order:
 | ... | `pod-3` (d2) Ready | `m3` on d2 Joinable | `Plan`: Change, add `m3@idD2` | checks, saves reconfig, `Apply` | serving, reconfig in flight |
 | ... | same | `m3@idD2` healthy | `Progress`: Succeeded | marks `m3@idD2` admitted, `Verify(m3@idD2)` | serving |
 
+[example controller-polls]: ../scenarios/controller-polls.json
+
 The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.Stepped` receives it:
 
 ```yaml
