@@ -97,7 +97,7 @@ Builds the controller and loads its state.
 
 ```go
 New(...) // empty journal (first run):       Record{Phase: starting}
-New(...) // leader changed during a reconfig:   Record{Phase: recovering, Reconfig: iro-ft-7c1e, ...}. The next Step watches Progress; it never resends.
+New(...) // leader changed during a reconfig:   Record{Phase: recovering, Reconfig: iro-ft-7c1e, ...}. The next Step watches Progress. It sends the reconfig again only if no acceptances were saved and Progress says NotStarted.
 New(...) // journal unreadable or not valid: error. The runner logs it and calls New again next poll.
 New(...) // after a save conflicted: Record as saved by the other writer. Deadlines restart, as after a leader change.
 New(...) // the record was deleted while running: the last save conflicted, and now the journal is empty: starting.
@@ -176,7 +176,7 @@ described [below](#reconfigs). A reconfig can run in `recovering` (fixing a faul
 |---|---|---|---|
 | `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then records the Pods every poll, checks nothing, waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
 | `serving` | healthy, maybe below full | verifies the members of a reconfig that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A reconfig that admits candidates runs here. | a fault |
-| `recovering` | the engine reports a fault | probes once on entry. Without a reconfig: plans every poll, resets on `Unrecoverable`, and sends a reconfig no sooner than 2 polls in. With a reconfig: checks `Progress` every poll and never sends it again. | `Healthy` plan, or reconfig `Succeeded`. Or reset. |
+| `recovering` | the engine reports a fault | probes once on entry. Without a reconfig: plans every poll, resets on `Unrecoverable`, and sends a reconfig no sooner than 2 polls in. With a reconfig: checks `Progress` every poll, and sends it again only as in [Reconfigs](#reconfigs). | `Healthy` plan, or reconfig `Succeeded`. Or reset. |
 
 In `serving`, a `Healthy` plan is fine and a `Change` that only adds members is a reconfig to grow back.
 Any other plan is a fault.
@@ -237,11 +237,20 @@ sent, and cleared when `Progress` reports `Succeeded` or `Failed`.
 | Asks the policy | `Plan` | `Progress` |
 | Deadline | `DiagnosisTimeout`, from the fault | `ApplyTimeout`, from `ReconfigSince` |
 | Members in `Remove` | admitted | still fenced: they must reach Terminal (C1, C4) |
-| After a leader change | plans again | watches `Progress`. Never sends the reconfig again. |
+| After a leader change | plans again | watches `Progress`. Sends the same reconfig again only if no acceptances were saved and `Progress` says `NotStarted`. |
 
 The two deadlines catch different hangs: an engine that never reaches a state IRO can act on,
 and a reconfig that never finishes. While the workload reports `Recreating`, deadlines are not checked, and
 both restart when it ends, and when a new leader takes over. A new group drops the reconfig in flight: the workload is already replacing everything.
+
+**A reconfig that never left.** The reconfig is saved before `Apply`, and its acceptances after. No saved
+acceptances means the send was never confirmed: the leader may have died before `Apply` reached the engine.
+When `Progress` then says `NotStarted`, the controller checks the reconfig again (C1 to C3, and C7 on the
+current observation), saves, and sends the same reconfig: same ID, same members. A reconfig that no longer
+passes is dropped, since nothing reached the engine, and the controller plans again. A resend restarts
+`ReconfigSince` and is not a new reconfig for C6. With acceptances saved, `NotStarted` counts as `Running`.
+An engine that cannot prove that no member got a reconfig never says `NotStarted`: the reconfig then fails,
+or runs into its deadline, and the group is reset.
 
 **After a reconfig succeeds**, the controller saves its participants and joiners in `Verifying` and calls
 `Verify` on them. A failure is retried for `VerifyTimeout`; then the group is reset (reason `verify_failed`).
@@ -314,7 +323,7 @@ never violated at runtime.
 | Guarantee | How |
 |---|---|
 | One writer per group | runs only on the elected leader. Journal saves are compare-and-swap on the version this controller loaded or saved; after a conflict it loads again. |
-| At-most-once reconfigs | the reconfig is saved before `Apply`. A new leader only watches `Progress`. |
+| At most one run per reconfig | saved before `Apply`, acceptances saved after. Sent again, same ID, only when the send was never confirmed and `Progress` says `NotStarted`. A member that already got it does not start it again. |
 | Repeatable workload calls | `Reset`, `ResetAll` and `Release` are saved first and repeated until `Discover` shows the result |
 | One reconfig at a time | a new plan is asked for only when no reconfig is in flight |
 | Faults come first | capacity is restored only while `serving` |

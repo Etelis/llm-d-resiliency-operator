@@ -129,7 +129,7 @@ Called at the end of every `Step`.
 | | |
 |---|---|
 | **Input** | the [`Reconfig`](engine.md#objects) just sent and the [`Plan`](engine.md#objects) it came from |
-| **Emits** | a log line and a `ReconfigStarted` Event |
+| **Emits** | a log line and a `ReconfigStarted` Event, again when the reconfig is sent again (reason `resent: no member got it`) |
 
 **Example.** → Event: `inc-7c1e: reconfig iro-ft-7c1e started: shrink, remove dp3@idD`
 

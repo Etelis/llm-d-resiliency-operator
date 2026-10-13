@@ -106,7 +106,7 @@ type Progress struct {
     Reason string
 }
 
-type ProgressState string // Running | Succeeded | Failed
+type ProgressState string // NotStarted | Running | Succeeded | Failed
 type FailureScope string  // Joiners: only the joiners failed | Group: the group may be broken
 ```
 
@@ -195,7 +195,7 @@ Sends a reconfig to every participant and joiner.
 |---|---|
 | **Input** | the [`Observation`](#objects) the reconfig was planned on, and the [`Reconfig`](#objects) |
 | **Output** | one [`Acceptance`](#objects) per member it sent to. An error unless every one accepted. |
-| **Side effects** | the engine starts the reconfig. Never repeated by the controller. |
+| **Side effects** | the engine starts the reconfig. Sent again only after a leader change, when no acceptances were saved and `Progress` says `NotStarted`. |
 
 **Example.**
 
@@ -267,6 +267,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 **Examples**, for reconfig `iro-ft-7c1e`:
 
 ```go
+// no participant got iro-ft-7c1e yet, and the engine can prove it: {State: NotStarted}
 // survivors still rebuilding:             {State: Running}
 // dp0-dp2 healthy, finished iro-ft-7c1e:  {State: Succeeded}
 // dp1 reports its FT operation failed:    {State: Failed, Scope: Group, Reason: "dp1@idB: FT failed: ..."}
@@ -288,7 +289,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | Candidates do not report `Serving` | check C5 |
 | The engine reports which reconfig each member is working on | `Progress` can tell its reconfig from another one |
 | `Apply` refuses, before sending anything, a reconfig that names a member missing from `Observation.Members`. A `Remove` member needs no driver-private data: a lost one has none. | check C7. A lost Pod, the most common fault, still shrinks in place. |
-| `Apply` need not be idempotent | the controller never sends a reconfig twice |
+| A member that already got a reconfig never starts it again, so `Apply` with the same ID is safe to repeat | a new leader may resend a reconfig whose send it cannot confirm, and the old leader's late send may still arrive |
 | Every call is bounded by a timeout | a hung engine must not stall the loop |
 
 ### Policy
@@ -302,7 +303,8 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | Plan `Add` only if `Capabilities().Grow` | the controller resets a single Pod only when the engine can re-admit its members |
 | A plan may remove and add in one reconfig (replace) if the engine supports it | fewer reconfigs during a fault |
 | `Change` plans must pass the controller's [checks C1 to C7](controller.md#checks-on-every-plan) | otherwise the controller resets |
-| `Progress` stays `Running` until the engine reports a result for this reconfig | the apply deadline covers a reconfig that never finishes |
+| `Progress` stays `Running` until the engine reports a result for this reconfig, or proves no member got it | the apply deadline covers a reconfig that never finishes |
+| Return `NotStarted` only when every participant and joiner is observed, could start the reconfig now and has not got it, and the engine would still show a reconfig a member got earlier | otherwise a reconfig that finished before a new fault looks unsent, and sending it again would run it twice |
 | `Failed` with scope `Joiners` only when admitted members are untouched | otherwise the group may be broken and must be reset |
 
 ## Considerations

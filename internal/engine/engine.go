@@ -91,9 +91,10 @@ type Progress struct {
 type ProgressState string
 
 const (
-	Running   ProgressState = "Running"
-	Succeeded ProgressState = "Succeeded"
-	Failed    ProgressState = "Failed"
+	NotStarted ProgressState = "NotStarted"
+	Running    ProgressState = "Running"
+	Succeeded  ProgressState = "Succeeded"
+	Failed     ProgressState = "Failed"
 )
 
 type FailureScope string

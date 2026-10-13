@@ -125,7 +125,7 @@ Two kinds of action, with opposite delivery rules:
 
 | Action | Delivery | Why |
 |---|---|---|
-| Engine reconfig (`Apply`) | at most once. Saved first, never sent again. | a reconfig is not idempotent. Sending it twice can break the group. |
+| Engine reconfig (`Apply`) | at most one run. Saved first. Sent again, same ID, only when the send was never confirmed and `Progress` proves no member got it. | running a reconfig twice can break the group, so a resend needs proof, and a member that already got it ignores it |
 | Workload call (`Reset`, `ResetAll`, `Release`) | saved first, repeated every poll until `Discover` shows the result | each call names Pods by UID and does nothing once they are gone, so repeating it is harmless |
 
 ## From a fault back to full capacity
