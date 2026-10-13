@@ -8,13 +8,14 @@ export default {
   url: 'https://llm-d-incubation.github.io',
   baseUrl: '/llm-d-resiliency-operator/',
   onBrokenLinks: 'throw',
-  markdown: {mermaid: true},
+  markdown: {mermaid: true, format: 'detect'},
   themes: ['@docusaurus/theme-mermaid'],
   presets: [
     [
       'classic',
       {
         docs: {
+          path: '../docs',
           routeBasePath: 'docs',
           sidebarPath: './sidebars.js',
         },
@@ -40,7 +41,7 @@ export default {
     footer: {
       style: 'dark',
       links: [
-        {title: 'Docs', items: [{label: 'Architecture', to: '/docs'}, {label: 'Recovery flow', to: '/docs/recovery-flow'}]},
+        {title: 'Docs', items: [{label: 'Overview', to: '/docs'}, {label: 'Contracts', to: '/docs/design/contracts'}]},
         {title: 'Community', items: [{label: 'GitHub', href: repo}, {label: 'llm-d', href: 'https://llm-d.ai'}]},
       ],
       copyright: `Copyright © ${new Date().getFullYear()} llm-d Project Authors. Apache-2.0.`,
