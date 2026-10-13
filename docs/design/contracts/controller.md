@@ -196,7 +196,8 @@ flowchart TD
 |---|---|---|
 | saved, same identity, not `Terminating` | unchanged | nothing |
 | saved as `Removing`, now gone or `Terminating` | the `Reset` or `Release` is happening | forgets it once it is gone |
-| saved, not `Removing`, now gone, `Terminating` or with a new identity | its members are lost | adds them to the observation as Terminal ([lost members](engine.md#observe)), so the policy plans as usual and a reconfig can remove them |
+| saved, not `Removing`, now gone or `Terminating` | its members are lost | adds them to the observation as Terminal ([lost members](engine.md#observe)), so the policy plans as usual and a reconfig can remove them |
+| saved, not `Removing`, same UID with a new identity: an engine container restarted in place | its members are lost. The restarted container's members are not in the group. | the same for the old members. It keeps the Pod's old identity while it tracks them, so once a reconfig removed them the Pod is [restored](#restoring-capacity) like a failed Pod. The new members are never candidates. |
 | not saved, `Starting` | a replacement Pod is loading | saves it and waits |
 | not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
 
@@ -221,6 +222,7 @@ next group: a candidate that could not join, or an excluded member whose Pod is 
 | member reported on a new, `Ready` Pod | records it as a candidate |
 | admitted member not reported (its Pod is unreachable) | treats it as unknown: not Serving, not Terminal |
 | admitted member on a Pod that is gone, `Terminating` or has a new identity (replaced, or its engine restarted) | lost: added to the observation as Terminal, `Detail: "pod lost"` |
+| member reported under a restarted Pod's new identity | not tracked, never a candidate. C5 still applies: it must not serve. |
 
 ### Reconfigs
 
@@ -264,6 +266,7 @@ flowchart TD
 1. Once the members of the last reconfig passed `Verify`, on a poll whose plan is `Healthy`, the controller
    looks for Pods that hold only excluded members. It marks them `Removing`, saves, and calls `Reset`,
    `ResetAll` or `Release`, per `--ft-capacity-restore` (C8). A Pod that is already gone is just forgotten.
+   A Pod restarted in place is one of them once the reconfig that removed its old members finished.
 2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [reconfig](#reconfigs).
 3. There is one try, no budget. If the Pod cannot be reset (`ErrUnsupported`, or the engine cannot grow),
    or the new Pod's members are rejected (the join reconfig fails, or the new Pod restarts before joining),
@@ -344,6 +347,15 @@ Each engine and workload implementation registers its own flags.
   is retried for `VerifyTimeout` before the reset.
 - **No give-up state.** IRO resets whenever recovery in place cannot help. How often a group may be
   recreated, and when to stop, is the workload's restart policy (LWS `restartBackoff`, `maxGroupRestarts`).
+- **Restarts in place.** Kubelet restarts a crashed or probe-failed container without replacing its Pod. A
+  workload that recreates the group for that reports `Recreating`, and the controller waits for the new group.
+  One that does not (LWS `restartPolicy: None`) reports the same UID with a new identity, and the controller
+  handles it like a lost Pod: a reconfig removes the old members, and capacity comes back only through the
+  Pod's reset. The restarted container's members are never candidates: IRO did not ask for them, and a
+  container that restarted once may restart again, so the fresh Pod from `Reset` is the one try. A restart
+  during recovery costs more: a member paused for a reconfig that is restarted is lost too, so it is removed
+  with the dead one, or the reconfig in flight fails and the group is reset. Probes on engine containers must
+  not fail while a member is paused for recovery; each engine doc names the probes that are safe, if any.
 - **Why the controller decides "same group".** It already remembers which Pods it asked to reset or
   release, so it can tell those from a lost one. The workload stays a plain reporter.
 - **Why reset one Pod first.** It is the smallest action that brings capacity back: only the failed Pod

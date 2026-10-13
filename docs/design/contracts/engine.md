@@ -315,3 +315,6 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 - **Who connects Pods and members.** The driver only reports. The controller tracks which members are
   candidates, admitted, excluded or rejected, and which Pods to remove.
 - **Shrinking needs no capability.** A policy that cannot shrink never plans `Remove`.
+- **Container probes.** A probe that restarts an engine container makes its members lost (`Member.ID()`
+  changes). The engine doc says which probes cannot fail while a member is paused for recovery, or that none
+  may be used.
