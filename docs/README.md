@@ -2,7 +2,8 @@
 
 IRO keeps a multi-node inference engine serving through faults. It watches one engine group, the Pods that
 run the engine's members. When a member fails, IRO removes it in place so the rest keep
-serving, then brings the group back to full capacity by resetting the failed Pod. Only when that cannot work
+serving, then brings the group back to full capacity by resetting the failed Pod, when the engine can admit
+new members. Only when that cannot work
 does it restart the whole group.
 
 ![IRO manager, its plugins and what they talk to](figures/architecture.svg)

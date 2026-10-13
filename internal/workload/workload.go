@@ -1,7 +1,7 @@
 // Copyright 2026 The llm-d Authors.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package workload owns the group's Pods. See docs/design/contracts/workload.md.
+// Package workload owns the group's Pods. See docs/components/workloads/index.md.
 package workload
 
 import (

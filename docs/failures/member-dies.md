@@ -2,9 +2,13 @@
 
 One member's process exits. The rest keep serving, and the group is full again once the failed Pod is reset.
 
+Getting back to full needs an engine that can [grow](../components/engines/index.md#growing-back). With one that
+cannot, the group keeps serving with fewer members until the next group, or IRO resets the group with
+`--ft-capacity-restore=reset-all`.
+
 - **IRO sees:** the engine reports the member terminal; the others pause
 - **IRO does:** removes it in one reconfig, verifies the survivors, then resets its Pod and admits the new member
-- **Ends with:** full again, without a restart
+- **Ends with:** full again without a restart if the engine can grow; otherwise serving with fewer members
 - **Rules:** [C1](../components/controller.md#safety-checks), [C8](../components/controller.md#safety-checks), [restoring capacity](../components/controller.md#getting-back-to-full)
 
 ![One member dies and the group goes 4, 3, 4 while serving](../figures/recovery-timeline.svg)

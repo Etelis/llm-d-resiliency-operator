@@ -3,6 +3,8 @@
 How LeaderWorkerSet implements the [workload](index.md) and [journal](../journal.md)
 contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 
+> **Not built yet.** This workload and its journal come with [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11); they are not on `main`.
+
 ## Workload
 
 | Contract | LWS |
@@ -43,9 +45,10 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
    `Reset` answers `ErrUnsupported`, and any container restart, including one from a probe, recreates the
    group: IRO waits and adopts it. Under `None`, LWS replaces only a deleted Pod, and kubelet restarts a
    crashed container in place. Either way IRO removes the lost member in place. A deleted Pod's replacement
-   brings members that stay candidates until the engine can admit them (vLLM cannot), holding their GPU. An
+   brings members that stay candidates until the engine can admit them (an engine that cannot grow never does),
+   holding their GPU. An
    engine container restarted in place keeps the Pod's UID: its new members are never candidates, and the Pod
-   is reset like any failed Pod (with vLLM, kept as it is). Neither policy tolerates a probe that fails while a
+   is reset like any failed Pod (with an engine that cannot grow, kept as it is). Neither policy tolerates a probe that fails while a
    member is paused for recovery: see the engine's doc.
 2. **Restart limits for IRO resets.** `restartBackoff` and `maxGroupRestarts` are on LWS `main`, not in
    v0.11.1. Check that a recreation IRO causes, by deleting the leader, is paced and counted like any other.

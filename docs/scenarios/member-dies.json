@@ -51,7 +51,7 @@
     },
     {
       "title": "IRO resets the failed Pod",
-      "note": "pod-3 holds only excluded members. The rest keep serving. No deadline: loading takes as long as it takes.",
+      "note": "pod-3 holds only excluded members. This needs an engine that can grow; with one that cannot, the group serves with 3. No deadline: loading takes as long as it takes.",
       "phase": "serving",
       "pods": {"pod-3": {"uid": "d2", "m3": "starting"}},
       "calls": [
