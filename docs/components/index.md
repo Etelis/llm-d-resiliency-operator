@@ -20,9 +20,9 @@ specific to an engine or a workload stays behind its plugin.
 | Controller | phases, deadlines, durability, whether it is still the same group, connecting Pods to members, resets, bringing capacity back, checks on every plan | engine states, what a member is inside the engine, Pod layout | [controller.md](controller.md) |
 | Journal | durable controller state, one writer at a time | what the bytes mean | [journal.md](journal.md) |
 | Telemetry | logs, metrics, Events, incident records, readiness. Best-effort, never read back. | how recovery decides anything | [telemetry.md](telemetry.md) |
-| Workload | reporting the group's Pods as they are now, resetting some Pods or all of them, releasing Pods | engine members, ports, engine processes, anything from before | [workload.md](../workloads/index.md) |
-| Engine driver | reporting which members run on each Pod and their state, sending reconfigs, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](../engines/index.md#interface) |
-| Engine policy | which members to remove or admit and when, how a reconfig is going | I/O, time, Kubernetes | [engine.md](../engines/index.md#interface) |
+| Workload | reporting the group's Pods as they are now, resetting some Pods or all of them, releasing Pods | engine members, ports, engine processes, anything from before | [workload.md](workloads/index.md) |
+| Engine driver | reporting which members run on each Pod and their state, sending reconfigs, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](engines/index.md#interface) |
+| Engine policy | which members to remove or admit and when, how a reconfig is going | I/O, time, Kubernetes | [engine.md](engines/index.md#interface) |
 
 Outside IRO, but the contracts depend on them:
 
@@ -55,12 +55,12 @@ Two kinds of action, with opposite delivery rules:
 
 | Object | Defined in | Made by | Read by |
 |---|---|---|---|
-| `Group`, `Pod`, `PodState`, `PodRef` | [workload.md](../workloads/index.md#objects) | workload | controller, engine driver |
-| `ErrUnsupported` | [workload.md](../workloads/index.md#objects) | workload | controller |
-| `Capabilities`, `Member`, `MemberID`, `Observation` | [engine.md](../engines/index.md#objects) | engine driver | controller, engine policy |
-| `Reconfig` | [engine.md](../engines/index.md#objects) | controller | engine driver, engine policy |
-| `Acceptance` | [engine.md](../engines/index.md#objects) | engine driver | controller |
-| `Plan`, `Progress` | [engine.md](../engines/index.md#objects) | engine policy | controller |
+| `Group`, `Pod`, `PodState`, `PodRef` | [workload.md](workloads/index.md#objects) | workload | controller, engine driver |
+| `ErrUnsupported` | [workload.md](workloads/index.md#objects) | workload | controller |
+| `Capabilities`, `Member`, `MemberID`, `Observation` | [engine.md](engines/index.md#objects) | engine driver | controller, engine policy |
+| `Reconfig` | [engine.md](engines/index.md#objects) | controller | engine driver, engine policy |
+| `Acceptance` | [engine.md](engines/index.md#objects) | engine driver | controller |
+| `Plan`, `Progress` | [engine.md](engines/index.md#objects) | engine policy | controller |
 | `Config`, `Record`, `Phase`, `MemberState`, `PodRecord` | [controller.md](controller.md#objects) | controller | journal (as bytes), telemetry |
 | `Recorder`, `Incident`, `Outcome`, `Durations`, `ResetReason` | [telemetry.md](telemetry.md#objects), code in `internal/controller/enginefault` | controller | telemetry |
 
@@ -82,7 +82,7 @@ Every file the design needs, and the PR that brings it.
 | `internal/controller/enginefault/runner.go` | the leader-elected loop that calls `Step` | controller (#11) |
 | `internal/controller/enginefault/setup.go` | flags; picks the engine and workload | controller (#11) |
 | `cmd/main.go` | registers engines and workloads, starts the manager | controller (#11) |
-| `internal/workload/lws/workload.go` | LWS `Workload` | controller (#11), see [lws.md](../workloads/lws.md) |
+| `internal/workload/lws/workload.go` | LWS `Workload` | controller (#11), see [lws.md](workloads/lws.md) |
 | `internal/journal/configmap/journal.go` | ConfigMap `Journal`, owned by the workload object | controller (#11) |
 | `internal/telemetry/recorder.go` | `Recorder`: log lines (#11); metrics, Events, incident history later | controller (#11), telemetry |
 | `internal/engine/vllm/driver.go` | vLLM `Driver` | vLLM (#19) |

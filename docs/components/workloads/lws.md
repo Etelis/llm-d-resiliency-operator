@@ -1,6 +1,6 @@
 # LWS workload
 
-How LeaderWorkerSet implements the [workload](index.md) and [journal](../components/journal.md)
+How LeaderWorkerSet implements the [workload](index.md) and [journal](../journal.md)
 contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 
 ## Workload

@@ -8,7 +8,7 @@ The workload owns the Pods of one engine group. It does four things:
 - **releases** Pods: removes them and frees their GPUs. It never adds Pods.
 
 It remembers nothing: no earlier calls, no earlier groups. Deciding whether this is still the same group
-is the [controller's](../components/controller.md#reading-discover) job. It knows nothing about engines beyond which of its
+is the [controller's](../controller.md#reading-discover) job. It knows nothing about engines beyond which of its
 containers run one, which is configuration: no ranks, ports or processes. The first implementation, LWS, comes with its own PR and doc.
 
 ## Interface
@@ -74,7 +74,7 @@ Reports the group as it is now.
 | **Errors** | only when the workload cannot be read, or its spec is not supported. Starting, terminating and missing Pods are facts, not errors. |
 | **Side effects** | none |
 
-**Example**, while `pod-3` is reset in [a member dies](../failures/member-dies.md):
+**Example**, while `pod-3` is reset in [a member dies](../../failures/member-dies.md):
 
 ```yaml
 Recreating: false
@@ -191,4 +191,4 @@ Release(ctx, []PodRef{{"pod-3", "d1"}})
 
 A prefill/decode set holds several engine groups with different roles. Proposal: each engine group
 is one recovery unit with its own `Group`, journal record and controller loop, and the workload lists
-the units. This is open decision 1 in the [overview](../components/index.md#open-decisions).
+the units. This is open decision 1 in the [overview](../index.md#open-decisions).

@@ -2,7 +2,7 @@
 
 The journal keeps the controller's state for one engine group, so a new leader can pick up where the
 last one stopped. It answers "what was IRO doing?", not "which Pods exist" (that is the
-[workload](../workloads/index.md)).
+[workload](workloads/index.md)).
 
 It stores bytes and never looks inside them. The schema is the controller's
 [`Record`](controller.md#objects). Today it is part of `Workload` (`Load`, `Save`); it gets its own

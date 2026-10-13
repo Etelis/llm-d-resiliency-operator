@@ -8,7 +8,7 @@ from [vllm-project/vllm#46370](https://github.com/vllm-project/vllm/pull/46370).
 Each data parallel rank runs its own API server (external load balancing, `--data-parallel-size-local 1`).
 On `--enable-fault-tolerance`, a rank that hits a fault stops serving and waits for an instruction:
 
-![A vLLM rank's fault-tolerance states](../figures/vllm-states.svg)
+![A vLLM rank's fault-tolerance states](../../figures/vllm-states.svg)
 
 | Endpoint | Use |
 |---|---|

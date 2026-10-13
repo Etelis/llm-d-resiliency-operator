@@ -6,10 +6,24 @@ export default {
       type: 'category',
       label: 'Components',
       link: {type: 'doc', id: 'components/index'},
-      items: ['components/controller', 'components/journal', 'components/telemetry'],
+      items: [
+        'components/controller',
+        {
+          type: 'category',
+          label: 'Engines',
+          link: {type: 'doc', id: 'components/engines/index'},
+          items: ['components/engines/vllm'],
+        },
+        {
+          type: 'category',
+          label: 'Workloads',
+          link: {type: 'doc', id: 'components/workloads/index'},
+          items: ['components/workloads/lws'],
+        },
+        'components/journal',
+        'components/telemetry',
+      ],
     },
-    {type: 'category', label: 'Engines', link: {type: 'doc', id: 'engines/index'}, items: ['engines/vllm']},
-    {type: 'category', label: 'Workloads', link: {type: 'doc', id: 'workloads/index'}, items: ['workloads/lws']},
     {
       type: 'category',
       label: 'Failures',

@@ -39,7 +39,7 @@ lives next to it. The controller calls the recorder after each thing happens. Th
 `Ready` is the only call that returns an error, and only the manager's readiness check uses it.
 
 `Record` and `Phase` come from the [controller](controller.md#objects); `Reconfig`, `Plan`, `Progress` and
-`MemberID` from the [engine](../engines/index.md#objects); `PodRef` from the [workload](../workloads/index.md#objects).
+`MemberID` from the [engine](engines/index.md#objects); `PodRef` from the [workload](workloads/index.md#objects).
 
 ## Objects
 
@@ -92,7 +92,7 @@ continues the same incident and its timings. Closed incidents leave the record a
 
 ## Functions
 
-All examples use the [example group](../components/index.md#example-group). The group label is `ns1/group`.
+All examples use the [example group](index.md#example-group). The group label is `ns1/group`.
 
 ### Stepped
 
@@ -129,7 +129,7 @@ Called at the end of every `Step`.
 
 | | |
 |---|---|
-| **Input** | the [`Reconfig`](../engines/index.md#objects) just sent and the [`Plan`](../engines/index.md#objects) it came from |
+| **Input** | the [`Reconfig`](engines/index.md#objects) just sent and the [`Plan`](engines/index.md#objects) it came from |
 | **Emits** | a log line and a `ReconfigStarted` Event, again when the reconfig is sent again (reason `resent: no member got it`) |
 
 **Example.** → Event: `inc-7c1e: reconfig iro-ft-7c1e started: shrink, remove m3@idD`
@@ -138,7 +138,7 @@ Called at the end of every `Step`.
 
 | | |
 |---|---|
-| **Input** | the reconfig and its final [`Progress`](../engines/index.md#objects) |
+| **Input** | the reconfig and its final [`Progress`](engines/index.md#objects) |
 | **Emits** | a log line, a `ReconfigSucceeded` or `ReconfigFailed` Event, `llm_d_iro_reconfigs_total{change,outcome}`. `NotStarted` is a reconfig dropped because no member got it and it no longer passed the checks: outcome `dropped`. A reconfig ended by a reset or a new group finishes `Running`, with that as its reason. |
 
 **Example.** `ReconfigFinished(iro-ft-7c1e, {Succeeded})` → `llm_d_iro_reconfigs_total{change="shrink",outcome="succeeded"}` +1

@@ -1,7 +1,7 @@
 # Controller
 
 The controller runs one loop per engine group, on the elected leader. Every poll it reads the
-[workload](../workloads/index.md) and the [engine](../engines/index.md), decides what the group needs, and acts.
+[workload](workloads/index.md) and the [engine](engines/index.md), decides what the group needs, and acts.
 It owns everything that is not engine- or workload-specific:
 
 - the phases and their deadlines,
@@ -11,7 +11,7 @@ It owns everything that is not engine- or workload-specific:
 - resets, and bringing capacity back after a shrink,
 - the checks every engine plan must pass.
 
-It reads only the engine-neutral [`Member`](../engines/index.md#objects) fields and [`Pod`](../workloads/index.md#objects)
+It reads only the engine-neutral [`Member`](engines/index.md#objects) fields and [`Pod`](workloads/index.md#objects)
 facts. Everything engine-specific stays in the engine.
 
 ## Interface
@@ -80,7 +80,7 @@ type Record struct {
 }
 ```
 
-`Reconfig`, `Acceptance` and `MemberID` come from the [engine](../engines/index.md#objects). `Incident` comes from [telemetry](telemetry.md#objects).
+`Reconfig`, `Acceptance` and `MemberID` come from the [engine](engines/index.md#objects). `Incident` comes from [telemetry](telemetry.md#objects).
 
 ## Functions
 
@@ -90,7 +90,7 @@ Builds the controller and loads its state.
 
 | | |
 |---|---|
-| **Input** | a [`Workload`](../workloads/index.md#interface), an [`Engine`](../engines/index.md#interface), a [`Journal`](journal.md#interface), a [`Recorder`](telemetry.md#interface), a [`Config`](#objects) |
+| **Input** | a [`Workload`](workloads/index.md#interface), an [`Engine`](engines/index.md#interface), a [`Journal`](journal.md#interface), a [`Recorder`](telemetry.md#interface), a [`Config`](#objects) |
 | **Output** | a `Controller`, or an error |
 | **Side effects** | `Journal.Load` |
 
@@ -188,7 +188,7 @@ them with the Pods saved in its journal.
 |---|---|---|
 | saved, same identity, not `Terminating` | unchanged | nothing |
 | saved as `Removing`, now gone or `Terminating` | the `Reset` or `Release` is happening | forgets it once it is gone |
-| saved, not `Removing`, now gone or `Terminating` | its members are lost | adds them to the observation as Terminal ([lost members](../engines/index.md#observe)), so the policy plans as usual and a reconfig can remove them |
+| saved, not `Removing`, now gone or `Terminating` | its members are lost | adds them to the observation as Terminal ([lost members](engines/index.md#observe)), so the policy plans as usual and a reconfig can remove them |
 | saved, not `Removing`, same UID with a new identity: an engine container restarted in place | its members are lost. The restarted container's members are not in the group. | the same for the old members. It keeps the Pod's old identity while it tracks them, so once a reconfig removed them the Pod is [restored](#restoring-capacity) like a failed Pod. The new members are never candidates. A Pod that restarts before its members were recorded is only a slower start. |
 | not saved, `Starting` | a replacement Pod is loading | saves it and waits |
 | not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
