@@ -13,21 +13,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	inferencev1alpha1 "github.com/llm-d/llm-d-resiliency-operator/apis/inference/v1alpha1"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/enginefault"
-	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/recoveryrequest"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/engine/vllm"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/telemetry"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload/lws"
 )
 
-var (
-	scheme = runtime.NewScheme()
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(inferencev1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -39,8 +34,6 @@ func main() {
 	var enableLeaderElection bool
 	var leaderElectionID string
 	var probeAddr string
-	var podNamespace string
-	var podLabelKey string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -48,8 +41,6 @@ func main() {
 			"Enabling this will ensure only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "llm-d-resiliency-operator-leader",
 		"Lease name for leader election; give each manager in a namespace its own.")
-	flag.StringVar(&podNamespace, "pod-namespace", "default", "The namespace of the pod to label.")
-	flag.StringVar(&podLabelKey, "pod-label-key", "llm-d.ai/inference-serving", "The label key to match the pod.")
 	engineFT := enginefault.Options{
 		Engines:   map[string]enginefault.EngineFactory{"vllm": &vllm.Options{}},
 		Workloads: map[string]enginefault.WorkloadFactory{"lws": &lws.Options{}},
@@ -73,14 +64,6 @@ func main() {
 		klog.Fatalf("unable to start manager: %v", err)
 	}
 
-	if err = (&recoveryrequest.Reconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		PodNamespace: podNamespace,
-		PodLabelKey:  podLabelKey,
-	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("unable to create controller: %v", err)
-	}
 	recorder := telemetry.New(ctrl.Log.WithName("engine-fault"), 10*engineFT.Config.ApplyTimeout)
 	if err := engineFT.Setup(mgr, recorder); err != nil {
 		klog.Fatalf("unable to set up engine FT: %v", err)
