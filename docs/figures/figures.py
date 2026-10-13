@@ -7,13 +7,25 @@ OUT = pathlib.Path(__file__).parent
 FONT = "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
 C = {
-    "blue": "#1a73e8", "blue_bg": "#e8f0fe",
-    "green": "#1e8e3e", "green_cell": "#34a853", "green_bg": "#e6f4ea",
-    "amber": "#f29900", "amber_cell": "#f9ab00", "amber_bg": "#fef7e0",
-    "red": "#d93025", "red_bg": "#fce8e6",
-    "grey": "#5f6368", "grey_cell": "#dadce0", "grey_bg": "#f1f3f4",
-    "purple": "#8430ce", "purple_bg": "#f3e8fd",
-    "ink": "#202124", "muted": "#5f6368", "rule": "#dadce0", "lane": "#c4c7c5",
+    "blue": "#1a73e8",
+    "blue_bg": "#e8f0fe",
+    "green": "#1e8e3e",
+    "green_cell": "#34a853",
+    "green_bg": "#e6f4ea",
+    "amber": "#f29900",
+    "amber_cell": "#f9ab00",
+    "amber_bg": "#fef7e0",
+    "red": "#d93025",
+    "red_bg": "#fce8e6",
+    "grey": "#5f6368",
+    "grey_cell": "#dadce0",
+    "grey_bg": "#f1f3f4",
+    "purple": "#8430ce",
+    "purple_bg": "#f3e8fd",
+    "ink": "#202124",
+    "muted": "#5f6368",
+    "rule": "#dadce0",
+    "lane": "#c4c7c5",
 }
 STATE = {
     "active": ("green", "green_bg", "green_cell"),
@@ -41,16 +53,21 @@ class Svg:
         style = ' font-style="italic"' if italic else ""
         self.parts.append(
             f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" fill="{color or C["ink"]}" text-anchor="{anchor}"'
-            f'{weight}{style} xml:space="preserve">{escape(s)}</text>')
+            f'{weight}{style} xml:space="preserve">{escape(s)}</text>'
+        )
 
     def rect(self, x, y, w, h, stroke, fill, r=6, sw=2, dash=None):
         d = f' stroke-dasharray="{dash}"' if dash else ""
-        self.parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{r}" fill="{fill}" '
-                          f'stroke="{stroke}" stroke-width="{sw}"{d}/>')
+        self.parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{r}" fill="{fill}" '
+            f'stroke="{stroke}" stroke-width="{sw}"{d}/>'
+        )
 
     def line(self, x1, y1, x2, y2, color, sw=1.5, dash=None):
         d = f' stroke-dasharray="{dash}"' if dash else ""
-        self.parts.append(f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{color}" stroke-width="{sw}"{d}/>')
+        self.parts.append(
+            f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{color}" stroke-width="{sw}"{d}/>'
+        )
 
     def box(self, x, y, w, h, title, lines=(), tone="grey", fill=None, dash=None, center=False, size=14):
         stroke = C[tone]
@@ -62,7 +79,9 @@ class Svg:
         for i, line in enumerate(lines):
             self.text(tx, ty + 20 + 18 * i, line, 12.5, color=C["muted"], anchor=anchor)
 
-    def arrow(self, points, color, label=None, at=None, dash=None, sw=1.8, label_color=None, anchor="middle", head=True):
+    def arrow(
+        self, points, color, label=None, at=None, dash=None, sw=1.8, label_color=None, anchor="middle", head=True
+    ):
         d = "M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in points)
         da = f' stroke-dasharray="{dash}"' if dash else ""
         self.parts.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{sw}"{da}/>')
@@ -76,9 +95,13 @@ class Svg:
 
     def head(self, x, y, fx, fy, color):
         import math
+
         a = math.atan2(y - fy, x - fx)
-        p = [(x, y), (x - 10 * math.cos(a - 0.4), y - 10 * math.sin(a - 0.4)),
-             (x - 10 * math.cos(a + 0.4), y - 10 * math.sin(a + 0.4))]
+        p = [
+            (x, y),
+            (x - 10 * math.cos(a - 0.4), y - 10 * math.sin(a - 0.4)),
+            (x - 10 * math.cos(a + 0.4), y - 10 * math.sin(a + 0.4)),
+        ]
         self.parts.append(f'<polygon points="{" ".join(f"{px:.1f},{py:.1f}" for px, py in p)}" fill="{color}"/>')
 
     def legend(self, y, items, x=32, step=None):
@@ -96,8 +119,11 @@ class Svg:
 
     def save(self, name):
         body = "\n".join(self.parts)
-        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" viewBox="0 0 {self.w} {self.h}" '
-               f'font-family="{FONT}">\n<rect width="100%" height="100%" rx="8" fill="#ffffff"/>\n{body}\n</svg>\n')
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" '
+            f'viewBox="0 0 {self.w} {self.h}" '
+            f'font-family="{FONT}">\n<rect width="100%" height="100%" rx="8" fill="#ffffff"/>\n{body}\n</svg>\n'
+        )
         (OUT / name).write_text(svg)
 
 
@@ -111,7 +137,9 @@ def sequence(name, title, lanes, phases, subtitle=None, lane_w=190, legend=None)
     s = Svg(w, h, title, subtitle)
     hy = top - 46
     for key, label, tone in lanes:
-        s.rect(xs[key] - lane_w / 2 + 14, hy, lane_w - 28, 44, C[tone], C["grey_bg"] if tone == "grey" else C[tone + "_bg"])
+        s.rect(
+            xs[key] - lane_w / 2 + 14, hy, lane_w - 28, 44, C[tone], C["grey_bg"] if tone == "grey" else C[tone + "_bg"]
+        )
         s.text(xs[key], hy + 27, label, 13.5, color=C[tone], bold=True, anchor="middle")
     s.parts.append("<g>")
     lane_parts = len(s.parts)
@@ -136,12 +164,23 @@ def sequence(name, title, lanes, phases, subtitle=None, lane_w=190, legend=None)
             s.arrow([(x1, y), (x2 - pad, y)], C[tone], label, ((x1 + x2) / 2, y - 7), dash="7 5" if reply else None)
             y += 40
     for key, *_ in lanes:
-        s.parts.insert(lane_parts, f'<line x1="{xs[key]:.1f}" y1="{hy + 44}" x2="{xs[key]:.1f}" y2="{y - 10:.1f}" '
-                                   f'stroke="{C["lane"]}" stroke-width="1.3" stroke-dasharray="5 5"/>')
+        s.parts.insert(
+            lane_parts,
+            f'<line x1="{xs[key]:.1f}" y1="{hy + 44}" x2="{xs[key]:.1f}" y2="{y - 10:.1f}" '
+            f'stroke="{C["lane"]}" stroke-width="1.3" stroke-dasharray="5 5"/>',
+        )
     s.parts.append("</g>")
     s.line(left - 8, y, w - 16, y, C["rule"], 1.2)
-    s.legend(y + 34, legend or [("line", "blue", "call"), ("dash", "blue", "reply"), ("amber", "amber", "decision"),
-                                ("green", "green", "engine")])
+    s.legend(
+        y + 34,
+        legend
+        or [
+            ("line", "blue", "call"),
+            ("dash", "blue", "reply"),
+            ("amber", "amber", "decision"),
+            ("green", "green", "engine"),
+        ],
+    )
     s.h = int(y + 56)
     s.save(name)
 
@@ -158,12 +197,22 @@ def pod(s, x, y, name, sub, cells, status, state, w=None, crossed=()):
         cx = x + 14 + i * (cw + gap)
         fill = C[STATE[cstate][2]]
         s.rect(cx, y + 52, cw, 28, fill, fill, r=3, sw=1)
-        s.text(cx + cw / 2, y + 71, label, 12, color="#ffffff" if cstate != "starting" else C["muted"], bold=True, anchor="middle")
+        s.text(
+            cx + cw / 2,
+            y + 71,
+            label,
+            12,
+            color="#ffffff" if cstate != "starting" else C["muted"],
+            bold=True,
+            anchor="middle",
+        )
         if label in crossed:
             s.line(cx + 6, y + 56, cx + cw - 6, y + 76, "#ffffff", 2.5)
             s.line(cx + cw - 6, y + 56, cx + 6, y + 76, "#ffffff", 2.5)
     s.rect(x + 14, y + 88, w - 28, 20, C[tone], C[tone] if state != "starting" else C["grey_cell"], r=3, sw=1)
-    s.text(x + w / 2, y + 102, status, 12, color="#ffffff" if state != "starting" else C["ink"], bold=True, anchor="middle")
+    s.text(
+        x + w / 2, y + 102, status, 12, color="#ffffff" if state != "starting" else C["ink"], bold=True, anchor="middle"
+    )
     return w
 
 
@@ -181,8 +230,20 @@ def architecture():
     s.box(676, 442, 112, 90, "Driver", ["reads, applies", "over HTTP"], tone="green", fill="#ffffff")
     s.box(540, 620, 260, 60, "Telemetry", ["metrics, Events, logs"], tone="grey")
     s.arrow([(165, 330), (165, 173), (540, 173)], C["blue"], "Load, Save", (350, 165))
-    s.arrow([(270, 360), (470, 360), (470, 299), (540, 299)], C["blue"], ["Discover, Reset,", "ResetAll, Release"], (284, 336), anchor="start")
-    s.arrow([(270, 400), (470, 400), (470, 465), (540, 465)], C["blue"], ["Observe, Probe, Apply,", "Verify · Plan, Progress"], (284, 422), anchor="start")
+    s.arrow(
+        [(270, 360), (470, 360), (470, 299), (540, 299)],
+        C["blue"],
+        ["Discover, Reset,", "ResetAll, Release"],
+        (284, 336),
+        anchor="start",
+    )
+    s.arrow(
+        [(270, 400), (470, 400), (470, 465), (540, 465)],
+        C["blue"],
+        ["Observe, Probe, Apply,", "Verify · Plan, Progress"],
+        (284, 422),
+        anchor="start",
+    )
     s.arrow([(165, 430), (165, 650), (540, 650)], C["blue"], "what happened", (350, 642))
     s.box(890, 260, 280, 78, "Kubernetes + workload controller", ["recreates deleted Pods"], tone="grey", center=True)
     s.box(890, 420, 280, 80, "Engine runtime", ["members and their recovery API"], tone="green", center=True)
@@ -192,94 +253,177 @@ def architecture():
     s.arrow([(788, 465), (890, 465)], C["green"], "HTTP", (840, 457))
     s.arrow([(800, 650), (890, 650)], C["grey"], "export", (845, 642))
     s.arrow([(1030, 530), (1030, 500)], C["purple"], "routes on native health", (1042, 520), anchor="start")
-    s.legend(760, [("line", "blue", "controller call"), ("line", "green", "engine HTTP"), ("line", "grey", "Kubernetes / export"),
-                   ("line", "purple", "traffic")])
+    s.legend(
+        760,
+        [
+            ("line", "blue", "controller call"),
+            ("line", "green", "engine HTTP"),
+            ("line", "grey", "Kubernetes / export"),
+            ("line", "purple", "traffic"),
+        ],
+    )
     s.save("architecture.svg")
 
 
 def step():
     sequence(
-        "controller-step.svg", "One controller step",
-        [("c", "Controller", "blue"), ("w", "Workload", "grey"), ("d", "Engine driver", "green"),
-         ("p", "Engine policy", "green"), ("j", "Journal", "grey")],
+        "controller-step.svg",
+        "One controller step",
         [
-            ("1  see the group", [
-                ("msg", "c", "w", "Discover()", False),
-                ("msg", "w", "c", "Pods, Recreating", True, "grey"),
-                ("msg", "c", "d", "Observe(pods)", False),
-                ("msg", "d", "c", "members per Pod and their state", True),
-            ]),
-            ("2  decide", [
-                ("msg", "c", "p", "Plan(observation, admitted, candidates)", False),
-                ("msg", "p", "c", "Healthy · Wait · Change · Unrecoverable", True),
-                ("note", "c", "w", ["a reconfig in flight asks Progress(observation, reconfig)", "instead of Plan"], "amber"),
-            ]),
-            ("3  act, only for a Change that passes the checks", [
-                ("msg", "c", "j", "Save(reconfig)", False),
-                ("msg", "c", "d", "Apply(observation, reconfig)", False),
-                ("msg", "d", "c", "acceptances", True),
-                ("msg", "c", "j", "Save(acceptances)", False),
-            ]),
-            ("4  restore capacity, only when serving below full", [
-                ("msg", "c", "w", "Reset(Pods), ResetAll or Release", False),
-            ]),
+            ("c", "Controller", "blue"),
+            ("w", "Workload", "grey"),
+            ("d", "Engine driver", "green"),
+            ("p", "Engine policy", "green"),
+            ("j", "Journal", "grey"),
+        ],
+        [
+            (
+                "1  see the group",
+                [
+                    ("msg", "c", "w", "Discover()", False),
+                    ("msg", "w", "c", "Pods, Recreating", True, "grey"),
+                    ("msg", "c", "d", "Observe(pods)", False),
+                    ("msg", "d", "c", "members per Pod and their state", True),
+                ],
+            ),
+            (
+                "2  decide",
+                [
+                    ("msg", "c", "p", "Plan(observation, admitted, candidates)", False),
+                    ("msg", "p", "c", "Healthy · Wait · Change · Unrecoverable", True),
+                    (
+                        "note",
+                        "c",
+                        "w",
+                        ["a reconfig in flight asks Progress(observation, reconfig)", "instead of Plan"],
+                        "amber",
+                    ),
+                ],
+            ),
+            (
+                "3  act, only for a Change that passes the checks",
+                [
+                    ("msg", "c", "j", "Save(reconfig)", False),
+                    ("msg", "c", "d", "Apply(observation, reconfig)", False),
+                    ("msg", "d", "c", "acceptances", True),
+                    ("msg", "c", "j", "Save(acceptances)", False),
+                ],
+            ),
+            (
+                "4  restore capacity, only when serving below full",
+                [
+                    ("msg", "c", "w", "Reset(Pods), ResetAll or Release", False),
+                ],
+            ),
         ],
         subtitle="repeated every poll · the journal is saved before anything reaches the engine",
-        legend=[("line", "blue", "controller call"), ("dash", "green", "engine reply"), ("dash", "grey", "workload reply"),
-                ("amber", "amber", "rule")],
+        legend=[
+            ("line", "blue", "controller call"),
+            ("dash", "green", "engine reply"),
+            ("dash", "grey", "workload reply"),
+            ("amber", "amber", "rule"),
+        ],
     )
 
 
 def recovery_sequence():
     sequence(
-        "recovery-sequence.svg", "Who does what when one member dies",
-        [("c", "Controller", "blue"), ("p", "Engine policy", "green"), ("d", "Engine driver", "green"),
-         ("w", "Workload", "grey")],
+        "recovery-sequence.svg",
+        "Who does what when one member dies",
         [
-            ("t1–t2  remove the dead member  ·  recovering", [
-                ("msg", "c", "d", "Observe(pods)", False),
-                ("msg", "d", "c", "m3 terminal, m0–m2 paused", True),
-                ("msg", "c", "p", "Plan(...)", False),
-                ("msg", "p", "c", "Change: remove m3", True),
-                ("msg", "c", "d", "Apply(remove m3)", False),
-                ("msg", "c", "p", "Progress(...)", False),
-                ("msg", "p", "c", "Succeeded", True),
-                ("msg", "c", "d", "Verify(m0, m1, m2)", False),
-                ("note", "c", "d", ["serving with 3 members; pod-3 holds only an excluded member"], "amber"),
-            ]),
-            ("t3  reset the failed Pod  ·  serving", [
-                ("msg", "c", "w", "Reset(pod-3, UID d1)", False),
-                ("msg", "w", "c", "pod-3 back with UID d2, then Ready", True, "grey"),
-            ]),
-            ("t4–t5  admit the new member  ·  serving", [
-                ("msg", "c", "d", "Observe(pods)", False),
-                ("msg", "d", "c", "m3 on pod-3 (d2) joinable", True),
-                ("msg", "c", "p", "Plan(...)", False),
-                ("msg", "p", "c", "Change: add m3", True),
-                ("msg", "c", "d", "Apply(add m3)", False),
-                ("msg", "c", "d", "Verify(m0 … m3)", False),
-                ("note", "c", "d", ["serving with 4 members"], "green"),
-            ]),
+            ("c", "Controller", "blue"),
+            ("p", "Engine policy", "green"),
+            ("d", "Engine driver", "green"),
+            ("w", "Workload", "grey"),
+        ],
+        [
+            (
+                "t1–t2  remove the dead member  ·  recovering",
+                [
+                    ("msg", "c", "d", "Observe(pods)", False),
+                    ("msg", "d", "c", "m3 terminal, m0–m2 paused", True),
+                    ("msg", "c", "p", "Plan(...)", False),
+                    ("msg", "p", "c", "Change: remove m3", True),
+                    ("msg", "c", "d", "Apply(remove m3)", False),
+                    ("msg", "c", "p", "Progress(...)", False),
+                    ("msg", "p", "c", "Succeeded", True),
+                    ("msg", "c", "d", "Verify(m0, m1, m2)", False),
+                    ("note", "c", "d", ["serving with 3 members; pod-3 holds only an excluded member"], "amber"),
+                ],
+            ),
+            (
+                "t3  reset the failed Pod  ·  serving",
+                [
+                    ("msg", "c", "w", "Reset(pod-3, UID d1)", False),
+                    ("msg", "w", "c", "pod-3 back with UID d2, then Ready", True, "grey"),
+                ],
+            ),
+            (
+                "t4–t5  admit the new member  ·  serving",
+                [
+                    ("msg", "c", "d", "Observe(pods)", False),
+                    ("msg", "d", "c", "m3 on pod-3 (d2) joinable", True),
+                    ("msg", "c", "p", "Plan(...)", False),
+                    ("msg", "p", "c", "Change: add m3", True),
+                    ("msg", "c", "d", "Apply(add m3)", False),
+                    ("msg", "c", "d", "Verify(m0 … m3)", False),
+                    ("note", "c", "d", ["serving with 4 members"], "green"),
+                ],
+            ),
         ],
         subtitle="the same recovery as the timeline above, as calls",
         lane_w=210,
-        legend=[("line", "blue", "controller call"), ("dash", "green", "engine reply"), ("dash", "grey", "workload reply"),
-                ("amber", "amber", "group state")],
+        legend=[
+            ("line", "blue", "controller call"),
+            ("dash", "green", "engine reply"),
+            ("dash", "grey", "workload reply"),
+            ("amber", "amber", "group state"),
+        ],
     )
 
 
 def recovery_timeline():
-    s = Svg(1060, 0, "One member dies: 4 → 3 → 4", "four Pods with one member each · the group keeps serving the whole time")
+    s = Svg(
+        1060, 0, "One member dies: 4 → 3 → 4", "four Pods with one member each · the group keeps serving the whole time"
+    )
     rows = [
         ("t0", "serving", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
-        ("t1", "m3 dies", "recovering", "amber", ["paused", "paused", "paused", "failed"],
-         ["paused", "paused", "paused", "dead"], ("m3",)),
-        ("t2", "a reconfig removes m3", "serving 3", "blue", ["active", "active", "active", "failed"],
-         ["serving", "serving", "serving", "excluded"], ()),
-        ("t3", "Reset replaces pod-3", "serving 3", "blue", ["active", "active", "active", "starting"],
-         ["serving", "serving", "serving", "new UID, starting"], ()),
-        ("t4", "a reconfig adds the new m3", "serving 3", "blue", ["active", "active", "active", "joining"],
-         ["serving", "serving", "serving", "joining"], ()),
+        (
+            "t1",
+            "m3 dies",
+            "recovering",
+            "amber",
+            ["paused", "paused", "paused", "failed"],
+            ["paused", "paused", "paused", "dead"],
+            ("m3",),
+        ),
+        (
+            "t2",
+            "a reconfig removes m3",
+            "serving 3",
+            "blue",
+            ["active", "active", "active", "failed"],
+            ["serving", "serving", "serving", "excluded"],
+            (),
+        ),
+        (
+            "t3",
+            "Reset replaces pod-3",
+            "serving 3",
+            "blue",
+            ["active", "active", "active", "starting"],
+            ["serving", "serving", "serving", "new UID, starting"],
+            (),
+        ),
+        (
+            "t4",
+            "a reconfig adds the new m3",
+            "serving 3",
+            "blue",
+            ["active", "active", "active", "joining"],
+            ["serving", "serving", "serving", "joining"],
+            (),
+        ),
         ("t5", "full again", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
     ]
     y = 96
@@ -291,26 +435,41 @@ def recovery_timeline():
         s.rect(32, y + 34, 9 + width(phase, 12, True) + 9, 22, C[tone], C[tone + "_bg"], r=11, sw=1.2)
         s.text(41, y + 50, phase, 12, color=C[tone], bold=True)
         x = 300
-        for i, (state, st) in enumerate(zip(states, status)):
-            pod_state = state if state != "failed" else "failed"
+        for i, state in enumerate(states):
+            st = status[i]
+            pod_state = state
             sub = "UID d2" if t in ("t3", "t4", "t5") and i == 3 else "UID d1" if i == 3 else f"UID {'abc'[i]}1"
             pod(s, x, y, f"pod-{i}", sub, [(f"m{i}", state)], st, pod_state, w=170, crossed=crossed)
             x += 182
         y += 140
     s.line(28, y - 10, 1032, y - 10, C["rule"], 1.2)
-    s.legend(y + 22, [("active", "green", "serving"), ("paused", "amber", "paused or joining"), ("failed", "red", "dead or excluded"),
-                      ("starting", "grey", "new Pod, not yet a member")])
-    s.text(32, y + 52, "One cell is one engine member. Pod names and UIDs come from the workload, member IDs from the engine.",
-           12, color=C["muted"])
+    s.legend(
+        y + 22,
+        [
+            ("active", "green", "serving"),
+            ("paused", "amber", "paused or joining"),
+            ("failed", "red", "dead or excluded"),
+            ("starting", "grey", "new Pod, not yet a member"),
+        ],
+    )
+    s.text(
+        32,
+        y + 52,
+        "One cell is one engine member. Pod names and UIDs come from the workload, member IDs from the engine.",
+        12,
+        color=C["muted"],
+    )
     s.h = y + 74
     s.save("recovery-timeline.svg")
 
 
 def phases():
     s = Svg(1100, 400, "Controller phases", "where the controller is, and what moves it")
-    pill = [("starting", 70, "grey", "the group comes up"),
-            ("serving", 450, "green", "the group serves"),
-            ("recovering", 830, "amber", "a fault is repaired")]
+    pill = [
+        ("starting", 70, "grey", "the group comes up"),
+        ("serving", 450, "green", "the group serves"),
+        ("recovering", 830, "amber", "a fault is repaired"),
+    ]
     for name, x, tone, line in pill:
         s.rect(x, 130, 200, 84, C[tone], C[tone + "_bg"], r=42, sw=2.5)
         s.text(x + 100, 166, name, 19, color=C[tone], bold=True, anchor="middle")
@@ -322,16 +481,43 @@ def phases():
     s.arrow([(930, 214), (930, 310), (140, 310), (140, 214)], C["red"])
     s.text(375, 262, "reset the group", 13, color=C["red"], bold=True, anchor="middle")
     s.text(535, 302, "reset the group: it cannot be repaired in place", 13, color=C["red"], bold=True, anchor="middle")
-    s.legend(360, [("line", "green", "things get better"), ("line", "amber", "a fault"), ("line", "red", "a reset: every Pod is recreated")])
+    s.legend(
+        360,
+        [
+            ("line", "green", "things get better"),
+            ("line", "amber", "a fault"),
+            ("line", "red", "a reset: every Pod is recreated"),
+        ],
+    )
     s.save("phases.svg")
 
 
 def adopt():
     s = Svg(1040, 470, "Same group or a new one?", "checked on every Discover, before anything else")
     s.box(60, 100, 220, 56, "Discover", [], tone="blue", center=True)
-    s.box(360, 92, 300, 72, "Recreating, stopped, or an owed", ["ResetAll with old Pods left?"], tone="amber", center=True, size=13.5)
+    s.box(
+        360,
+        92,
+        300,
+        72,
+        "Recreating, stopped, or an owed",
+        ["ResetAll with old Pods left?"],
+        tone="amber",
+        center=True,
+        size=13.5,
+    )
     s.box(740, 92, 260, 72, "Wait, act on nothing", ["repeat the owed ResetAll"], tone="grey", center=True)
-    s.box(360, 250, 300, 72, "Any saved Pod still there", ["with the same identity?"], tone="amber", center=True, size=13.5)
+    s.box(
+        360,
+        250,
+        300,
+        72,
+        "Any saved Pod still there",
+        ["with the same identity?"],
+        tone="amber",
+        center=True,
+        size=13.5,
+    )
     s.box(740, 210, 260, 72, "Same group", ["compare Pod by Pod"], tone="green", center=True)
     s.box(740, 330, 260, 72, "New group", ["clear the journal, go to starting"], tone="red", center=True)
     s.arrow([(280, 128), (360, 128)], C["blue"])
@@ -343,11 +529,15 @@ def adopt():
 
 
 def capacity():
-    s = Svg(1100, 500, "Restoring capacity", "a Pod holds only excluded members · --ft-capacity-restore picks what happens")
+    s = Svg(
+        1100, 500, "Restoring capacity", "a Pod holds only excluded members · --ft-capacity-restore picks what happens"
+    )
     s.box(390, 92, 320, 56, "Pod with only excluded members", [], tone="red", center=True)
-    cols = [("reset-pod  (default)", 60, "Reset the Pod", "tried once", "green"),
-            ("reset-all", 400, "ResetAll", "the whole group restarts", "amber"),
-            ("release", 740, "Release the Pod", "the workload gives it back", "grey")]
+    cols = [
+        ("reset-pod  (default)", 60, "Reset the Pod", "tried once", "green"),
+        ("reset-all", 400, "ResetAll", "the whole group restarts", "amber"),
+        ("release", 740, "Release the Pod", "the workload gives it back", "grey"),
+    ]
     for label, x, act, note, tone in cols:
         s.arrow([(550, 148), (550, 180), (x + 150, 180), (x + 150, 222)], C["blue"])
         s.text(x + 150, 212, label, 12.5, color=C["blue"], bold=True, anchor="middle")
@@ -357,7 +547,13 @@ def capacity():
     s.box(400, 380, 300, 64, "Full again", ["after a fresh start"], tone="green", center=True)
     s.box(740, 380, 300, 64, "Fewer members", ["until the group restarts"], tone="grey", center=True)
     s.arrow([(170, 286), (170, 330), (120, 330), (120, 380)], C["green"], "joined", (128, 352), anchor="start")
-    s.arrow([(250, 286), (250, 330), (300, 330), (300, 380)], C["grey"], ["unsupported,", "or join fails"], (308, 346), anchor="start")
+    s.arrow(
+        [(250, 286), (250, 330), (300, 330), (300, 380)],
+        C["grey"],
+        ["unsupported,", "or join fails"],
+        (308, 346),
+        anchor="start",
+    )
     s.arrow([(550, 286), (550, 380)], C["green"])
     s.arrow([(890, 286), (890, 380)], C["grey"])
     s.legend(480, [("active", "green", "full group"), ("grey", "grey", "serving below full")])
@@ -370,7 +566,13 @@ def engine():
     s.box(390, 92, 220, 64, "Driver", ["Observe, Probe, Apply, Verify"], tone="green", center=True)
     s.box(390, 196, 220, 64, "Policy", ["Plan, Progress · pure"], tone="green", center=True)
     s.box(760, 92, 200, 64, "Engine runtime", ["FT API"], tone="green", center=True)
-    s.arrow([(220, 150), (300, 150), (300, 124), (390, 124)], C["blue"], "Capabilities, I/O calls", (230, 114), anchor="start")
+    s.arrow(
+        [(220, 150), (300, 150), (300, 124), (390, 124)],
+        C["blue"],
+        "Capabilities, I/O calls",
+        (230, 114),
+        anchor="start",
+    )
     s.arrow([(220, 174), (300, 174), (300, 228), (390, 228)], C["blue"], "decisions", (310, 250), anchor="start")
     s.arrow([(610, 124), (760, 124)], C["green"], "HTTP", (685, 116))
     s.arrow([(500, 156), (500, 196)], C["green"], "private engine data", (510, 182), dash="6 4", anchor="start")
@@ -379,8 +581,12 @@ def engine():
 
 def vllm_states():
     s = Svg(1080, 420, "A vLLM rank's fault-tolerance state", "as reported by /v1/fault_tolerance/status")
-    nodes = {"healthy": (60, 120, "green"), "diagnosing": (420, 120, "amber"), "unhealthy": (780, 120, "amber"),
-             "dead": (420, 300, "red")}
+    nodes = {
+        "healthy": (60, 120, "green"),
+        "diagnosing": (420, 120, "amber"),
+        "unhealthy": (780, 120, "amber"),
+        "dead": (420, 300, "red"),
+    }
     for name, (x, y, tone) in nodes.items():
         s.rect(x, y, 220, 56, C[tone], C[tone + "_bg"], r=28, sw=2.5)
         s.text(x + 110, y + 34, name, 17, color=C[tone], bold=True, anchor="middle")
@@ -389,11 +595,26 @@ def vllm_states():
     s.arrow([(890, 120), (890, 84), (170, 84), (170, 120)], C["green"], "retry or scale_down succeeded", (530, 76))
     s.arrow([(170, 176), (170, 328), (420, 328)], C["red"], "own worker died", (180, 318), anchor="start")
     s.arrow([(530, 176), (530, 300)], C["red"], "own worker died", (540, 248), anchor="start")
-    s.arrow([(890, 176), (890, 328), (640, 328)], C["red"], ["scale_down failed, or no instruction", "for engine_recovery_timeout_sec"],
-            (880, 222), anchor="end")
+    s.arrow(
+        [(890, 176), (890, 328), (640, 328)],
+        C["red"],
+        ["scale_down failed, or no instruction", "for engine_recovery_timeout_sec"],
+        (880, 222),
+        anchor="end",
+    )
     s.save("vllm-states.svg")
 
 
 if __name__ == "__main__":
-    for draw in (architecture, step, recovery_sequence, recovery_timeline, phases, adopt, capacity, engine, vllm_states):
+    for draw in (
+        architecture,
+        step,
+        recovery_sequence,
+        recovery_timeline,
+        phases,
+        adopt,
+        capacity,
+        engine,
+        vllm_states,
+    ):
         draw()
