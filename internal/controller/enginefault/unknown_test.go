@@ -68,6 +68,45 @@ func TestNothingReadable(t *testing.T) {
 			t.Fatalf("after: %+v", record)
 		}
 	})
+	t.Run("the group is reset once it has been unseen for UnseenTimeout", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.serving()
+		test.unknown("dp0", "dp1", "dp2", "dp3")
+		test.pollAnyway()
+		test.after(test.config.UnseenTimeout - 10*time.Second)
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("reset before UnseenTimeout: %+v", test.record())
+		}
+		test.after(10 * time.Second)
+		test.wantReset(ResetUnseen)
+		if !test.record().UnseenSince.IsZero() {
+			t.Fatalf("record %+v", test.record())
+		}
+	})
+	t.Run("a zero UnseenTimeout waits forever", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.config.UnseenTimeout = 0
+		test.serving()
+		test.unknown("dp0", "dp1", "dp2", "dp3")
+		test.pollAnyway()
+		test.after(24 * time.Hour)
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("reset with no timeout: %+v", test.record())
+		}
+	})
+	t.Run("a failing Discover never resets", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.serving()
+		test.wl.discoverErr = errors.New("api down")
+		test.pollAnyway()
+		test.after(2 * test.config.UnseenTimeout)
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("reset while Discover fails: %+v", test.record())
+		}
+	})
 	t.Run("an unreadable excluded member is not a C4 violation", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)

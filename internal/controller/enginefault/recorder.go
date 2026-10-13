@@ -70,4 +70,5 @@ const (
 	ResetVerifyFailed      ResetReason = "verify_failed"
 	ResetExclusionBroken   ResetReason = "exclusion_broken"
 	ResetCapacity          ResetReason = "capacity"
+	ResetUnseen            ResetReason = "unseen"
 )

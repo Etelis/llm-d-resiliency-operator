@@ -162,6 +162,9 @@ func (fsm *controller) step(ctx context.Context, next *Record) error {
 	fsm.comparePods(ctx, next, &group)
 	current := fsm.connect(ctx, next, &group)
 	if len(current.unknown) > 0 && current.read == 0 {
+		if since := next.UnseenSince; !since.IsZero() && fsm.config.UnseenTimeout > 0 && now.Sub(since) >= fsm.config.UnseenTimeout {
+			return fsm.resetAll(ctx, next, ResetUnseen, "no admitted member could be read since "+since.Format(time.RFC3339), now)
+		}
 		return fsm.unseen(ctx, next, now, errors.New("observe: no admitted member could be read"))
 	}
 	resume(next, now)
