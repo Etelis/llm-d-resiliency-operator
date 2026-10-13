@@ -7,6 +7,7 @@ package enginefault
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -211,3 +212,20 @@ func TestIncidentNamesTheRemovedMember(t *testing.T) {
 		t.Fatalf("closed incident %+v", closed)
 	}
 }
+
+func TestResendCheckedAgain(t *testing.T) {
+	t.Parallel()
+	test := newHarness(t)
+	test.replacementCandidate()
+	test.eng.plan = engine.Plan{Kind: engine.Change, Participants: ids("dp0@idA", "dp1@idB", "dp2@idC"), Add: ids("dp3@idD2")}
+	test.unconfirmed()
+	sent := len(test.eng.applied)
+	test.wl.group.Pods[3].State = workload.PodStarting
+	test.eng.plan = engine.Plan{Kind: engine.Healthy}
+	test.poll()
+	record := test.record()
+	if len(test.eng.applied) != sent || record.Reconfig != nil || len(test.wl.resetAlls) != 0 || !strings.Contains(record.Reason, "dropped") {
+		t.Fatalf("applied %d, record %+v", len(test.eng.applied), record)
+	}
+}
+

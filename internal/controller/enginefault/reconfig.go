@@ -43,6 +43,10 @@ func (fsm *controller) watch(ctx context.Context, next *Record, current *view, n
 			next.Since = now
 		}
 		return nil
+	case engine.NotStarted:
+		if len(next.Acceptances) == 0 {
+			return fsm.resend(ctx, next, current, &progress, now)
+		}
 	}
 	if now.Sub(next.ReconfigSince) > fsm.config.ApplyTimeout {
 		fsm.finishReconfig(next, &progress, now)
@@ -79,11 +83,35 @@ func (fsm *controller) send(ctx context.Context, next *Record, current *view, pl
 		}
 		affect(next, inc, reconfig.Remove)
 	}
+	return fsm.apply(ctx, next, current, &reconfig, plan, now)
+}
+
+// resend sends a reconfig again whose send was never confirmed, once the engine proves no member got it.
+func (fsm *controller) resend(ctx context.Context, next *Record, current *view, progress *engine.Progress, now time.Time) error {
+	reconfig := *next.Reconfig
+	plan := engine.Plan{
+		Kind: engine.Change, Participants: reconfig.Participants, Remove: reconfig.Remove, Add: reconfig.Add,
+		Reason: "resent: no member got it",
+	}
+	if reason := checkPlan(next, current, &plan); reason != "" {
+		fsm.finishReconfig(next, &engine.Progress{State: engine.NotStarted, Reason: reason}, now)
+		next.Reason = "dropped " + reconfig.ID + ", no member got it: " + reason
+		return nil
+	}
+	next.ReconfigSince = now
+	next.Reason = plan.Reason + ": " + progress.Reason
+	return fsm.apply(ctx, next, current, &reconfig, &plan, now)
+}
+
+func (fsm *controller) apply(
+	ctx context.Context, next *Record, current *view, reconfig *engine.Reconfig, plan *engine.Plan, now time.Time,
+) error {
+	next.Acceptances = nil
 	if err := fsm.save(ctx, next); err != nil {
 		return err
 	}
-	acceptances, err := fsm.eng.Apply(ctx, current.obs, reconfig)
-	fsm.recorder.ReconfigStarted(&reconfig, plan)
+	acceptances, err := fsm.eng.Apply(ctx, current.obs, *reconfig)
+	fsm.recorder.ReconfigStarted(reconfig, plan)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

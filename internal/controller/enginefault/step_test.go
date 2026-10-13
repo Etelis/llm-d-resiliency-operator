@@ -6,6 +6,7 @@ package enginefault
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -37,6 +38,22 @@ func (test *harness) shrunk() {
 		test.t.Fatalf("shrink did not finish: %+v", record)
 	}
 	test.rec.calls = nil
+}
+
+// unconfirmed sends the reconfig, then loses its acceptances, as when the leader dies before saving them.
+func (test *harness) unconfirmed() {
+	test.t.Helper()
+	var data []byte
+	var version int
+	test.eng.onApply = func() { data, version = slices.Clone(test.store.data), test.store.version }
+	test.poll()
+	test.eng.onApply = nil
+	test.store.data, test.store.version = data, version
+	if record := test.record(); record.Reconfig == nil || len(record.Acceptances) != 0 {
+		test.t.Fatalf("record %+v", record)
+	}
+	test.load()
+	test.eng.progress = engine.Progress{State: engine.NotStarted, Reason: "no rank has it"}
 }
 
 func (test *harness) wantReset(reason ResetReason) {
@@ -406,16 +423,68 @@ func TestReconfigOutcomes(t *testing.T) {
 		test.poll()
 		test.wantReset(ResetApplyDeadline)
 	})
-	t.Run("never resent after a leader change", func(t *testing.T) {
+	t.Run("not resent after a leader change once the send was confirmed", func(t *testing.T) {
 		t.Parallel()
 		test := start(t)
 		test.poll()
 		test.load()
-		test.eng.progress = engine.Progress{State: engine.Running}
+		test.eng.progress = engine.Progress{State: engine.NotStarted}
 		test.poll()
 		if len(test.eng.applied) != 1 {
 			t.Fatalf("reconfig sent %d times", len(test.eng.applied))
 		}
+		test.clock = test.clock.Add(test.config.ApplyTimeout)
+		test.poll()
+		test.wantReset(ResetApplyDeadline)
+	})
+	t.Run("not resent by the leader that sent it", func(t *testing.T) {
+		t.Parallel()
+		test := start(t)
+		test.poll()
+		test.eng.progress = engine.Progress{State: engine.NotStarted}
+		test.poll()
+		test.poll()
+		if len(test.eng.applied) != 1 {
+			t.Fatalf("reconfig sent %d times", len(test.eng.applied))
+		}
+	})
+	t.Run("resent when the send was not confirmed", func(t *testing.T) {
+		t.Parallel()
+		test := start(t)
+		test.unconfirmed()
+		test.poll()
+		record := test.record()
+		if len(test.eng.applied) != 2 || !reflect.DeepEqual(test.eng.applied[0], test.eng.applied[1]) ||
+			len(record.Acceptances) != 3 || !record.ReconfigSince.Equal(test.clock) || !record.LastNoChangeReconfig.IsZero() ||
+			len(test.wl.resetAlls) != 0 {
+			t.Fatalf("applied %v, record %+v", test.eng.applied, record)
+		}
+		test.eng.progress = engine.Progress{State: engine.Succeeded}
+		for _, name := range []string{"dp0", "dp1", "dp2"} {
+			test.member(name).Serving = true
+		}
+		test.eng.plan = engine.Plan{Kind: engine.Healthy}
+		test.poll()
+		if record := test.record(); record.Members["dp3@idD"] != Excluded || record.Phase != Serving {
+			t.Fatalf("record %+v", record)
+		}
+	})
+	t.Run("resend save fails", func(t *testing.T) {
+		t.Parallel()
+		test := start(t)
+		test.unconfirmed()
+		test.store.saveErrs = []error{errors.New("conflict")}
+		if err := test.pollErr(); err == nil || len(test.eng.applied) != 1 {
+			t.Fatalf("applied %d after a failed save", len(test.eng.applied))
+		}
+	})
+	t.Run("resend refused", func(t *testing.T) {
+		t.Parallel()
+		test := start(t)
+		test.unconfirmed()
+		test.eng.applyErr = errors.New("refused")
+		test.poll()
+		test.wantReset(ResetReconfigFailed)
 	})
 	t.Run("save fails before apply", func(t *testing.T) {
 		t.Parallel()
