@@ -25,7 +25,7 @@ type Recorder interface {
     IncidentOpened(incident *Incident)
     ReconfigStarted(reconfig *Reconfig, plan *Plan)
     ReconfigFinished(reconfig *Reconfig, progress Progress)
-    PodResetRequested(pod PodRef, err error)
+    PodResetRequested(pods []PodRef, err error)
     ResetAllRequested(reason ResetReason, pods []PodRef)
     ReleaseRequested(pods []PodRef, err error)
     SaveFailed(err error)
@@ -146,10 +146,10 @@ Called at the end of every `Step`.
 
 | | |
 |---|---|
-| **Input** | the Pod named in `Reset`, and the workload's answer |
-| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total`, once per Pod (not every poll). `ErrUnsupported` is logged, and the group keeps serving with fewer members. |
+| **Input** | the Pods named in `Reset`, and the workload's answer |
+| **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total` (one per Pod), once per call (not every poll). `ErrUnsupported` is logged, and the Pods the workload cannot handle stay as they are. |
 
-**Example.** `PodResetRequested({lws-0-3, d1}, nil)` → Event: `resetting lws-0-3 to bring dp3 back`
+**Example.** `PodResetRequested([{lws-0-2, c1}, {lws-0-3, d1}], nil)` → Event: `resetting lws-0-2, lws-0-3 to bring dp2, dp3 back`
 
 ### ResetAllRequested
 
@@ -209,7 +209,7 @@ All metrics carry `group` (`<namespace>/<workload name>`). Label values come fro
 | `llm_d_iro_phase` | gauge | `phase` | 1 for the current phase |
 | `llm_d_iro_phase_transitions_total` | counter | `from`, `to` | phase changes |
 | `llm_d_iro_members` | gauge | `state` | members by state: candidate, admitted, excluded, rejected |
-| `llm_d_iro_pod_resets_total` | counter | | single Pods IRO reset to bring members back |
+| `llm_d_iro_pod_resets_total` | counter | | Pods IRO reset to bring members back, one by one or several in one call |
 | `llm_d_iro_reconfigs_total` | counter | `change`, `outcome` | reconfigs by shape (retry, shrink, grow, replace) and result (succeeded, failed_joiners, failed_group, deadline) |
 | `llm_d_iro_resets_total` | counter | `reason` | resets IRO asked for, by [`ResetReason`](#objects). Recreations the workload did on its own are not counted here; they close incidents as `Recreated`. |
 | `llm_d_iro_incidents_total` | counter | `outcome` | closed incidents by outcome |
@@ -230,7 +230,7 @@ On the workload object (the LWS). Every Event of an incident starts with its ID.
 | `PhaseChanged` | Normal | any phase change |
 | `ReconfigStarted` | Normal | a reconfig is sent |
 | `ReconfigSucceeded` / `ReconfigFailed` | Normal / Warning | a reconfig finishes |
-| `PodReset` | Normal | IRO resets one Pod to bring its members back |
+| `PodReset` | Normal | IRO resets Pods to bring their members back |
 | `PodsReleased` | Normal | IRO releases Pods and serves below full |
 | `GroupReset` | Warning | IRO asks the workload to recreate the group |
 | `RecreateStopped` | Warning | the workload reports it gave up recreating the group |

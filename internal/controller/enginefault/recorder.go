@@ -17,7 +17,7 @@ type Recorder interface {
 	IncidentOpened(incident *Incident)
 	ReconfigStarted(reconfig *engine.Reconfig, plan *engine.Plan)
 	ReconfigFinished(reconfig *engine.Reconfig, progress engine.Progress)
-	PodResetRequested(pod workload.PodRef, err error)
+	PodResetRequested(pods []workload.PodRef, err error)
 	ResetAllRequested(reason ResetReason, pods []workload.PodRef)
 	ReleaseRequested(pods []workload.PodRef, err error)
 	SaveFailed(err error)

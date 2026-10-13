@@ -135,7 +135,7 @@ In order:
 | 4 | same | same | same | checks C1-C7, saves reconfig `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, reconfig in flight |
 | 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, reconfig in flight |
 | 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the reconfig, `Verify(dp0, dp1, dp2)` | serving |
-| 7 | same | same | `Plan`: Healthy | `lws-0-3` holds only excluded members: marks it `Removing`, saves, `Reset(lws-0-3, d1)` | serving |
+| 7 | same | same | `Plan`: Healthy | `lws-0-3` holds only excluded members: marks it `Removing`, saves, `Reset([lws-0-3 d1])` | serving |
 | 8 | `lws-0-3` (d1) Terminating | `dp0`-`dp2` Serving | `Plan`: Healthy | waits | serving |
 | 9 | `lws-0-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `dp3@idD`. No deadline. | serving |
 | ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves reconfig, `Apply` | serving, reconfig in flight |
@@ -264,10 +264,13 @@ flowchart TD
 ```
 
 1. Once the members of the last reconfig passed `Verify`, on a poll whose plan is `Healthy`, the controller
-   looks for Pods that hold only excluded members. It marks them `Removing`, saves, and calls `Reset`,
-   `ResetAll` or `Release`, per `--ft-capacity-restore` (C8). A Pod that is already gone is just forgotten.
+   looks for Pods that hold only excluded members. It marks them all `Removing`, saves once, and names them
+   all in one `Reset`, `ResetAll` or `Release`, per `--ft-capacity-restore` (C8). If a call that names several
+   Pods returns `ErrUnsupported`, it asks for each Pod alone, so a Pod the workload can never replace does not
+   keep the others below full. A Pod that is already gone is just forgotten.
    A Pod restarted in place is one of them once the reconfig that removed its old members finished.
-2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [reconfig](#reconfigs).
+2. After a `Reset`, the new Pods start on their own. Their members become candidates as each Pod becomes
+   `Ready`, and the policy admits them in ordinary [reconfigs](#reconfigs): one for all of them, or one as each is ready.
 3. There is one try, no budget. If the Pod cannot be reset (`ErrUnsupported`, or the engine cannot grow),
    or the new Pod's members are rejected (the join reconfig fails, or the new Pod restarts before joining),
    the group keeps serving with fewer members. The Pod's members are marked rejected, so it is not tried
@@ -314,7 +317,7 @@ never violated at runtime.
 | Faults come first | capacity is restored only while `serving` |
 | A failed save never advances the phase | the in-memory state keeps the last saved phase |
 | Never resets a group it cannot see | discovery failures wait |
-| Resets hit only what failed | `Reset` names one Pod by UID; `ResetAll` names the saved Pods by UID. Both are repeated until those Pods are gone. |
+| Resets hit only what failed | `Reset` names the failed Pods by UID; `ResetAll` names the saved Pods by UID. Both are repeated, one call per poll, until those Pods are gone. |
 | Never gives up on its own | no reset budget and no terminal phase. The workload's restart policy paces resets and decides when to stop. |
 | No startup deadline | `starting`, and a reset Pod coming back, take as long as they need |
 
@@ -328,7 +331,7 @@ never violated at runtime.
 | `--ft-diagnosis-timeout` | 75s | `DiagnosisTimeout` |
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
 | `--ft-verify-timeout` | 2m | `VerifyTimeout`: how long a failed check after a reconfig is retried. 0 resets on the first failure. |
-| `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod once and serves below full if that fails; `reset-all` resets the group, so it never stays below full; `release` frees the GPUs and serves below full. |
+| `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pods once and serves below full if that fails; `reset-all` resets the group, so it never stays below full; `release` frees the GPUs and serves below full. |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
 
@@ -358,8 +361,8 @@ Each engine and workload implementation registers its own flags.
   not fail while a member is paused for recovery; each engine doc names the probes that are safe, if any.
 - **Why the controller decides "same group".** It already remembers which Pods it asked to reset or
   release, so it can tell those from a lost one. The workload stays a plain reporter.
-- **Why reset one Pod first.** It is the smallest action that brings capacity back: only the failed Pod
-  restarts, and the other members keep serving. `ResetAll` stops the whole group while the model loads
-  again, and when this group is the only one serving the model, that is a full outage. So when the Pod
+- **Why reset the failed Pods first.** It is the smallest action that brings capacity back: only the failed Pods
+  restart, and the other members keep serving. `ResetAll` stops the whole group while the model loads
+  again, and when this group is the only one serving the model, that is a full outage. So when a Pod
   cannot come back, the default keeps serving with fewer members. `--ft-capacity-restore=reset-all` takes
   the outage to get back to full.

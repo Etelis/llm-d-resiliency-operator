@@ -53,7 +53,7 @@ flowchart LR
 | Controller | phases, deadlines, durability, whether it is still the same group, connecting Pods to members, resets, bringing capacity back, checks on every plan | engine states, ranks, Pod layout | [controller.md](controller.md) |
 | Journal | durable controller state, one writer at a time | what the bytes mean | [journal.md](journal.md) |
 | Telemetry | logs, metrics, Events, incident records, readiness. Best-effort, never read back. | how recovery decides anything | [telemetry.md](telemetry.md) |
-| Workload | reporting the group's Pods as they are now, resetting one Pod or all of them, releasing Pods | ranks, ports, engine processes, anything from before | [workload.md](workload.md) |
+| Workload | reporting the group's Pods as they are now, resetting some Pods or all of them, releasing Pods | ranks, ports, engine processes, anything from before | [workload.md](workload.md) |
 | Engine driver | reporting which members run on each Pod and their state, sending reconfigs, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](engine.md#interface) |
 | Engine policy | which members to remove or admit and when, how a reconfig is going | I/O, time, Kubernetes | [engine.md](engine.md#interface) |
 
@@ -149,7 +149,7 @@ sequenceDiagram
   end
   rect rgba(251, 188, 5, 0.15)
     Note over C,W: 2. Reset the failed Pod (phase: serving, 3 members)
-    C->>W: Reset(lws-0-3, UID d1)
+    C->>W: Reset([lws-0-3, UID d1])
     W-->>C: Discover: lws-0-3 back with UID d2, starting, then Ready
   end
   rect rgba(52, 168, 83, 0.12)
