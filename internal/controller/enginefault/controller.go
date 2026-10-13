@@ -20,6 +20,7 @@ type Config struct {
 	DiagnosisTimeout time.Duration
 	ApplyTimeout     time.Duration
 	VerifyTimeout    time.Duration
+	UnseenTimeout    time.Duration
 	FlapWindow       time.Duration
 	CapacityRestore  CapacityRestore
 }

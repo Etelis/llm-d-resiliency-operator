@@ -84,7 +84,7 @@ type Durations struct {
 }
 
 // ResetReason is a fixed set, so it can be a metric label.
-type ResetReason string // unrecoverable | reconfig_failed | diagnosis_deadline | apply_deadline | flap | verify_failed | exclusion_broken | capacity
+type ResetReason string // unrecoverable | reconfig_failed | diagnosis_deadline | apply_deadline | flap | verify_failed | exclusion_broken | capacity | unseen
 ```
 
 The controller keeps the **open** incident in its [`Record`](controller.md#objects), so a new leader
