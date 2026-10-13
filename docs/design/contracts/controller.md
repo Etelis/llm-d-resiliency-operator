@@ -37,6 +37,7 @@ type Config struct {
     DiagnosisTimeout time.Duration   // 75s: longest time in recovering without a reconfig
     ApplyTimeout     time.Duration   // 90s: longest time a reconfig may stay in flight
     VerifyTimeout    time.Duration   // 2m: how long a failed check after a reconfig is retried
+    UnseenTimeout    time.Duration   // 10m: longest time no admitted member can be read before the group is reset
     FlapWindow       time.Duration   // 2m: check C6
     CapacityRestore  CapacityRestore // reset-pod (default) | reset-all | release
 }
@@ -124,7 +125,8 @@ In order:
    Wait while a Pod is `Starting` or gives no members. On a `Healthy` plan, admit every member and go to
    `serving`. Stop here: no member is admitted yet, so there is nothing to check.
 4. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members). If it reads none of the
-   admitted members, stop here as in step 1. See [unknown members](#unknown-members).
+   admitted members, stop here as in step 1, or reset the group once that has lasted `UnseenTimeout`. See
+   [unknown members](#unknown-members).
 5. **Check the observation** (C1, C4, C5). A violation resets the group. Unknown members are not checked.
 6. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [reconfig](#reconfigs) is in flight.
    Check and send a new reconfig, verify the members of a reconfig that succeeded, or reset.
@@ -166,8 +168,8 @@ stateDiagram-v2
   starting --> serving: plan Healthy
   serving --> recovering: a fault is observed
   recovering --> serving: plan Healthy, or reconfig Succeeded
-  serving --> starting: ResetAll, after verification fails past window, capacity (reset-all), a grow that fails or misses its deadline, a plan failing C2 or C3, C4 or C5 broken
-  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, Apply refused, deadline, flap guard, a plan failing C1 to C3, C1, C4 or C5 broken
+  serving --> starting: ResetAll, after verification fails past window, capacity (reset-all), a grow that fails or misses its deadline, a plan failing C2 or C3, C4 or C5 broken, unseen too long
+  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, Apply refused, deadline, flap guard, a plan failing C1 to C3, C1, C4 or C5 broken, unseen too long
 ```
 
 Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
@@ -238,7 +240,7 @@ by a new plan. What happens depends on how many admitted members IRO can read. L
 |---|---|
 | all that are not lost | as usual |
 | some, and others are unknown | the group is not healthy: a `Healthy` plan, or a grow in `serving`, counts as a fault. A `Change` that passes the checks but names an unknown participant is not sent: the controller waits. If they stay unknown, the diagnosis deadline resets the group, which is what stops them. |
-| none, and some are unknown (the rest lost) | it cannot see the group, as when `Discover` fails: no incident, no plan, and its deadlines are paused |
+| none, and some are unknown (the rest lost) | it cannot see the group, as when `Discover` fails: no incident, no plan, and its deadlines are paused. If that lasts `UnseenTimeout`, counted from `UnseenSince`, the group is reset (reason `unseen`): a hung frontend, or every member hung, is not left alone forever. |
 
 An unknown member never becomes Terminal by timeout. IRO cannot tell a hung member from one only IRO cannot
 reach, and the router may still send it traffic: removing it would break C1. Only the engine (`Terminal`) or
@@ -352,7 +354,7 @@ never violated at runtime.
 | One reconfig at a time | a new plan is asked for only when no reconfig is in flight |
 | Faults come first | capacity is restored only while `serving` |
 | A failed save never advances the phase | the in-memory state keeps the last saved phase |
-| Never resets a group it cannot see | a failed `Discover`, or an `Observe` that reads no admitted member, waits with deadlines paused |
+| Never resets a group it cannot see | a failed `Discover` waits. An `Observe` that reads no admitted member waits with deadlines paused, up to `UnseenTimeout`. |
 | Resets hit only what failed | `Reset` names the failed Pods by UID; `ResetAll` names the saved Pods by UID. Both are repeated, one call per poll, until those Pods are gone. |
 | Never gives up on its own | no reset budget and no terminal phase. The workload's restart policy paces resets and decides when to stop. |
 | No startup deadline | `starting`, and a reset Pod coming back, take as long as they need |
@@ -367,6 +369,7 @@ never violated at runtime.
 | `--ft-diagnosis-timeout` | 75s | `DiagnosisTimeout` |
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
 | `--ft-verify-timeout` | 2m | `VerifyTimeout`: how long a failed check after a reconfig is retried. 0 resets on the first failure. |
+| `--ft-unseen-timeout` | 10m | `UnseenTimeout`: how long no admitted member may be readable before the group is reset. 0 waits forever. |
 | `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pods once and serves below full if that fails; `reset-all` resets the group, so it never stays below full; `release` frees the GPUs and serves below full. |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
@@ -378,10 +381,12 @@ Each engine and workload implementation registers its own flags.
 
 - **IRO cannot see the group.** A failed `Discover`, or an `Observe` that reads no admitted member, proves
   nothing about the group: IRO may be the one cut off. The controller keeps the phase, opens no incident,
-  asks for no plan, and pauses its deadlines. A group whose every member hangs looks the same, so that case
-  is left to the workload's probes where the engine doc allows them; otherwise the unseen gauge and alert in
-  [telemetry](telemetry.md) are the only signal. A real fault does not wait forever either: an engine that
-  gives up on recovery reports its members Terminal, and the group is reset once IRO sees it again.
+  asks for no plan, and pauses its deadlines. A group whose every member hangs, or whose single frontend
+  hangs, looks the same, so the wait is bounded: once no admitted member has been readable for
+  `UnseenTimeout`, the group is reset. The timeout is long, so a short blip on IRO's side never resets a
+  group that serves. A failed `Discover` never resets: IRO cannot see the Pods it would name. A real fault
+  does not wait that long either: an engine that gives up on recovery reports its members Terminal, and the
+  group is reset once IRO sees it again.
 - **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry
   reports it so people can see it. Recovery resumes when the workload recreates the group.
 - **Why verify only after a reconfig.** Verify does not gate traffic: the router follows the engine's native
