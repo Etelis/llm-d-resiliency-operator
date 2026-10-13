@@ -98,10 +98,10 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
 ## Known engine issues
 
 Found on 4 H200 ranks (DeepSeek-V2-Lite, DP/EP 4, `nixl_ep` from NIXL 1.3.2) with vllm#46370 at `384ba19`.
-IRO recovers from each, but not in place.
 
 | Issue | What IRO does |
 |---|---|
-| Removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep` | `Progress` fails the round on the new fault; the group is reset |
+| Removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep`: masking the highest rank shrinks the dispatched token slots, but the expert output keeps the full size. Trimming it to the dispatched slots before `combine` fixes it; with that change the highest rank, and ranks 1 and 3 together, are removed in place. | without the fix, `Progress` fails the round on the new fault and the group is reset |
+| A Pod that disappears (not just its processes) can leave survivors wedged: their workers fail on a Gloo connection reset in the per-step DP sync, the EngineCore blocks on the shared-memory broadcast, and the status stays `healthy` | the plan waits; the diagnosis deadline resets the group |
 | The DP coordinator (rank 0) dying goes unnoticed under load; the first request after an idle period faults the group | the probe wakes the idle rank, then a retry; a second one within `FlapWindow` resets the group |
 | NIXL 1.5.0, which vLLM pins, fails `prepMemView` when ranks connect on these nodes; 1.3.2 works | none: the group does not start |
