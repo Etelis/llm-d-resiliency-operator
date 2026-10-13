@@ -43,30 +43,22 @@ traffic router reads the engine's own health directly, not through this plugin.
 A member is one engine process that serves: a rank, a worker. The driver reports each member with the Pod it
 runs on.
 
-| Field | Means |
-|---|---|
-| `Name` | the engine's name for it, unique within its Pod, such as `m3` |
-| `Serving` | the router may send it traffic: the engine's own health |
-| `Terminal` | it will never serve again |
-| `Unknown` | the driver could not read it now. `Serving`, `Terminal` and `Joinable` are then false. |
-| `Joinable` | for a candidate only: it can be admitted now |
+| Field | Means | The driver must |
+|---|---|---|
+| `Name` | the engine's name for it, unique within its Pod, such as `m3` | |
+| `Serving` | the router may send it traffic: the engine's own health | report what the router uses, and never `Serving` for a candidate (checks [C1 and C5](../controller.md#safety-checks)) |
+| `Terminal` | it will never serve again | never report it `Serving` again, only `Terminal` or `Unknown` (check C4) |
+| `Unknown` | the driver could not read it now. `Serving`, `Terminal` and `Joinable` are then false. | use it whenever it cannot read a member, never guess `Terminal`: only a process known to be gone may be removed (check C1) |
+| `Joinable` | for a candidate only: it can be admitted now | report it false while the Pod is not `Ready`, so a loading Pod is not a candidate yet |
+
+A Pod gives all of its members, or none when the driver cannot list them, so at the end of `starting` the
+controller admits exactly the members it saw.
 
 A member's ID is `Name@PodIdentity`, such as `m3@idD`. The Pod's identity changes when the Pod is replaced or its
 engine restarts, so an ID names exactly one process in one Pod's life, and a replaced member gets a new ID.
 
 `Serving` is not "healthy". `Serving` is what the router sees. "Healthy" is the policy's `Healthy` plan, which
 may also use what the router does not see, such as a process that already exited.
-
-The rules the driver keeps when it reports members:
-
-| Rule | Why |
-|---|---|
-| A member the driver cannot read is `Unknown`, never `Terminal` by guess | only a process known to be gone may be removed (controller check [C1](../controller.md#safety-checks)) |
-| Once `Terminal`, never `Serving` again: later reported `Terminal` or `Unknown` | check C4 depends on it |
-| `Serving` means what the router uses | checks C1 and C5 reason about traffic |
-| Candidates do not report `Serving` | check C5 |
-| A Pod gives all of its members, or none when the driver cannot list them | at the end of `starting` the controller admits exactly the members it saw |
-| A Pod that is not `Ready` gives members that are not `Joinable` | a loading Pod is not a candidate yet, and an admitted Pod whose sidecar restarts keeps its members |
 
 **Lost members.** When a Pod is gone, `Terminating`, or has a new identity, the driver no longer sees the
 members that ran on it. Before it calls `Plan`, `Progress`, `Apply` or `Verify`, the controller adds each one to
