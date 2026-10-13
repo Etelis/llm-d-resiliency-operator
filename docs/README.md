@@ -2,31 +2,29 @@
 
 | I want to… | Read |
 | --- | --- |
-| understand what IRO is made of | [Architecture](architecture.md) |
-| understand engine fault recovery | [Design overview](design/engine-fault-recovery.md) |
-| see every state and transition | [State machine](design/engine-fault-state-machine.md) |
-| know why a rank was retried, removed or reset | [Decisions](design/engine-fault-decisions.md) |
-| add a new engine or workload type | [Adapters](design/adapters.md) |
-| understand restarts and leader election | [Journal and failover](design/journal-and-failover.md) |
-| see the LWS side and its RBAC | [LeaderWorkerSet workload](workloads/lws.md) |
-| debug a stuck group | [Operations](operations.md) |
-| look up a flag | [Configuration](configuration.md) |
+| understand what IRO is made of | [Components and contracts](design/contracts/README.md) |
+| see the phases and what the controller does in each | [Controller](design/contracts/controller.md) |
+| add a new engine | [Engine](design/contracts/engine.md) |
+| add a new workload type | [Workload](design/contracts/workload.md) |
+| understand restarts and leader changes | [Journal](design/contracts/journal.md) |
+| find logs, metrics and Events | [Telemetry](design/contracts/telemetry.md) |
+| see the LWS side and its RBAC | [LeaderWorkerSet](design/lws.md) |
+| deploy vLLM for IRO | [vLLM](design/vllm.md) |
+| look up a flag | [Controller](design/contracts/controller.md#configuration), [LeaderWorkerSet](design/lws.md), [vLLM](design/vllm.md#flags) |
 | check pinned dependency versions | [Upstream versions](upstream-versions.md) |
 
 ```text
 docs/
-├── README.md                          this page
-├── architecture.md
+├── README.md                 this page
 ├── design/
-│   ├── engine-fault-recovery.md       start here for engine faults
-│   ├── engine-fault-state-machine.md
-│   ├── engine-fault-decisions.md
-│   ├── adapters.md
-│   └── journal-and-failover.md
-├── workloads/
-│   └── lws.md
-├── diagrams/                          figures used by the docs
-├── operations.md
-├── configuration.md
+│   ├── contracts/
+│   │   ├── README.md         start here
+│   │   ├── controller.md
+│   │   ├── engine.md
+│   │   ├── workload.md
+│   │   ├── journal.md
+│   │   └── telemetry.md
+│   ├── lws.md                LeaderWorkerSet workload and journal
+│   └── vllm.md               vLLM engine
 └── upstream-versions.md
 ```
