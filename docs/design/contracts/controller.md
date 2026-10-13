@@ -272,8 +272,12 @@ An engine that cannot prove that no member got a reconfig never says `NotStarted
 or runs into its deadline, and the group is reset.
 
 **After a reconfig succeeds**, the controller saves its participants and joiners in `Verifying` and calls
-`Verify` on them. A failure is retried for `VerifyTimeout`; then the group is reset (reason `verify_failed`).
-A new leader finds `Verifying` in the journal and continues the check. Verify runs only here: IRO checks
+`Verify` on them every poll until it passes. Members the reconfig removed are already out and are not
+checked. One failed request is not a fault: a failure is retried for `VerifyTimeout`, and only a member that
+still cannot generate after that resets the group (reason `verify_failed`, naming every member that failed).
+If the engine reports a fault meanwhile, or a member becomes unknown, the check is dropped and the group goes
+to `recovering`, where the policy can remove a dead member in place. While IRO cannot see the group, the
+retry window is paused like the deadlines. A new leader finds `Verifying` in the journal and continues the check. Verify runs only here: IRO checks
 what it changed, nothing else. A fresh group, or one that recovered without a reconfig, goes to `serving`
 on a `Healthy` plan.
 
@@ -382,6 +386,14 @@ Each engine and workload implementation registers its own flags.
   health. Its job is to catch a recovery the engine reports as done but that cannot generate. That risk
   comes from what IRO changed, so that is when it checks. One slow completion is not a fault, so a failure
   is retried for `VerifyTimeout` before the reset.
+- **Why a failed check resets the whole group.** It happens only when the engine reports every checked
+  member `Serving` and one still cannot generate after `VerifyTimeout`. The checked members are admitted and
+  the engine depends on them: after a shrink or a retry they are every member left, and in expert parallel
+  every rank takes part in every step. No smaller action is safe. A reconfig removes only Terminal members
+  (C1), and a Pod is reset only once the engine no longer depends on it (C8). Resetting the failing member's
+  Pod would be a new fault for every member that shares a step with it, and its replacement comes back only
+  if the engine can grow. Keeping the member admitted is not safe either: the router keeps sending it traffic
+  that fails. `--ft-capacity-restore` does not apply: it is about Pods whose members a reconfig already removed.
 - **No give-up state.** IRO resets whenever recovery in place cannot help. How often a group may be
   recreated, and when to stop, is the workload's restart policy (LWS `restartBackoff`, `maxGroupRestarts`).
 - **Restarts in place.** Kubelet restarts a crashed or probe-failed container without replacing its Pod. A

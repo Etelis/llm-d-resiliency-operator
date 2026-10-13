@@ -221,7 +221,7 @@ after a reconfig succeeds, for the members that took part or joined.
 | | |
 |---|---|
 | **Input** | the latest [`Observation`](#objects), and the members to check |
-| **Output** | `nil` when every member produced tokens. An error naming the first that did not. |
+| **Output** | `nil` when every member produced tokens. An error naming every member that did not. |
 | **Side effects** | a few tokens of inference, marked so they are not counted as user traffic |
 
 **Example.**
@@ -229,7 +229,7 @@ after a reconfig succeeds, for the members that took part or joined.
 ```go
 Verify(ctx, obs, []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"})
 // nil
-// or: error "dp1@idB: no tokens generated". The controller retries for --ft-verify-timeout, then resets.
+// or: error "dp1@idB: no tokens generated". The controller retries every poll for --ft-verify-timeout, then resets.
 ```
 
 ### Plan
