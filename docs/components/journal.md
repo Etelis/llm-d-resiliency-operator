@@ -1,37 +1,33 @@
 # Journal
 
-The journal keeps the controller's state for one engine group, so a new leader can pick up where the
-last one stopped. It answers "what was IRO doing?", not "which Pods exist" (that is the
-[workload](workloads/index.md)).
+## What it does
 
-It stores bytes and never looks inside them. The schema is the controller's
-[`Record`](controller.md#objects). Today it is part of `Workload` (`Load`, `Save`); it gets its own
-contract so it can be replaced or faked on its own.
+The journal keeps the controller's state for one engine group, so a new leader can pick up where the last one
+stopped. It answers "what was IRO doing?", not "which Pods exist" (that is the [workload](workloads/index.md)).
 
-## Interface
+It stores bytes and never looks inside them. The schema is the controller's [`Record`](controller.md#objects).
+It is its own component, apart from the workload: the workload keeps no memory and the journal is all memory, a
+set with several engine groups needs one record per group, and tests can fake it alone.
 
-```go
-type Journal interface {
-    Load(ctx context.Context) (data []byte, version string, err error)
-    Save(ctx context.Context, data []byte, version string) (string, error)
-}
-```
+## What it talks to
 
-## Objects
+| With | Calls | When | Returns |
+|---|---|---|---|
+| Controller → journal | `Load` | when it becomes the leader, and after a conflict | the saved record and its version |
+| | `Save` | before every action, and after each change | the new version, or a conflict |
+| Journal → storage | the store's own API, such as a ConfigMap owned by the workload object | inside the calls above | |
 
-```go
-// ErrConflict means the record is not at the version Save was given: another writer changed or deleted it,
-// or, for "", it already exists.
-var ErrConflict = errors.New("journal conflict")
-```
+## When the controller uses it
 
-The record itself is opaque `[]byte`. Its content is defined by the controller's [`Record`](controller.md#objects).
+The controller saves before it acts: before a reconfig, before a workload call, and on every phase change. It
+never acts on state it could not save, so a failed `Save` stops the step, and its phase in memory stays at the
+last saved one.
 
-## Functions
+[example journal-lost]: ../scenarios/journal-lost.json
 
-### Load
+## Reading the record
 
-Reads the saved record.
+`Load` reads the saved record.
 
 | | |
 |---|---|
@@ -40,16 +36,17 @@ Reads the saved record.
 | **Errors** | the store cannot be read |
 | **Side effects** | none |
 
-**Example.**
-
 ```go
 Load(ctx) // first run of IRO for this group: nil, "", nil. The controller starts a new group.
 Load(ctx) // after a leader change: {"phase":"recovering","reconfig":{"id":"iro-ft-7c1e",...},...}, "v42", nil
 ```
 
-### Save
+A bad record does not stop the manager: if `Load` fails or the bytes do not parse, the runner logs it and tries
+again on the next poll.
 
-Writes the record, unless someone else wrote it first.
+## Saving the record
+
+`Save` writes the record, unless someone else wrote it first.
 
 | | |
 |---|---|
@@ -57,7 +54,7 @@ Writes the record, unless someone else wrote it first.
 | **Output** | the new version. `ErrConflict` when the record is not at that version: changed or deleted by someone else, or, for `""`, already there. Another error otherwise. |
 | **Side effects** | the write only |
 
-**Example**, two IRO processes that both think they lead:
+Two IRO processes that both think they lead:
 
 ```go
 // process A and process B both loaded version 41.
@@ -66,22 +63,35 @@ B.Save(ctx, recordB, "41") // ErrConflict. B's state is not saved, so B does not
 B.Save(ctx, recordB, "")   // ErrConflict: the record exists. "" only creates.
 ```
 
-## Rules
+After `ErrConflict` the controller drops its state and loads again, and continues from the saved record as after
+a leader change, deadlines included. If the record was deleted, it starts over as on IRO's first run.
 
 | Rule | Why |
 |---|---|
-| The bytes are opaque. The controller owns the schema. | the journal never interprets recovery state |
 | `Save` is compare-and-swap on the version it is given. The journal keeps no version of its own. | two leaders can never both win, and a writer that lost one race is not stuck: it loads the current version and goes on |
 | A change that leaves the record alone, such as a new annotation, is not a conflict | metadata edits must not stop recovery |
-| `Save` never recreates a deleted record. With a version it returns `ErrConflict`; `""` only creates. | a writer that cannot prove its state is current must not write it back. Deleting the record is how a person makes IRO forget the group. |
-| The record lives and dies with the workload object | a new workload with the same name starts clean |
+| `Save` never recreates a deleted record. With a version it returns `ErrConflict`; `""` only creates. | a writer that cannot prove its state is current must not write it back |
+| The bytes are opaque | the journal never interprets recovery state |
 
-## Considerations
+## Lifetime
 
-- **A failed `Save` stops the step.** The controller never acts on state it could not save. Its phase in memory stays at the last saved one.
-- **After `ErrConflict` the controller loads again.** It drops its state and continues from the saved record,
-  as after a leader change, deadlines included. If the record was deleted, it starts over as on IRO's first run.
-- **A bad record does not stop the manager.** If `Load` fails or the bytes do not parse, the runner logs and tries again on the next poll.
-- **Why not part of the workload.** The workload keeps no memory; the journal is all memory. A set with several
-  engine groups needs one record per group, and tests can fake the journal alone. The implementation can still
-  come from the workload module, because it needs the workload object for the owner reference.
+The record lives and dies with the workload object, so a new workload with the same name starts clean.
+Deleting the record is how a person makes IRO forget the group: the next leader starts over, and admits a group
+that serves without resetting it.
+
+## API reference
+
+### Interface
+
+```go
+type Journal interface {
+    Load(ctx context.Context) (data []byte, version string, err error)
+    Save(ctx context.Context, data []byte, version string) (string, error)
+}
+
+// ErrConflict means the record is not at the version Save was given: another writer changed or deleted it,
+// or, for "", it already exists.
+var ErrConflict = errors.New("journal conflict")
+```
+
+The record itself is opaque `[]byte`; its content is the controller's [`Record`](controller.md#objects).
