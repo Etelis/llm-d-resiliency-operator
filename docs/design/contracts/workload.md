@@ -8,8 +8,8 @@ The workload owns the Pods of one engine group. It does four things:
 - **releases** Pods: removes them and frees their GPUs. It never adds Pods.
 
 It remembers nothing: no earlier calls, no earlier groups. Deciding whether this is still the same group
-is the [controller's](controller.md#reading-discover) job. It knows nothing about engines: no ranks, ports
-or processes. The first implementation, LWS, comes with its own PR and doc.
+is the [controller's](controller.md#reading-discover) job. It knows nothing about engines beyond which of its
+containers run one, which is configuration: no ranks, ports or processes. The first implementation, LWS, comes with its own PR and doc.
 
 ## Interface
 
@@ -38,7 +38,7 @@ type Pod struct {
     UID      string
     IP       string
     Index    int      // position in the group, fixed for the Pod's life
-    Identity string   // UID + container IDs + restart counts. Changes when any container restarts.
+    Identity string   // UID + the engine containers' IDs and restart counts. Changes when the Pod is replaced or an engine container restarts, and for nothing else.
     Node     string   // the node it runs on, empty until scheduled
     State    PodState
 }
@@ -155,7 +155,7 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
 | No memory. Every answer comes from the cluster as it is now. | a restarted IRO or a new leader gets the same answers |
 | `Discover` fails only when it cannot read the workload, or its spec is not supported | the controller should see starting and terminating Pods, not lose sight of the group |
 | `Pods` are sorted by `Index`, and a Pod keeps its `Index` for life | stable addressing for the engine driver |
-| `Pod.Identity` changes when any container restarts | a restarted process is never mistaken for the old one |
+| `Pod.Identity` changes when the Pod is replaced or an engine container restarts, and for nothing else | a restarted engine is never mistaken for the old one, and a sidecar restart does not look like lost members |
 | `Reset`, `ResetAll` and `Release` touch only the Pods they name, by UID | a late call can never hit a new Pod |
 | All three can be repeated: once the named Pods are gone, they do nothing | the controller repeats them until `Discover` shows the result |
 | `Reset` never recreates the rest of the group. If it would have to, it returns `ErrUnsupported`. | the healthy members keep serving |
@@ -177,6 +177,11 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
   not only once the leader is deleted. Otherwise the controller may plan a reconfig for a group that is about to go.
 - **Recreating vs. stopped.** `Recreating` is temporary: the controller waits. `RecreateStopped` is
   the workload saying it gave up: the controller waits too, and telemetry reports it.
+- **Engine containers.** The workload must know which containers run the engine. If it also counts a
+  sidecar, a sidecar restart looks like an engine restart: the members are lost and their new IDs serve
+  without being admitted, which breaks C5 and resets the group. If it leaves an engine container out, a
+  restarted engine passes for the old process. `Recreating` is different: it predicts what the workload itself
+  will do, so it follows the workload's own restart policy, which may count every container.
 
 ## Later: disaggregated sets
 

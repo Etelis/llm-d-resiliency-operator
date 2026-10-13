@@ -53,7 +53,7 @@ type Capabilities struct {
 // Member is one engine member (a rank, a worker...) as the driver sees it now.
 type Member struct {
     Pod         PodRef
-    PodIdentity string // copied from the Pod, so the ID changes when the Pod restarts
+    PodIdentity string // copied from the Pod, so the ID changes when the Pod is replaced or its engine restarts
     Name        string // the engine's name for it, unique within the Pod, e.g. "dp3"
     Serving     bool   // the router may send it traffic: the engine's native health
     Terminal    bool   // will never serve again
@@ -279,7 +279,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 
 | Rule | Why |
 |---|---|
-| Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod restarts, so exclusions and reconfigs name exactly one process |
+| Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod is replaced or its engine restarts, so exclusions and reconfigs name exactly one process |
 | No memory. Addresses and anything else the driver needs travel in `Observation.Engine`. | a new leader needs no warm-up. The driver may still cache internally, keyed by Pod identity. |
 | Pods that are not `Ready` give no members, or members that are not Joinable | a loading Pod is not a candidate yet |
 | A Pod gives all of its members or none | the controller admits, at the end of `starting`, exactly the members it saw |

@@ -220,7 +220,7 @@ next group: a candidate that could not join, or an excluded member whose Pod is 
 | member reported on a saved Pod | matches it by ID |
 | member reported on a new, `Ready` Pod | records it as a candidate |
 | admitted member not reported (its Pod is unreachable) | treats it as unknown: not Serving, not Terminal |
-| admitted member on a Pod that is gone, `Terminating` or restarted | lost: added to the observation as Terminal, `Detail: "pod lost"` |
+| admitted member on a Pod that is gone, `Terminating` or has a new identity (replaced, or its engine restarted) | lost: added to the observation as Terminal, `Detail: "pod lost"` |
 
 ### Reconfigs
 
