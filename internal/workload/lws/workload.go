@@ -249,11 +249,9 @@ func annotated(pod *corev1.Pod, key string) bool {
 func identity(pod *corev1.Pod, engines []string) (string, error) {
 	hash := sha256.New()
 	hash.Write([]byte(pod.UID))
-	for _, name := range engines {
-		if !slices.ContainsFunc(slices.Concat(pod.Spec.Containers, pod.Spec.InitContainers),
-			func(container corev1.Container) bool { return container.Name == name }) {
-			return "", fmt.Errorf("pod %s has no container %s", pod.Name, name)
-		}
+	if len(engines) > 0 && !slices.ContainsFunc(slices.Concat(pod.Spec.Containers, pod.Spec.InitContainers),
+		func(container corev1.Container) bool { return slices.Contains(engines, container.Name) }) {
+		return "", fmt.Errorf("pod %s has none of the engine containers %v", pod.Name, engines)
 	}
 	add := func(specs []corev1.Container, list []corev1.ContainerStatus) {
 		for index := range specs {

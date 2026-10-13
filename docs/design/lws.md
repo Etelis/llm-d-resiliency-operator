@@ -19,7 +19,7 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 | `Reset` | under `RecreateGroupOnPodRestart`: `ErrUnsupported`, because deleting any Pod recreates the whole group. Under `None`: delete each named worker with a UID precondition, and LWS recreates each one alone. A list that names the leader: `ErrUnsupported` before anything is deleted, because deleting it takes its workers with it. |
 | `ResetAll` | delete the leader with a UID precondition and foreground propagation, so the old leader stays `Terminating` until its workers are gone. `NotFound` or `Conflict` count as done. |
 | `Release` | `ErrUnsupported`: LWS cannot remove a chosen Pod from a running group |
-| Flags | `--lws-namespace` (default `default`), `--lws-name`, `--lws-engine-containers` (a named container a Pod lacks makes `Discover` fail) |
+| Flags | `--lws-namespace` (default `default`), `--lws-name`, `--lws-engine-containers` (each Pod must have at least one of them, or `Discover` fails; leader and workers may name theirs differently) |
 
 ## Journal
 

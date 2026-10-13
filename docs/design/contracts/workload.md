@@ -38,7 +38,7 @@ type Pod struct {
     UID      string
     IP       string
     Index    int      // position in the group, fixed for the Pod's life
-    Identity string   // UID + the engine containers' IDs and restart counts. Changes when the Pod is replaced or an engine container restarts, and for nothing else.
+    Identity string   // UID + the engine containers' IDs and restart counts. Changes while the Pod starts, then only when it is replaced or an engine container restarts.
     Node     string   // the node it runs on, empty until scheduled
     State    PodState
 }
@@ -155,7 +155,7 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
 | No memory. Every answer comes from the cluster as it is now. | a restarted IRO or a new leader gets the same answers |
 | `Discover` fails only when it cannot read the workload, or its spec is not supported | the controller should see starting and terminating Pods, not lose sight of the group |
 | `Pods` are sorted by `Index`, and a Pod keeps its `Index` for life | stable addressing for the engine driver |
-| `Pod.Identity` changes when the Pod is replaced or an engine container restarts, and for nothing else | a restarted engine is never mistaken for the old one, and a sidecar restart does not look like lost members |
+| Once its engine containers run, `Pod.Identity` changes only when the Pod is replaced or an engine container restarts | a restarted engine is never mistaken for the old one, and a sidecar restart does not look like lost members |
 | `Reset`, `ResetAll` and `Release` take a list and touch only the Pods they name, by UID | a late call can never hit a new Pod |
 | All three can be repeated: once the named Pods are gone, they do nothing | the controller repeats them until `Discover` shows the result |
 | `Reset` never recreates the rest of the group. If it would have to, it returns `ErrUnsupported`. | the healthy members keep serving |

@@ -54,20 +54,22 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 }
 
 func (fsm *controller) remove(ctx context.Context, next *Record, pods []workload.PodRef, record bool) {
+	release := fsm.config.CapacityRestore == RestoreRelease
 	var err error
-	if fsm.config.CapacityRestore == RestoreRelease {
+	if release {
 		err = fsm.wl.Release(ctx, pods)
-		if record {
-			fsm.recorder.ReleaseRequested(pods, err)
-		}
 	} else {
 		err = fsm.wl.Reset(ctx, pods)
-		if record {
-			fsm.recorder.PodResetRequested(pods, err)
-		}
+	}
+	split := errors.Is(err, workload.ErrUnsupported) && len(pods) > 1
+	switch {
+	case record && !split && release:
+		fsm.recorder.ReleaseRequested(pods, err)
+	case record && !split:
+		fsm.recorder.PodResetRequested(pods, err)
 	}
 	switch {
-	case errors.Is(err, workload.ErrUnsupported) && len(pods) > 1:
+	case split:
 		for _, pod := range pods {
 			fsm.remove(ctx, next, []workload.PodRef{pod}, record)
 		}

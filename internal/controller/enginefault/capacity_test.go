@@ -108,6 +108,7 @@ func TestResetSeveralPods(t *testing.T) {
 		if len(test.wl.resetCalls) != 3 {
 			t.Fatalf("reset calls %v", test.wl.resetCalls)
 		}
+		test.wantCalls("PodResetRequested lws-0-2", "PodResetRequested lws-0-3")
 		test.wantKept("dp2@idC")
 		if test.record().Members["dp3@idD"] != Rejected {
 			t.Fatalf("record %+v", test.record())
