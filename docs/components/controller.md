@@ -166,18 +166,30 @@ RecreateStopped: false
 
 ![Controller phases: starting, serving, recovering](../figures/phases.svg)
 
-Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
-and the group goes to `starting`, which waits until the old Pods are gone (see [Reading Discover](#reading-discover)). Whether a reconfig is in flight is not a phase; it is the `Reconfig` field,
-described [below](#reconfigs). A reconfig can run in `recovering` (fixing a fault) or in `serving` (bringing a Pod's members back).
+The controller is always in one of three states. There is no final state: it never gives up on a group.
 
-| Phase | Meaning | Controller does | Leaves when |
-|---|---|---|---|
-| `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then records the Pods every poll, checks nothing, waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
-| `serving` | healthy, maybe below full | verifies the members of a reconfig that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A reconfig that admits candidates runs here. | a fault, or a reset (verification, capacity with `reset-all`, a failed grow) |
-| `recovering` | the engine reports a fault | probes once on entry. Without a reconfig: plans every poll, resets on `Unrecoverable`, and sends a reconfig no sooner than 2 polls in. With a reconfig: checks `Progress` every poll, and sends it again only as in [Reconfigs](#reconfigs). | `Healthy` plan, or reconfig `Succeeded`. Or reset. |
+| State | Meaning | The controller |
+|---|---|---|
+| `starting` | the group is coming up: a new group, or one that was just reset | waits for every member, then admits them all. No deadline: how fast the group comes up is the workload's call. |
+| `serving` | the group serves, maybe with fewer members than it started with | checks the result of a recovery it just made, and [brings failed Pods back](#restoring-capacity) |
+| `recovering` | the engine reports a fault | removes dead members in place with a [reconfig](#reconfigs), or retries |
 
-In `serving`, a `Healthy` plan is fine and a `Change` that only adds members is a reconfig to grow back.
-Any other plan is a fault.
+| From | To | When |
+|---|---|---|
+| `starting` | `serving` | every member is up: the policy says `Healthy` |
+| `serving` | `recovering` | the engine reports a fault: the policy says anything but `Healthy`, other than adding members back |
+| `recovering` | `serving` | the fault is repaired: the policy says `Healthy`, or the reconfig succeeded |
+| `serving` or `recovering` | `starting` | recovery in place cannot help, so IRO resets the group (`ResetAll`). Each [failure](../failures/index.md) says when. |
+
+Details per state:
+
+- **`starting`**: while Pods of the old group remain, the controller repeats the `ResetAll` and does nothing
+  else (see [Reading Discover](#reading-discover)). Then it records the Pods every poll and ignores any plan
+  but `Healthy`.
+- **`serving`**: plans every poll. A plan that only adds members runs a reconfig here too, to admit the
+  members of a Pod that was reset.
+- **`recovering`**: probes once on entry, and sends a reconfig no sooner than 2 polls in. Resets on
+  `Unrecoverable`. While a reconfig runs, it follows `Progress` instead of planning.
 
 ### Reading Discover
 
