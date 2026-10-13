@@ -174,14 +174,14 @@ func TestPodLostWhileServing(t *testing.T) {
 
 func TestOutcome(t *testing.T) {
 	t.Parallel()
-	round := func(remove, add []engine.MemberID) RoundResult {
-		return RoundResult{Round: engine.Round{Remove: remove, Add: add}, Progress: engine.Progress{State: engine.Succeeded}}
+	reconfig := func(remove, add []engine.MemberID) ReconfigResult {
+		return ReconfigResult{Reconfig: engine.Reconfig{Remove: remove, Add: add}, Progress: engine.Progress{State: engine.Succeeded}}
 	}
-	for want, rounds := range map[Outcome][]RoundResult{
-		Shrunk:    {round(ids("a@1"), nil)},
-		Recovered: {round(ids("a@1"), ids("b@2"))},
+	for want, reconfigs := range map[Outcome][]ReconfigResult{
+		Shrunk:    {reconfig(ids("a@1"), nil)},
+		Recovered: {reconfig(ids("a@1"), ids("b@2"))},
 	} {
-		if got := outcome(&Incident{Rounds: rounds}); got != want {
+		if got := outcome(&Incident{Reconfigs: reconfigs}); got != want {
 			t.Fatalf("outcome %s, want %s", got, want)
 		}
 	}

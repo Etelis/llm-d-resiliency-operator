@@ -9,10 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/llm-d/llm-d-resiliency-operator/internal/engine"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/journal"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
 )
 
@@ -20,9 +23,11 @@ type fakeWorkload struct {
 	group       workload.Group
 	discoverErr error
 	resetErr    error
+	resetFor    func([]workload.PodRef) error
 	releaseErr  error
 	discovers   int
 	resets      []workload.PodRef
+	resetCalls  [][]workload.PodRef
 	resetAlls   [][]workload.PodRef
 	releases    [][]workload.PodRef
 }
@@ -34,9 +39,14 @@ func (fake *fakeWorkload) Discover(context.Context) (workload.Group, error) {
 	return group, fake.discoverErr
 }
 
-func (fake *fakeWorkload) Reset(_ context.Context, pod workload.PodRef) error {
-	fake.resets = append(fake.resets, pod)
-	return fake.resetErr
+func (fake *fakeWorkload) Reset(_ context.Context, pods []workload.PodRef) error {
+	fake.resetCalls = append(fake.resetCalls, slices.Clone(pods))
+	err := fake.resetErr
+	if fake.resetFor != nil {
+		err = fake.resetFor(pods)
+	}
+	fake.resets = append(fake.resets, pods...)
+	return err
 }
 
 func (fake *fakeWorkload) ResetAll(_ context.Context, pods []workload.PodRef) error {
@@ -58,7 +68,8 @@ type fakeEngine struct {
 	verifyErr  error
 	hangVerify bool
 	probes     int
-	applied    []engine.Round
+	applied    []engine.Reconfig
+	appliedOn  []engine.Observation
 	verified   [][]engine.MemberID
 	admitted   []engine.MemberID
 	candidates []engine.MemberID
@@ -87,13 +98,18 @@ func (fake *fakeEngine) Probe(context.Context, engine.Observation) error {
 	return nil
 }
 
-//nolint:gocritic // The interface passes the round by value.
-func (fake *fakeEngine) Apply(_ context.Context, _ engine.Observation, round engine.Round) ([]engine.Acceptance, error) {
+//nolint:gocritic // The interface passes the reconfig by value.
+func (fake *fakeEngine) Apply(_ context.Context, obs engine.Observation, reconfig engine.Reconfig) ([]engine.Acceptance, error) {
 	if fake.onApply != nil {
 		fake.onApply()
 	}
-	fake.applied = append(fake.applied, round)
-	return nil, fake.applyErr
+	fake.applied = append(fake.applied, reconfig)
+	fake.appliedOn = append(fake.appliedOn, obs)
+	var acceptances []engine.Acceptance
+	for _, id := range append(slices.Clone(reconfig.Participants), reconfig.Add...) {
+		acceptances = append(acceptances, engine.Acceptance{Member: id, Accepted: fake.applyErr == nil})
+	}
+	return acceptances, fake.applyErr
 }
 
 func (fake *fakeEngine) Verify(ctx context.Context, _ engine.Observation, members []engine.MemberID) error {
@@ -110,40 +126,57 @@ func (fake *fakeEngine) Plan(_ engine.Observation, admitted, candidates []engine
 	return fake.plan
 }
 
-func (fake *fakeEngine) Progress(engine.Observation, engine.Round) engine.Progress {
+func (fake *fakeEngine) Progress(engine.Observation, engine.Reconfig) engine.Progress {
 	return fake.progress
 }
 
 type fakeJournal struct {
 	data     []byte
+	version  int
 	loadErrs []error
 	saveErrs []error
 	loads    int
 	saves    int
 }
 
-func (fake *fakeJournal) Load(context.Context) ([]byte, error) {
+func (fake *fakeJournal) current() string {
+	if fake.data == nil && fake.version == 0 {
+		return ""
+	}
+	if fake.version == 0 {
+		fake.version = 1
+	}
+	return strconv.Itoa(fake.version)
+}
+
+func (fake *fakeJournal) Load(context.Context) ([]byte, string, error) {
 	fake.loads++
 	if len(fake.loadErrs) > 0 {
 		err := fake.loadErrs[0]
 		fake.loadErrs = fake.loadErrs[1:]
-		return nil, err
+		return nil, "", err
 	}
-	return slices.Clone(fake.data), nil
+	return slices.Clone(fake.data), fake.current(), nil
 }
 
-func (fake *fakeJournal) Save(_ context.Context, data []byte) error {
+func (fake *fakeJournal) Save(_ context.Context, data []byte, version string) (string, error) {
 	if len(fake.saveErrs) > 0 {
 		err := fake.saveErrs[0]
 		fake.saveErrs = fake.saveErrs[1:]
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
+	if version != fake.current() {
+		return "", journal.ErrConflict
+	}
 	fake.saves++
+	fake.version++
 	fake.data = slices.Clone(data)
-	return nil
+	return strconv.Itoa(fake.version), nil
 }
+
+func (fake *fakeJournal) remove() { fake.data, fake.version = nil, 0 }
 
 type fakeRecorder struct {
 	calls  []string
@@ -164,16 +197,20 @@ func (fake *fakeRecorder) IncidentOpened(incident *Incident) {
 	fake.add("IncidentOpened %v %v", incident.Affected, incident.Nodes)
 }
 
-func (fake *fakeRecorder) RoundStarted(round *engine.Round, _ *engine.Plan) {
-	fake.add("RoundStarted remove=%v add=%v", round.Remove, round.Add)
+func (fake *fakeRecorder) ReconfigStarted(reconfig *engine.Reconfig, _ *engine.Plan) {
+	fake.add("ReconfigStarted remove=%v add=%v", reconfig.Remove, reconfig.Add)
 }
 
-func (fake *fakeRecorder) RoundFinished(_ *engine.Round, progress engine.Progress) {
-	fake.add("RoundFinished %s", progress.State)
+func (fake *fakeRecorder) ReconfigFinished(_ *engine.Reconfig, progress engine.Progress) {
+	fake.add("ReconfigFinished %s", progress.State)
 }
 
-func (fake *fakeRecorder) PodResetRequested(pod workload.PodRef, _ error) {
-	fake.add("PodResetRequested %s", pod.Name)
+func (fake *fakeRecorder) PodResetRequested(pods []workload.PodRef, _ error) {
+	names := make([]string, 0, len(pods))
+	for _, pod := range pods {
+		names = append(names, pod.Name)
+	}
+	fake.add("PodResetRequested %s", strings.Join(names, ","))
 }
 
 func (fake *fakeRecorder) ResetAllRequested(reason ResetReason, pods []workload.PodRef) {

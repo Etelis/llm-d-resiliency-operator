@@ -324,32 +324,46 @@ func annotate(key string) func(*corev1.Pod) {
 
 func restart(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].RestartCount = 1 }
 
+var errNoUID = errors.New("no UID")
+
 func TestReset(t *testing.T) {
 	t.Parallel()
 	worker := workload.PodRef{Name: "model-0-1", UID: "model-0-1-uid"}
+	other := workload.PodRef{Name: "model-0-2", UID: "model-0-2-uid"}
+	leader := workload.PodRef{Name: "model-0", UID: "model-0-uid"}
 	for name, test := range map[string]struct {
 		policy  string
-		pod     workload.PodRef
-		deleted bool
+		pods    []workload.PodRef
+		deletes int
 		err     error
 	}{
-		"recreates group": {policy: "RecreateGroupOnPodRestart", pod: worker, err: workload.ErrUnsupported},
-		"leader":          {policy: "None", pod: workload.PodRef{Name: "model-0", UID: "model-0-uid"}, err: workload.ErrUnsupported},
-		"worker":          {policy: "None", pod: worker, deleted: true},
-		"stale UID":       {policy: "None", pod: workload.PodRef{Name: "model-0-1", UID: "old"}},
+		"recreates group":  {policy: "RecreateGroupOnPodRestart", pods: []workload.PodRef{worker}, err: workload.ErrUnsupported},
+		"leader":           {policy: "None", pods: []workload.PodRef{leader}, err: workload.ErrUnsupported},
+		"leader in a list": {policy: "None", pods: []workload.PodRef{worker, leader}, err: workload.ErrUnsupported},
+		"worker":           {policy: "None", pods: []workload.PodRef{worker}, deletes: 1},
+		"two workers":      {policy: "None", pods: []workload.PodRef{worker, other}, deletes: 2},
+		"stale UID":        {policy: "None", pods: []workload.PodRef{{Name: "model-0-1", UID: "old"}}},
+		"no UID":           {policy: "None", pods: []workload.PodRef{worker, {Name: "model-0-2"}}, err: errNoUID},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			world := newCluster(t, leaderWorkerSet(test.policy), readyPod(0), readyPod(1))
+			world := newCluster(t, leaderWorkerSet(test.policy), readyPod(0), readyPod(1), readyPod(2))
 			instance := newWorkload(t, world)
-			if err := instance.Reset(t.Context(), test.pod); !errors.Is(err, test.err) {
+			err := instance.Reset(t.Context(), test.pods)
+			if test.err == errNoUID {
+				if err == nil || errors.Is(err, workload.ErrUnsupported) {
+					t.Fatalf("error %v, want a missing UID", err)
+				}
+			} else if !errors.Is(err, test.err) {
 				t.Fatalf("error %v, want %v", err, test.err)
 			}
-			if (len(world.deletes) == 1) != test.deleted {
+			if len(world.deletes) != test.deletes {
 				t.Fatalf("deletes: %+v", world.deletes)
 			}
-			if err := instance.Reset(t.Context(), test.pod); !errors.Is(err, test.err) {
-				t.Fatalf("repeat: %v", err)
+			if test.err == nil {
+				if err := instance.Reset(t.Context(), test.pods); err != nil {
+					t.Fatalf("repeat: %v", err)
+				}
 			}
 		})
 	}

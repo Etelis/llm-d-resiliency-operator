@@ -97,9 +97,14 @@ func (lws *Workload) Discover(ctx context.Context) (workload.Group, error) {
 	return group, nil
 }
 
-func (lws *Workload) Reset(ctx context.Context, pod workload.PodRef) error {
-	if pod.Name == lws.podName(0) {
-		return workload.ErrUnsupported
+func (lws *Workload) Reset(ctx context.Context, pods []workload.PodRef) error {
+	for _, pod := range pods {
+		if pod.Name == lws.podName(0) {
+			return workload.ErrUnsupported
+		}
+		if pod.UID == "" {
+			return fmt.Errorf("pod %s has no UID", pod.Name)
+		}
 	}
 	set := lws.object()
 	if err := lws.reader.Get(ctx, client.ObjectKeyFromObject(set), set); err != nil {
@@ -112,7 +117,11 @@ func (lws *Workload) Reset(ctx context.Context, pod workload.PodRef) error {
 	if recreates {
 		return workload.ErrUnsupported
 	}
-	return lws.delete(ctx, pod)
+	var errs []error
+	for _, pod := range pods {
+		errs = append(errs, lws.delete(ctx, pod))
+	}
+	return errors.Join(errs...)
 }
 
 func (lws *Workload) ResetAll(ctx context.Context, pods []workload.PodRef) error {

@@ -16,7 +16,7 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 | `Recreating` | the leader Pod is missing or terminating, carries `leaderworkerset.sigs.k8s.io/group-recreate-pending`, or is newer than a worker (LWS replaced it while old workers remain). Under `RecreateGroupOnPodRestart`, also any Pod terminating or with a restarted or exited container. |
 | `RecreateStopped` | the leader Pod carries `leaderworkerset.sigs.k8s.io/group-restart-budget-exhausted` |
 | `Discover` fails | the LWS cannot be read, its spec is not supported, or a Pod's name does not match its worker index |
-| `Reset` | under `RecreateGroupOnPodRestart`: `ErrUnsupported`, because deleting any Pod recreates the whole group. Under `None`: delete the worker with a UID precondition, and LWS recreates just that Pod. The leader: `ErrUnsupported`, because deleting it takes its workers with it. |
+| `Reset` | under `RecreateGroupOnPodRestart`: `ErrUnsupported`, because deleting any Pod recreates the whole group. Under `None`: delete each named worker with a UID precondition, and LWS recreates each one alone. A list that names the leader: `ErrUnsupported` before anything is deleted, because deleting it takes its workers with it. |
 | `ResetAll` | delete the leader with a UID precondition and foreground propagation, so the old leader stays `Terminating` until its workers are gone. `NotFound` or `Conflict` count as done. |
 | `Release` | `ErrUnsupported`: LWS cannot remove a chosen Pod from a running group |
 | Flags | `--lws-namespace` (default `default`), `--lws-name` |
@@ -26,9 +26,10 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 | Contract | ConfigMap |
 |---|---|
 | Storage | ConfigMap `<lws-name>-ft-state`, key `state.json` |
-| Compare-and-swap | `resourceVersion` on update. A Kubernetes conflict is `ErrConflict`. |
-| Metadata-only conflict | re-read. If `state.json` is unchanged, retry once on the new version. |
-| Recreate if deleted | `NotFound` on update creates it again |
+| Version | `<resourceVersion>/<digest of state.json>` |
+| Compare-and-swap | read the ConfigMap, and update it only if its `resourceVersion` or its `state.json` matches the version. Anything else, including a Kubernetes conflict, is `ErrConflict`. |
+| Metadata-only change | `state.json` is unchanged, so the update goes ahead on the new `resourceVersion` |
+| Deleted | `ErrConflict`. The empty version creates the ConfigMap, and `AlreadyExists` is `ErrConflict`. |
 | Lifetime | owner reference to the LWS |
 
 ## RBAC

@@ -87,21 +87,21 @@ func TestRunningExample(t *testing.T) {
 
 	test.poll()
 	if len(test.eng.applied) != 0 {
-		t.Fatal("poll 3 sent a round before two polls in recovering")
+		t.Fatal("poll 3 sent a reconfig before two polls in recovering")
 	}
 
 	saved := false
-	test.eng.onApply = func() { saved = test.record().Round != nil }
+	test.eng.onApply = func() { saved = test.record().Reconfig != nil }
 	test.poll()
 	if len(test.eng.applied) != 1 || !saved {
-		t.Fatalf("poll 4: applied %d, round saved before Apply %v", len(test.eng.applied), saved)
+		t.Fatalf("poll 4: applied %d, reconfig saved before Apply %v", len(test.eng.applied), saved)
 	}
-	test.wantCalls("RoundStarted remove=[dp3@idD] add=[]")
+	test.wantCalls("ReconfigStarted remove=[dp3@idD] add=[]")
 
 	test.eng.progress = engine.Progress{State: engine.Running}
 	test.poll()
-	if len(test.eng.applied) != 1 || test.record().Round == nil {
-		t.Fatal("poll 5 did not keep watching the round")
+	if len(test.eng.applied) != 1 || test.record().Reconfig == nil {
+		t.Fatal("poll 5 did not keep watching the reconfig")
 	}
 
 	test.eng.progress = engine.Progress{State: engine.Succeeded}
@@ -115,7 +115,7 @@ func TestRunningExample(t *testing.T) {
 		record.Incident != nil || !slices.Equal(test.eng.verified[0], ids("dp0@idA", "dp1@idB", "dp2@idC")) {
 		t.Fatalf("poll 6: %+v, verified %v", record, test.eng.verified)
 	}
-	test.wantCalls("PhaseChanged recovering->serving", "RoundFinished Succeeded", "IncidentClosed Shrunk")
+	test.wantCalls("PhaseChanged recovering->serving", "ReconfigFinished Succeeded", "IncidentClosed Shrunk")
 
 	test.poll()
 	if len(test.wl.resets) != 1 || test.wl.resets[0] != (workload.PodRef{Name: "lws-0-3", UID: "d1"}) ||
@@ -141,9 +141,9 @@ func TestRunningExample(t *testing.T) {
 	test.eng.plan = engine.Plan{Kind: engine.Change, Participants: ids("dp0@idA", "dp1@idB", "dp2@idC"), Add: ids("dp3@idD2")}
 	test.poll()
 	if len(test.eng.applied) != 2 || test.record().Phase != Serving {
-		t.Fatalf("grow round: applied %d", len(test.eng.applied))
+		t.Fatalf("grow reconfig: applied %d", len(test.eng.applied))
 	}
-	test.wantCalls("RoundStarted remove=[] add=[dp3@idD2]")
+	test.wantCalls("ReconfigStarted remove=[] add=[dp3@idD2]")
 
 	test.eng.progress = engine.Progress{State: engine.Succeeded}
 	test.member("dp3").Serving, test.member("dp3").Joinable = true, false
@@ -153,7 +153,7 @@ func TestRunningExample(t *testing.T) {
 		!slices.Equal(test.eng.verified[len(test.eng.verified)-1], ids("dp0@idA", "dp1@idB", "dp2@idC", "dp3@idD2")) {
 		t.Fatalf("grow did not finish: %+v, verified %v", test.record().Members, test.eng.verified)
 	}
-	test.wantCalls("RoundFinished Succeeded")
+	test.wantCalls("ReconfigFinished Succeeded")
 }
 
 func TestNew(t *testing.T) {
@@ -261,13 +261,13 @@ func TestReadingDiscover(t *testing.T) {
 				t.Fatal("discovery error swallowed")
 			}
 		}
-		if record := test.record(); record.Phase != Serving || record.DiscoveryUnavailableSince.IsZero() ||
+		if record := test.record(); record.Phase != Serving || record.UnseenSince.IsZero() ||
 			test.store.saves != saves+1 || len(test.wl.resetAlls) != 0 {
 			t.Fatalf("discovery failure: %+v, saves %d", record, test.store.saves-saves)
 		}
 		test.wl.discoverErr = nil
 		test.poll()
-		if !test.record().DiscoveryUnavailableSince.IsZero() {
+		if !test.record().UnseenSince.IsZero() {
 			t.Fatal("discovery recovery not noted")
 		}
 	})
@@ -370,7 +370,7 @@ func TestRecovering(t *testing.T) {
 	})
 }
 
-func TestRoundOutcomes(t *testing.T) {
+func TestReconfigOutcomes(t *testing.T) {
 	t.Parallel()
 	start := func(t *testing.T) *harness {
 		t.Helper()
@@ -387,7 +387,7 @@ func TestRoundOutcomes(t *testing.T) {
 		test := start(t)
 		test.eng.applyErr = errors.New("refused")
 		test.poll()
-		test.wantReset(ResetRoundFailed)
+		test.wantReset(ResetReconfigFailed)
 	})
 	t.Run("progress fails", func(t *testing.T) {
 		t.Parallel()
@@ -395,7 +395,7 @@ func TestRoundOutcomes(t *testing.T) {
 		test.poll()
 		test.eng.progress = engine.Progress{State: engine.Failed, Scope: engine.Group}
 		test.poll()
-		test.wantReset(ResetRoundFailed)
+		test.wantReset(ResetReconfigFailed)
 	})
 	t.Run("apply deadline", func(t *testing.T) {
 		t.Parallel()
@@ -414,7 +414,7 @@ func TestRoundOutcomes(t *testing.T) {
 		test.eng.progress = engine.Progress{State: engine.Running}
 		test.poll()
 		if len(test.eng.applied) != 1 {
-			t.Fatalf("round sent %d times", len(test.eng.applied))
+			t.Fatalf("reconfig sent %d times", len(test.eng.applied))
 		}
 	})
 	t.Run("save fails before apply", func(t *testing.T) {
@@ -426,12 +426,12 @@ func TestRoundOutcomes(t *testing.T) {
 		}
 		test.poll()
 		if len(test.eng.applied) != 1 {
-			t.Fatal("round not sent once the journal works")
+			t.Fatal("reconfig not sent once the journal works")
 		}
 	})
 }
 
-func TestVerifyAfterRound(t *testing.T) {
+func TestVerifyAfterReconfig(t *testing.T) {
 	t.Parallel()
 	t.Run("retried, then reset", func(t *testing.T) {
 		t.Parallel()
@@ -472,7 +472,7 @@ func TestFlapGuard(t *testing.T) {
 	test := newHarness(t)
 	test.serving()
 	retry := engine.Plan{Kind: engine.Change, Participants: ids("dp0@idA", "dp1@idB", "dp2@idC", "dp3@idD")}
-	for round := range 2 {
+	for reconfig := range 2 {
 		for index := range test.eng.members {
 			test.eng.members[index].Serving = false
 		}
@@ -480,7 +480,7 @@ func TestFlapGuard(t *testing.T) {
 		test.poll()
 		test.poll()
 		test.poll()
-		if round == 1 {
+		if reconfig == 1 {
 			break
 		}
 		test.eng.progress = engine.Progress{State: engine.Succeeded}
@@ -491,7 +491,7 @@ func TestFlapGuard(t *testing.T) {
 		test.poll()
 	}
 	test.wantReset(ResetFlap)
-	if !test.record().LastNoChangeRound.IsZero() {
+	if !test.record().LastNoChangeReconfig.IsZero() {
 		t.Fatal("the flap window carried into the new group")
 	}
 }

@@ -48,17 +48,17 @@ func (rec *Recorder) IncidentOpened(incident *enginefault.Incident) {
 		"affected", incident.Affected, "nodes", incident.Nodes)
 }
 
-func (rec *Recorder) RoundStarted(round *engine.Round, plan *engine.Plan) {
-	rec.log.Info("round started", "round", round.ID, "remove", round.Remove, "add", round.Add, "reason", plan.Reason)
+func (rec *Recorder) ReconfigStarted(reconfig *engine.Reconfig, plan *engine.Plan) {
+	rec.log.Info("reconfig started", "reconfig", reconfig.ID, "remove", reconfig.Remove, "add", reconfig.Add, "reason", plan.Reason)
 }
 
-func (rec *Recorder) RoundFinished(round *engine.Round, progress engine.Progress) {
-	rec.log.Info("round finished", "round", round.ID, "state", progress.State, "scope", progress.Scope,
+func (rec *Recorder) ReconfigFinished(reconfig *engine.Reconfig, progress engine.Progress) {
+	rec.log.Info("reconfig finished", "reconfig", reconfig.ID, "state", progress.State, "scope", progress.Scope,
 		"reason", progress.Reason)
 }
 
-func (rec *Recorder) PodResetRequested(pod workload.PodRef, err error) {
-	rec.log.Info("pod reset requested", "pod", pod.Name, "uid", pod.UID, "error", err)
+func (rec *Recorder) PodResetRequested(pods []workload.PodRef, err error) {
+	rec.log.Info("pod reset requested", "pods", pods, "error", err)
 }
 
 func (rec *Recorder) ResetAllRequested(reason enginefault.ResetReason, pods []workload.PodRef) {

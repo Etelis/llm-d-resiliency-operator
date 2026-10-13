@@ -49,35 +49,35 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 	if err := fsm.save(ctx, next); err != nil {
 		return err
 	}
-	if mode == RestoreRelease {
-		err := fsm.wl.Release(ctx, targets)
-		fsm.recorder.ReleaseRequested(targets, err)
-		for _, pod := range targets {
-			fsm.removed(next, pod.UID, err)
-		}
-		return nil
-	}
-	for _, pod := range targets {
-		err := fsm.wl.Reset(ctx, pod)
-		fsm.recorder.PodResetRequested(pod, err)
-		fsm.removed(next, pod.UID, err)
-	}
+	fsm.remove(ctx, next, targets, true)
 	return nil
 }
 
-func (fsm *controller) remove(ctx context.Context, pod workload.PodRef) error {
+// remove names every Pod in one call. If the workload cannot handle them together, it asks for each alone,
+// so a Pod it can never replace does not keep the others below full.
+func (fsm *controller) remove(ctx context.Context, next *Record, pods []workload.PodRef, record bool) {
+	var err error
 	if fsm.config.CapacityRestore == RestoreRelease {
-		return fsm.wl.Release(ctx, []workload.PodRef{pod})
+		err = fsm.wl.Release(ctx, pods)
+		if record {
+			fsm.recorder.ReleaseRequested(pods, err)
+		}
+	} else {
+		err = fsm.wl.Reset(ctx, pods)
+		if record {
+			fsm.recorder.PodResetRequested(pods, err)
+		}
 	}
-	return fsm.wl.Reset(ctx, pod)
-}
-
-func (fsm *controller) removed(next *Record, uid string, err error) {
-	if errors.Is(err, workload.ErrUnsupported) {
-		keep(next, uid)
-		return
+	switch {
+	case errors.Is(err, workload.ErrUnsupported) && len(pods) > 1:
+		for _, pod := range pods {
+			fsm.remove(ctx, next, []workload.PodRef{pod}, record)
+		}
+	case errors.Is(err, workload.ErrUnsupported):
+		keep(next, pods[0].UID)
+	default:
+		fsm.called(err)
 	}
-	fsm.called(err)
 }
 
 // keep leaves a Pod as it is: its members stay out until the next group.

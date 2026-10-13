@@ -29,6 +29,7 @@ type controller struct {
 	config   Config
 	now      func() time.Time
 	saved    []byte
+	version  string
 	pending  []func()
 	// callErr collects workload errors that do not stop the step: the call is repeated next poll.
 	callErr error
@@ -57,7 +58,7 @@ func New(ctx context.Context, wl workload.Workload, eng engine.Engine, store jou
 func load(ctx context.Context, wl workload.Workload, eng engine.Engine, store journal.Journal,
 	recorder Recorder, config Config, now func() time.Time,
 ) (*controller, error) {
-	data, err := store.Load(ctx)
+	data, version, err := store.Load(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +79,8 @@ func load(ctx context.Context, wl workload.Workload, eng engine.Engine, store jo
 		saved = nil
 	}
 	return &controller{
-		wl: wl, eng: eng, store: store, recorder: recorder, config: config, now: now, saved: saved, waited: true,
+		wl: wl, eng: eng, store: store, recorder: recorder, config: config, now: now, saved: saved, version: version,
+		waited: true,
 	}, nil
 }
 
@@ -112,13 +114,14 @@ func (fsm *controller) save(ctx context.Context, next *Record) error {
 		return err
 	}
 	if !bytes.Equal(data, fsm.saved) {
-		if err := fsm.store.Save(ctx, data); err != nil {
+		version, err := fsm.store.Save(ctx, data, fsm.version)
+		if err != nil {
 			fsm.pending = nil
 			fsm.recorder.SaveFailed(err)
 			return fmt.Errorf("save journal: %w", err)
 		}
 		previous := fsm.record()
-		fsm.saved = data
+		fsm.saved, fsm.version = data, version
 		if previous.Phase != next.Phase {
 			fsm.recorder.PhaseChanged(previous.Phase, next.Phase, next.Reason)
 		}
@@ -138,15 +141,9 @@ func (fsm *controller) step(ctx context.Context, next *Record) error {
 	now := fsm.now().UTC()
 	group, err := fsm.wl.Discover(ctx)
 	if err != nil {
-		if next.DiscoveryUnavailableSince.IsZero() {
-			next.DiscoveryUnavailableSince = now
-			if saveErr := fsm.save(ctx, next); saveErr != nil {
-				return saveErr
-			}
-		}
-		return fmt.Errorf("discover: %w", err)
+		return fsm.unseen(ctx, next, now, fmt.Errorf("discover: %w", err))
 	}
-	next.DiscoveryUnavailableSince = time.Time{}
+	next.UnseenSince = time.Time{}
 	next.RecreateStopped = group.RecreateStopped
 	if waiting, err := fsm.waitForWorkload(ctx, next, &group, now); waiting || err != nil {
 		return err
@@ -167,12 +164,22 @@ func (fsm *controller) step(ctx context.Context, next *Record) error {
 		return fsm.resetAll(ctx, next, ResetExclusionBroken, reason, now)
 	}
 	switch {
-	case next.Round != nil:
+	case next.Reconfig != nil:
 		return fsm.watch(ctx, next, current, now)
 	case next.Phase == Serving:
 		return fsm.serve(ctx, next, current, now)
 	}
 	return fsm.recover(ctx, next, current, now)
+}
+
+func (fsm *controller) unseen(ctx context.Context, next *Record, now time.Time, err error) error {
+	if next.UnseenSince.IsZero() {
+		next.UnseenSince = now
+		if saveErr := fsm.save(ctx, next); saveErr != nil {
+			return saveErr
+		}
+	}
+	return err
 }
 
 func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group *workload.Group, now time.Time) (bool, error) {
@@ -187,8 +194,8 @@ func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group 
 		if fsm.waited && next.Phase == Recovering {
 			next.Since = now
 		}
-		if fsm.waited && next.Round != nil {
-			next.RoundSince = now
+		if fsm.waited && next.Reconfig != nil {
+			next.ReconfigSince = now
 		}
 		fsm.waited = false
 		return false, nil
@@ -218,8 +225,8 @@ func sameGroup(next *Record, group *workload.Group) bool {
 }
 
 func (fsm *controller) startOver(next *Record, reason string, now time.Time) {
-	if next.Round != nil {
-		fsm.finishRound(next, &engine.Progress{State: engine.Running, Reason: reason}, now)
+	if next.Reconfig != nil {
+		fsm.finishReconfig(next, &engine.Progress{State: engine.Running, Reason: reason}, now)
 	}
 	fsm.closeIncident(next, Recreated, now)
 	*next = Record{Phase: Starting, Since: now, Reason: reason, RecreateStopped: next.RecreateStopped}
@@ -262,19 +269,23 @@ func (fsm *controller) start(ctx context.Context, next *Record, group *workload.
 }
 
 func (fsm *controller) comparePods(ctx context.Context, next *Record, group *workload.Group) {
+	var owed []workload.PodRef
 	for _, uid := range slices.Sorted(maps.Keys(next.Pods)) {
 		saved, pod := next.Pods[uid], find(group, uid)
 		switch {
 		case saved.Removing && pod == nil:
 			forget(next, uid)
 		case saved.Removing && pod.State != workload.PodTerminating:
-			fsm.removed(next, uid, fsm.remove(ctx, podRef(uid, &saved)))
+			owed = append(owed, podRef(uid, &saved))
 		case saved.Removing:
 		case pod == nil && !tracks(next, saved.Identity):
 			delete(next.Pods, uid)
 		case pod != nil && pod.Identity != saved.Identity && !tracks(next, saved.Identity):
 			next.Pods[uid] = PodRecord{Name: pod.Name, Identity: pod.Identity, Node: pod.Node}
 		}
+	}
+	if len(owed) > 0 {
+		fsm.remove(ctx, next, owed, false)
 	}
 	for index := range group.Pods {
 		pod := &group.Pods[index]
@@ -363,10 +374,10 @@ func violation(next *Record, current *view) string {
 		switch {
 		case state == Excluded && !member.Terminal:
 			return fmt.Sprintf("C4: excluded member %s is not terminal", id)
-		case state != Admitted && member.Serving && (next.Round == nil || !slices.Contains(next.Round.Add, id)):
+		case state != Admitted && member.Serving && (next.Reconfig == nil || !slices.Contains(next.Reconfig.Add, id)):
 			return fmt.Sprintf("C5: member %s serves before it is admitted", id)
-		case next.Round != nil && slices.Contains(next.Round.Remove, id) && !member.Terminal:
-			return fmt.Sprintf("C1: member %s left the round but is not terminal", id)
+		case next.Reconfig != nil && slices.Contains(next.Reconfig.Remove, id) && !member.Terminal:
+			return fmt.Sprintf("C1: member %s left the reconfig but is not terminal", id)
 		}
 	}
 	return ""

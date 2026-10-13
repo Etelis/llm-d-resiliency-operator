@@ -209,7 +209,7 @@ Every file the design needs, and the PR that brings it.
 | `internal/controller/enginefault/controller.go` | `Controller`, `Config`, `Record` | contracts (#32) |
 | `internal/controller/enginefault/recorder.go` | `Recorder`, `Incident` | contracts (#32) |
 | `internal/controller/enginefault/step.go` | `New` and `Step`: phases, reading Discover, connecting members, checks | controller (#11) |
-| `internal/controller/enginefault/round.go` | sending and watching rounds, plan checks, `Verify`, `ResetAll` | controller (#11) |
+| `internal/controller/enginefault/reconfig.go` | sending and watching reconfigs, plan checks, `Verify`, `ResetAll` | controller (#11) |
 | `internal/controller/enginefault/capacity.go` | restoring capacity | controller (#11) |
 | `internal/controller/enginefault/incident.go` | incident records | controller (#11) |
 | `internal/controller/enginefault/runner.go` | the leader-elected loop that calls `Step` | controller (#11) |
