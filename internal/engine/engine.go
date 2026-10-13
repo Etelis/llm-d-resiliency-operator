@@ -23,14 +23,14 @@ type Capabilities struct {
 type Driver interface {
 	Observe(ctx context.Context, pods []workload.Pod) Observation
 	Probe(ctx context.Context, observation Observation) error
-	Apply(ctx context.Context, observation Observation, round Round) ([]Acceptance, error)
+	Apply(ctx context.Context, observation Observation, reconfig Reconfig) ([]Acceptance, error)
 	Verify(ctx context.Context, observation Observation, members []MemberID) error
 }
 
 // Policy is pure: no I/O, no clock.
 type Policy interface {
 	Plan(observation Observation, admitted, candidates []MemberID) Plan
-	Progress(observation Observation, round Round) Progress
+	Progress(observation Observation, reconfig Reconfig) Progress
 }
 
 type MemberID string
@@ -52,7 +52,7 @@ type Observation struct {
 	Engine  any
 }
 
-type Round struct {
+type Reconfig struct {
 	ID           string
 	Participants []MemberID
 	Remove       []MemberID

@@ -54,15 +54,15 @@ flowchart LR
 | Journal | durable controller state, one writer at a time | what the bytes mean | [journal.md](journal.md) |
 | Telemetry | logs, metrics, Events, incident records, readiness. Best-effort, never read back. | how recovery decides anything | [telemetry.md](telemetry.md) |
 | Workload | reporting the group's Pods as they are now, resetting one Pod or all of them, releasing Pods | ranks, ports, engine processes, anything from before | [workload.md](workload.md) |
-| Engine driver | reporting which members run on each Pod and their state, sending rounds, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](engine.md#interface) |
-| Engine policy | which members to remove or admit and when, how a round is going | I/O, time, Kubernetes | [engine.md](engine.md#interface) |
+| Engine driver | reporting which members run on each Pod and their state, sending reconfigs, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](engine.md#interface) |
+| Engine policy | which members to remove or admit and when, how a reconfig is going | I/O, time, Kubernetes | [engine.md](engine.md#interface) |
 
 Outside IRO, but the contracts depend on them:
 
 | External | What IRO relies on |
 |---|---|
 | Kubernetes + LWS controller | recreates the group after a reset, and decides how often and whether to keep doing so (`restartBackoff`, `maxGroupRestarts`). Later: removes and adds Pods without recreating it. |
-| Engine runtime | exposes engine state and accepts recovery rounds |
+| Engine runtime | exposes engine state and accepts recovery reconfigs |
 | Traffic router (EPP) | routes on the engine's native health. IRO never steers traffic. |
 | Leader election | one controller acts on a group at a time |
 
@@ -106,14 +106,14 @@ sequenceDiagram
   W-->>C: Group (Pods, Recreating)
   C->>D: Observe(pods)
   D-->>C: Observation (members per Pod, their state)
-  alt a round is in flight
-    C->>P: Progress(observation, round)
-  else no round
+  alt a reconfig is in flight
+    C->>P: Progress(observation, reconfig)
+  else no reconfig
     C->>P: Plan(observation, admitted, candidates)
   end
   opt plan is Change and passes the checks
-    C->>J: Save(round)
-    C->>D: Apply(observation, round)
+    C->>J: Save(reconfig)
+    C->>D: Apply(observation, reconfig)
     C->>J: Save(acceptances)
   end
   opt serving below full
@@ -125,7 +125,7 @@ Two kinds of action, with opposite delivery rules:
 
 | Action | Delivery | Why |
 |---|---|---|
-| Engine round (`Apply`) | at most once. Saved first, never sent again. | a round is not idempotent. Sending it twice can break the group. |
+| Engine reconfig (`Apply`) | at most once. Saved first, never sent again. | a reconfig is not idempotent. Sending it twice can break the group. |
 | Workload call (`Reset`, `ResetAll`, `Release`) | saved first, repeated every poll until `Discover` shows the result | each call names Pods by UID and does nothing once they are gone, so repeating it is harmless |
 
 ## From a fault back to full capacity
@@ -142,8 +142,8 @@ sequenceDiagram
     D-->>C: dp3 Terminal, dp0-dp2 paused
     C->>P: Plan(observation, admitted, candidates)
     P-->>C: Change, remove dp3@idD
-    C->>D: Apply(round: remove dp3@idD)
-    C->>P: Progress(observation, round)
+    C->>D: Apply(reconfig: remove dp3@idD)
+    C->>P: Progress(observation, reconfig)
     P-->>C: Succeeded
     C->>D: Verify(dp0, dp1, dp2)
   end
@@ -158,22 +158,22 @@ sequenceDiagram
     D-->>C: dp3 on lws-0-3 (d2), Joinable
     C->>P: Plan(observation, admitted, candidates)
     P-->>C: Change, add dp3@idD2
-    C->>D: Apply(round: add dp3@idD2)
-    C->>P: Progress(observation, round)
+    C->>D: Apply(reconfig: add dp3@idD2)
+    C->>P: Progress(observation, reconfig)
     P-->>C: Succeeded
     C->>D: Verify(dp0, dp1, dp2, dp3@idD2)
   end
   Note over C,W: serving with 4 members
 ```
 
-1. **Remove the dead member.** The driver reports `dp3` Terminal. The policy proposes `Remove`, the round
+1. **Remove the dead member.** The driver reports `dp3` Terminal. The policy proposes `Remove`, the reconfig
    runs, and `Progress` reports `Succeeded`. Only then does the controller record `dp3@idD` as excluded and
    verify the survivors.
 2. **Reset the failed Pod.** Each member names its Pod, so the controller knows `lws-0-3` now holds only
    excluded members. It calls `Reset` on it. The rest of the group keeps serving. There is no deadline;
    scheduling and model loading take as long as they take.
 3. **Admit the new member.** The new Pod's members show up as candidates. The policy plans `Add` when the
-   engine can admit them, the round runs like any other, and the round's members are verified.
+   engine can admit them, the reconfig runs like any other, and the reconfig's members are verified.
 
 A fault at any point comes first: the group goes to `recovering`, and the capacity work continues once the
 group serves again.
@@ -191,7 +191,7 @@ fails to join), the group keeps serving with fewer members until the next group.
 | `Group`, `Pod`, `PodState`, `PodRef` | [workload.md](workload.md#objects) | workload | controller, engine driver |
 | `ErrUnsupported` | [workload.md](workload.md#objects) | workload | controller |
 | `Capabilities`, `Member`, `MemberID`, `Observation` | [engine.md](engine.md#objects) | engine driver | controller, engine policy |
-| `Round` | [engine.md](engine.md#objects) | controller | engine driver, engine policy |
+| `Reconfig` | [engine.md](engine.md#objects) | controller | engine driver, engine policy |
 | `Acceptance` | [engine.md](engine.md#objects) | engine driver | controller |
 | `Plan`, `Progress` | [engine.md](engine.md#objects) | engine policy | controller |
 | `Config`, `Record`, `Phase`, `MemberState`, `PodRecord` | [controller.md](controller.md#objects) | controller | journal (as bytes), telemetry |

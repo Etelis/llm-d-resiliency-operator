@@ -174,7 +174,7 @@ Release(ctx, []PodRef{{"lws-0-3", "d1"}})
   `ErrUnsupported` for that Pod, and the controller keeps it as it is.
 - **Report `Recreating` as early as possible.** A workload that will recreate the group because of what it
   sees (for example, any container restart, when its policy recreates the group for that) reports `Recreating` right away,
-  not only once the leader is deleted. Otherwise the controller may plan a round for a group that is about to go.
+  not only once the leader is deleted. Otherwise the controller may plan a reconfig for a group that is about to go.
 - **Recreating vs. stopped.** `Recreating` is temporary: the controller waits. `RecreateStopped` is
   the workload saying it gave up: the controller waits too, and telemetry reports it.
 

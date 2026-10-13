@@ -23,8 +23,8 @@ type Recorder interface {
     Stepped(record *Record, err error)
     PhaseChanged(from, to Phase, reason string)
     IncidentOpened(incident *Incident)
-    RoundStarted(round *Round, plan *Plan)
-    RoundFinished(round *Round, progress Progress)
+    ReconfigStarted(reconfig *Reconfig, plan *Plan)
+    ReconfigFinished(reconfig *Reconfig, progress Progress)
     PodResetRequested(pod PodRef, err error)
     ResetAllRequested(reason ResetReason, pods []PodRef)
     ReleaseRequested(pods []PodRef, err error)
@@ -38,7 +38,7 @@ The code is in `internal/controller/enginefault/recorder.go`: the recorder repor
 lives next to it. The controller calls the recorder after each thing happens. The recorder decides which signals to emit.
 `Ready` is the only call that returns an error, and only the manager's readiness check uses it.
 
-`Record` and `Phase` come from the [controller](controller.md#objects); `Round`, `Plan`, `Progress` and
+`Record` and `Phase` come from the [controller](controller.md#objects); `Reconfig`, `Plan`, `Progress` and
 `MemberID` from the [engine](engine.md#objects); `PodRef` from the [workload](workload.md#objects).
 
 ## Objects
@@ -52,16 +52,16 @@ type Incident struct {
     Closed    time.Time     // zero while open
     Cause     string        // the reason of the first plan that was not Healthy
     Affected  []MemberID    // Terminal members when it opened (if none, those not Serving),
-                            // plus every member a round removes
+                            // plus every member a reconfig removes
     Pods      []PodRef      // their Pods
     Nodes     []string      // their nodes
-    Rounds    []RoundResult // every round sent for it
+    Reconfigs    []ReconfigResult // every reconfig sent for it
     Outcome   Outcome       // set when closed
     Durations Durations
 }
 
-type RoundResult struct {
-    Round    Round
+type ReconfigResult struct {
+    Reconfig    Reconfig
     Progress Progress
 }
 
@@ -76,14 +76,14 @@ const (
 
 // Durations splits an incident into stages.
 type Durations struct {
-    Diagnose time.Duration // opened -> first round sent, or reset requested
-    Apply    time.Duration // rounds sent -> their Progress finished
+    Diagnose time.Duration // opened -> first reconfig sent, or reset requested
+    Apply    time.Duration // reconfigs sent -> their Progress finished
     Verify   time.Duration // verification started -> passed
     Total    time.Duration // opened -> closed
 }
 
 // ResetReason is a fixed set, so it can be a metric label.
-type ResetReason string // unrecoverable | round_failed | diagnosis_deadline | apply_deadline | flap | verify_failed | exclusion_broken | capacity
+type ResetReason string // unrecoverable | reconfig_failed | diagnosis_deadline | apply_deadline | flap | verify_failed | exclusion_broken | capacity
 ```
 
 The controller keeps the **open** incident in its [`Record`](controller.md#objects), so a new leader
@@ -124,23 +124,23 @@ Called at the end of every `Step`.
 **Example.** `IncidentOpened({ID: inc-7c1e, Cause: "dp3 is dead", Affected: [dp3@idD], Pods: [lws-0-3], Nodes: [gpu-node-7]})`
 → Event: `inc-7c1e: dp3@idD on lws-0-3 (node gpu-node-7) is dead; recovering`
 
-### RoundStarted
+### ReconfigStarted
 
 | | |
 |---|---|
-| **Input** | the [`Round`](engine.md#objects) just sent and the [`Plan`](engine.md#objects) it came from |
-| **Emits** | a log line and a `RoundStarted` Event |
+| **Input** | the [`Reconfig`](engine.md#objects) just sent and the [`Plan`](engine.md#objects) it came from |
+| **Emits** | a log line and a `ReconfigStarted` Event |
 
-**Example.** → Event: `inc-7c1e: round iro-ft-7c1e started: shrink, remove dp3@idD`
+**Example.** → Event: `inc-7c1e: reconfig iro-ft-7c1e started: shrink, remove dp3@idD`
 
-### RoundFinished
+### ReconfigFinished
 
 | | |
 |---|---|
-| **Input** | the round and its final [`Progress`](engine.md#objects) |
-| **Emits** | a log line, a `RoundSucceeded` or `RoundFailed` Event, `llm_d_iro_rounds_total{change,outcome}` |
+| **Input** | the reconfig and its final [`Progress`](engine.md#objects) |
+| **Emits** | a log line, a `ReconfigSucceeded` or `ReconfigFailed` Event, `llm_d_iro_reconfigs_total{change,outcome}` |
 
-**Example.** `RoundFinished(iro-ft-7c1e, {Succeeded})` → `llm_d_iro_rounds_total{change="shrink",outcome="succeeded"}` +1
+**Example.** `ReconfigFinished(iro-ft-7c1e, {Succeeded})` → `llm_d_iro_reconfigs_total{change="shrink",outcome="succeeded"}` +1
 
 ### PodResetRequested
 
@@ -158,7 +158,7 @@ Called at the end of every `Step`.
 | **Input** | a fixed [`ResetReason`](#objects) and the Pods named in `ResetAll` |
 | **Emits** | a log line, a `GroupReset` Warning Event, `llm_d_iro_resets_total{reason}` |
 
-**Example.** `ResetAllRequested(round_failed, [lws-0 ... lws-0-3])` → `llm_d_iro_resets_total{reason="round_failed"}` +1
+**Example.** `ResetAllRequested(reconfig_failed, [lws-0 ... lws-0-3])` → `llm_d_iro_resets_total{reason="reconfig_failed"}` +1
 
 ### ReleaseRequested
 
@@ -210,12 +210,12 @@ All metrics carry `group` (`<namespace>/<workload name>`). Label values come fro
 | `llm_d_iro_phase_transitions_total` | counter | `from`, `to` | phase changes |
 | `llm_d_iro_members` | gauge | `state` | members by state: candidate, admitted, excluded, rejected |
 | `llm_d_iro_pod_resets_total` | counter | | single Pods IRO reset to bring members back |
-| `llm_d_iro_rounds_total` | counter | `change`, `outcome` | rounds by shape (retry, shrink, grow, replace) and result (succeeded, failed_joiners, failed_group, deadline) |
+| `llm_d_iro_reconfigs_total` | counter | `change`, `outcome` | reconfigs by shape (retry, shrink, grow, replace) and result (succeeded, failed_joiners, failed_group, deadline) |
 | `llm_d_iro_resets_total` | counter | `reason` | resets IRO asked for, by [`ResetReason`](#objects). Recreations the workload did on its own are not counted here; they close incidents as `Recreated`. |
 | `llm_d_iro_incidents_total` | counter | `outcome` | closed incidents by outcome |
 | `llm_d_iro_incident_duration_seconds` | histogram | `stage` | diagnose, apply, verify, total |
 | `llm_d_iro_journal_save_failures_total` | counter | | failed journal saves |
-| `llm_d_iro_last_verified_timestamp_seconds` | gauge | | when the last round's members passed `Verify` |
+| `llm_d_iro_last_verified_timestamp_seconds` | gauge | | when the last reconfig's members passed `Verify` |
 
 Alerts this allows: recovering for more than N minutes, below full for more than N minutes,
 journal saves failing, no leader.
@@ -228,8 +228,8 @@ On the workload object (the LWS). Every Event of an incident starts with its ID.
 |---|---|---|
 | `IncidentOpened` | Warning | a fault opens an incident |
 | `PhaseChanged` | Normal | any phase change |
-| `RoundStarted` | Normal | a round is sent |
-| `RoundSucceeded` / `RoundFailed` | Normal / Warning | a round finishes |
+| `ReconfigStarted` | Normal | a reconfig is sent |
+| `ReconfigSucceeded` / `ReconfigFailed` | Normal / Warning | a reconfig finishes |
 | `PodReset` | Normal | IRO resets one Pod to bring its members back |
 | `PodsReleased` | Normal | IRO releases Pods and serves below full |
 | `GroupReset` | Warning | IRO asks the workload to recreate the group |
@@ -247,7 +247,7 @@ journal stays small and its saves stay critical-path only.
 | Rule | Why |
 |---|---|
 | Never returns an error to the controller, except `Ready` | telemetry must not change what IRO does |
-| Never blocks. Metrics are in memory; Events and history writes are asynchronous. | a slow API server must not delay a round or a reset |
+| Never blocks. Metrics are in memory; Events and history writes are asynchronous. | a slow API server must not delay a reconfig or a reset |
 | IRO never reads telemetry back | decisions come from the workload, the engine and the journal only |
 | Metric labels come from fixed sets: no member IDs, Pod names or free text | bounded cardinality. IDs and names go in Events and logs. |
 | Names follow llm-d: `llm_d_iro_*` | consistent with `llm_d_epp_*` and the rest of llm-d |
@@ -273,7 +273,7 @@ journal stays small and its saves stay critical-path only.
 
 | Signal | How |
 |---|---|
-| Logs | the controller-runtime logger from the context, with `group`, `incident`, `round` and `phase` keys |
+| Logs | the controller-runtime logger from the context, with `group`, `incident`, `reconfig` and `phase` keys |
 | Metrics | the controller-runtime metrics registry, served on the manager's `/metrics` |
 | Events | the manager's `EventRecorder`, on the LWS |
 | Incident history | ConfigMap `<lws-name>-ft-incidents`, owned by the LWS |

@@ -33,9 +33,9 @@ A runner calls `New` until the journal loads, then `Step` every `PollInterval` w
 // Config holds the controller's settings. Flags are in Configuration below.
 type Config struct {
     PollInterval     time.Duration   // 1s
-    DiagnosisTimeout time.Duration   // 75s: longest time in recovering without a round
-    ApplyTimeout     time.Duration   // 90s: longest time a round may stay in flight
-    VerifyTimeout    time.Duration   // 2m: how long a failed check after a round is retried
+    DiagnosisTimeout time.Duration   // 75s: longest time in recovering without a reconfig
+    ApplyTimeout     time.Duration   // 90s: longest time a reconfig may stay in flight
+    VerifyTimeout    time.Duration   // 2m: how long a failed check after a reconfig is retried
     FlapWindow       time.Duration   // 2m: check C6
     CapacityRestore  CapacityRestore // reset-pod (default) | reset-all | release
 }
@@ -64,12 +64,12 @@ type Record struct {
     Pods    map[string]PodRecord     // by UID. Also what ResetAll names.
     Members map[MemberID]MemberState
 
-    Round       *Round    // in flight, nil when none
-    RoundSince  time.Time // the apply deadline counts from here
+    Reconfig       *Reconfig    // in flight, nil when none
+    ReconfigSince  time.Time // the apply deadline counts from here
     Acceptances []Acceptance
-    Verifying   []MemberID // members of a round that succeeded, not yet checked with Verify
+    Verifying   []MemberID // members of a reconfig that succeeded, not yet checked with Verify
 
-    LastNoChangeRound         time.Time // check C6
+    LastNoChangeReconfig         time.Time // check C6
     VerifyFailedSince         time.Time
     DiscoveryUnavailableSince time.Time
     RecreateStopped           bool // from the last Discover, so people can see the workload gave up
@@ -78,7 +78,7 @@ type Record struct {
 }
 ```
 
-`Round`, `Acceptance` and `MemberID` come from the [engine](engine.md#objects). `Incident` comes from [telemetry](telemetry.md#objects).
+`Reconfig`, `Acceptance` and `MemberID` come from the [engine](engine.md#objects). `Incident` comes from [telemetry](telemetry.md#objects).
 
 ## Functions
 
@@ -96,7 +96,7 @@ Builds the controller and loads its state.
 
 ```go
 New(...) // empty journal (first run):       Record{Phase: starting}
-New(...) // leader changed during a round:   Record{Phase: recovering, Round: iro-ft-7c1e, ...}. The next Step watches Progress; it never resends.
+New(...) // leader changed during a reconfig:   Record{Phase: recovering, Reconfig: iro-ft-7c1e, ...}. The next Step watches Progress; it never resends.
 New(...) // journal unreadable or not valid: error. The runner logs it and calls New again next poll.
 New(...) // a phase this version does not know: starts over, as with an empty journal.
 ```
@@ -118,24 +118,24 @@ In order:
    repeat any owed `ResetAll` and stop here. See [Reading Discover](#reading-discover).
 3. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
 4. **Check the observation** (C4, C5). A violation resets the group.
-5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [round](#rounds) is in flight.
-   Check and send a new round, verify the members of a round that succeeded, or reset.
+5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [reconfig](#reconfigs) is in flight.
+   Check and send a new reconfig, verify the members of a reconfig that succeeded, or reset.
 6. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
 
 **Example**, the [running example](README.md#running-example) poll by poll:
 
-| Poll | Discover | Observe | Policy says | Controller does | Phase, round |
+| Poll | Discover | Observe | Policy says | Controller does | Phase, reconfig |
 |---|---|---|---|---|---|
 | 1 | 4 Pods `Ready` | all `Serving` | `Plan`: Healthy | nothing | serving |
 | 2 | same | `dp3` Terminal, `dp0`-`dp2` paused | `Plan`: Change, remove `dp3@idD` | enters `recovering`, saves, calls `Probe` once | recovering |
 | 3 | same | same | same | waits: under 2 polls in `recovering` | recovering |
-| 4 | same | same | same | checks C1-C7, saves round `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, round in flight |
-| 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, round in flight |
-| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the round, `Verify(dp0, dp1, dp2)` | serving |
+| 4 | same | same | same | checks C1-C7, saves reconfig `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, reconfig in flight |
+| 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, reconfig in flight |
+| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the reconfig, `Verify(dp0, dp1, dp2)` | serving |
 | 7 | same | same | `Plan`: Healthy | `lws-0-3` holds only excluded members: marks it `Removing`, saves, `Reset(lws-0-3, d1)` | serving |
 | 8 | `lws-0-3` (d1) Terminating | `dp0`-`dp2` Serving | `Plan`: Healthy | waits | serving |
 | 9 | `lws-0-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `dp3@idD`. No deadline. | serving |
-| ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves round, `Apply` | serving, round in flight |
+| ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves reconfig, `Apply` | serving, reconfig in flight |
 | ... | same | `dp3@idD2` healthy | `Progress`: Succeeded | marks `dp3@idD2` admitted, `Verify(dp3@idD2)` | serving |
 
 The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.Stepped` receives it:
@@ -143,7 +143,7 @@ The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.St
 ```yaml
 Phase: recovering
 Reason: "dp3 is dead; survivors paused"
-Round: {ID: iro-ft-7c1e, Participants: [dp0@idA, dp1@idB, dp2@idC], Remove: [dp3@idD]}
+Reconfig: {ID: iro-ft-7c1e, Participants: [dp0@idA, dp1@idB, dp2@idC], Remove: [dp3@idD]}
 Members: {dp0@idA: admitted, dp1@idB: admitted, dp2@idC: admitted, dp3@idD: admitted}
 RecreateStopped: false
 ```
@@ -157,22 +157,22 @@ stateDiagram-v2
   [*] --> starting
   starting --> serving: plan Healthy
   serving --> recovering: a fault is observed
-  recovering --> serving: plan Healthy, or round Succeeded
-  serving --> starting: ResetAll, after a round fails verification past window, C4 or C5 broken
-  recovering --> starting: ResetAll, after Unrecoverable, round Failed for group, deadline, flap guard
+  recovering --> serving: plan Healthy, or reconfig Succeeded
+  serving --> starting: ResetAll, after a reconfig fails verification past window, C4 or C5 broken
+  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, deadline, flap guard
 ```
 
 Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
-and the group goes to `starting`, which waits until the old Pods are gone (see [Reading Discover](#reading-discover)). Whether a round is in flight is not a phase; it is the `Round` field,
-described [below](#rounds). A round can run in `recovering` (fixing a fault) or in `serving` (bringing a Pod's members back).
+and the group goes to `starting`, which waits until the old Pods are gone (see [Reading Discover](#reading-discover)). Whether a reconfig is in flight is not a phase; it is the `Reconfig` field,
+described [below](#reconfigs). A reconfig can run in `recovering` (fixing a fault) or in `serving` (bringing a Pod's members back).
 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
 | `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
-| `serving` | healthy, maybe below full | verifies the members of a round that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A round that admits candidates runs here. | a fault |
-| `recovering` | the engine reports a fault | probes once on entry. Without a round: plans every poll, resets on `Unrecoverable`, and sends a round no sooner than 2 polls in. With a round: checks `Progress` every poll and never sends it again. | `Healthy` plan, or round `Succeeded`. Or reset. |
+| `serving` | healthy, maybe below full | verifies the members of a reconfig that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A reconfig that admits candidates runs here. | a fault |
+| `recovering` | the engine reports a fault | probes once on entry. Without a reconfig: plans every poll, resets on `Unrecoverable`, and sends a reconfig no sooner than 2 polls in. With a reconfig: checks `Progress` every poll and never sends it again. | `Healthy` plan, or reconfig `Succeeded`. Or reset. |
 
-In `serving`, a `Healthy` plan is fine and a `Change` that only adds members is a round to grow back.
+In `serving`, a `Healthy` plan is fine and a `Change` that only adds members is a reconfig to grow back.
 Any other plan is a fault.
 
 ### Reading Discover
@@ -207,7 +207,7 @@ group first serves. The table applies from then on. An empty journal (IRO's firs
 
 `Discover` reports Pods. `Observe` reports members, each with the Pod it runs on. The controller joins
 the two by `Member.ID()` (`dp3@idD`) and keeps each ID as candidate, admitted, excluded or rejected.
-Excluded means a round removed it, and its Pod may still be reset. Rejected means it stays out until the
+Excluded means a reconfig removed it, and its Pod may still be reset. Rejected means it stays out until the
 next group: a candidate that could not join, or an excluded member whose Pod is kept as it is.
 
 | Case | Controller does |
@@ -217,26 +217,26 @@ next group: a candidate that could not join, or an excluded member whose Pod is 
 | admitted member not reported (its Pod is unreachable) | treats it as unknown: not Serving, not Terminal |
 | admitted member on a Pod that is gone, `Terminating` or restarted | lost: treated as Terminal |
 
-### Rounds
+### Reconfigs
 
-A round is the one engine action IRO can have in flight. It is saved in the journal before it is
+A reconfig is the one engine action IRO can have in flight. It is saved in the journal before it is
 sent, and cleared when `Progress` reports `Succeeded` or `Failed`.
 
-| | No round in flight | Round in flight |
+| | No reconfig in flight | Reconfig in flight |
 |---|---|---|
 | Asks the policy | `Plan` | `Progress` |
-| Deadline | `DiagnosisTimeout`, from the fault | `ApplyTimeout`, from `RoundSince` |
+| Deadline | `DiagnosisTimeout`, from the fault | `ApplyTimeout`, from `ReconfigSince` |
 | Members in `Remove` | admitted | still fenced: they must reach Terminal (C1, C4) |
-| After a leader change | plans again | watches `Progress`. Never sends the round again. |
+| After a leader change | plans again | watches `Progress`. Never sends the reconfig again. |
 
 The two deadlines catch different hangs: an engine that never reaches a state IRO can act on,
-and a round that never finishes. While the workload reports `Recreating`, deadlines are not checked, and
-both restart when it ends, and when a new leader takes over. A new group drops the round in flight: the workload is already replacing everything.
+and a reconfig that never finishes. While the workload reports `Recreating`, deadlines are not checked, and
+both restart when it ends, and when a new leader takes over. A new group drops the reconfig in flight: the workload is already replacing everything.
 
-**After a round succeeds**, the controller saves its participants and joiners in `Verifying` and calls
+**After a reconfig succeeds**, the controller saves its participants and joiners in `Verifying` and calls
 `Verify` on them. A failure is retried for `VerifyTimeout`; then the group is reset (reason `verify_failed`).
 A new leader finds `Verifying` in the journal and continues the check. Verify runs only here: IRO checks
-what it changed, nothing else. A fresh group, or one that recovered without a round, goes to `serving`
+what it changed, nothing else. A fresh group, or one that recovered without a reconfig, goes to `serving`
 on a `Healthy` plan.
 
 ### Restoring capacity
@@ -256,12 +256,12 @@ flowchart TD
   A --> F
 ```
 
-1. Once the members of the last round passed `Verify`, on a poll whose plan is `Healthy`, the controller
+1. Once the members of the last reconfig passed `Verify`, on a poll whose plan is `Healthy`, the controller
    looks for Pods that hold only excluded members. It marks them `Removing`, saves, and calls `Reset`,
    `ResetAll` or `Release`, per `--ft-capacity-restore` (C8). A Pod that is already gone is just forgotten.
-2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [round](#rounds).
+2. After a `Reset`, the new Pod's members are candidates. The policy admits them in an ordinary [reconfig](#reconfigs).
 3. There is one try, no budget. If the Pod cannot be reset (`ErrUnsupported`, or the engine cannot grow),
-   or the new Pod's members are rejected (the join round fails, or the new Pod restarts before joining),
+   or the new Pod's members are rejected (the join reconfig fails, or the new Pod restarts before joining),
    the group keeps serving with fewer members. The Pod's members are marked rejected, so it is not tried
    again. A new Pod that is still starting is waited for.
 4. With `release`, the released Pod goes and the group serves with fewer members. `ErrUnsupported` keeps
@@ -270,7 +270,7 @@ flowchart TD
    its Pod still holds admitted members, so the group never stays below full.
 6. Other workload errors are not failures: the call is repeated on the next poll.
 7. Full capacity comes back with the next group: any `ResetAll`, or a recreation by the workload.
-8. There is no extra state: the `Removing` Pods, the member states and the round in flight say where things are.
+8. There is no extra state: the `Removing` Pods, the member states and the reconfig in flight say where things are.
 
 ## Rules
 
@@ -281,14 +281,14 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 
 | # | Rule | Why |
 |---|---|---|
-| C1 | `Remove` holds only members that are Terminal, and they stay Terminal until the round succeeds | the router follows native health. A removed member that still serves gets traffic outside the group. |
+| C1 | `Remove` holds only members that are Terminal, and they stay Terminal until the reconfig succeeds | the router follows native health. A removed member that still serves gets traffic outside the group. |
 | C2 | `Add` holds only candidates that are Joinable, on Pods that are `Ready` and unchanged | a stale Pod must not join |
-| C3 | `Participants` and `Remove` are admitted members, `Add` holds candidates, the three are disjoint, and `Participants` is not empty | a round must name a real, consistent membership change |
+| C3 | `Participants` and `Remove` are admitted members, `Add` holds candidates, the three are disjoint, and `Participants` is not empty | a reconfig must name a real, consistent membership change |
 | C4 | Excluded members stay Terminal | otherwise an excluded member could take traffic again |
-| C5 | Members that are not admitted are not Serving, except those the round in flight adds | a joiner must not take traffic before it is in the group |
-| C6 | A round that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
-| C7 | One round at a time. `Apply` refuses a round that names a member missing from the current observation. | a stale round cannot apply to a changed group |
-| C8 | `Reset` and `Release` name only Pods whose every member is excluded, after the round that removed them finished | the engine must no longer depend on a Pod before it goes |
+| C5 | Members that are not admitted are not Serving, except those the reconfig in flight adds | a joiner must not take traffic before it is in the group |
+| C6 | A reconfig that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
+| C7 | One reconfig at a time. `Apply` refuses a reconfig that names a member missing from the current observation. | a stale reconfig cannot apply to a changed group |
+| C8 | `Reset` and `Release` name only Pods whose every member is excluded, after the reconfig that removed them finished | the engine must no longer depend on a Pod before it goes |
 
 A plan that fails C1 to C3 resets the group. An observation that fails C4 or C5 resets the group.
 C8 limits what the controller itself sends, so it is never violated at runtime.
@@ -298,9 +298,9 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | Guarantee | How |
 |---|---|
 | One writer per group | runs only on the elected leader. Journal saves are compare-and-swap. |
-| At-most-once rounds | the round is saved before `Apply`. A new leader only watches `Progress`. |
+| At-most-once reconfigs | the reconfig is saved before `Apply`. A new leader only watches `Progress`. |
 | Repeatable workload calls | `Reset`, `ResetAll` and `Release` are saved first and repeated until `Discover` shows the result |
-| One round at a time | a new plan is asked for only when no round is in flight |
+| One reconfig at a time | a new plan is asked for only when no reconfig is in flight |
 | Faults come first | capacity is restored only while `serving` |
 | A failed save never advances the phase | the in-memory state keeps the last saved phase |
 | Never resets a group it cannot see | discovery failures wait |
@@ -317,7 +317,7 @@ C8 limits what the controller itself sends, so it is never violated at runtime.
 | `--workload` (target) | `lws` | workload implementation |
 | `--ft-diagnosis-timeout` | 75s | `DiagnosisTimeout` |
 | `--ft-apply-timeout` | 90s | `ApplyTimeout` |
-| `--ft-verify-timeout` | 2m | `VerifyTimeout`: how long a failed check after a round is retried. 0 resets on the first failure. |
+| `--ft-verify-timeout` | 2m | `VerifyTimeout`: how long a failed check after a reconfig is retried. 0 resets on the first failure. |
 | `--ft-capacity-restore` (target) | `reset-pod` | `CapacityRestore`: `reset-pod` resets the failed Pod once and serves below full if that fails; `reset-all` resets the group, so it never stays below full; `release` frees the GPUs and serves below full. |
 | no flag | 2m | `FlapWindow` |
 | no flag | 1s | `PollInterval` |
@@ -331,7 +331,7 @@ Each engine and workload implementation registers its own flags.
   phase and its deadline clock and never resets on it.
 - **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry
   reports it so people can see it. Recovery resumes when the workload recreates the group.
-- **Why verify only after a round.** Verify does not gate traffic: the router follows the engine's native
+- **Why verify only after a reconfig.** Verify does not gate traffic: the router follows the engine's native
   health. Its job is to catch a recovery the engine reports as done but that cannot generate. That risk
   comes from what IRO changed, so that is when it checks. One slow completion is not a fault, so a failure
   is retried for `VerifyTimeout` before the reset.
