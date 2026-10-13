@@ -40,9 +40,12 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 ## Open decisions
 
 1. **Restart policy.** Resetting one Pod needs `restartPolicy: None`. Under `RecreateGroupOnPodRestart`,
-   `Reset` answers `ErrUnsupported`: with the default `--ft-capacity-restore` the group serves with fewer
-   members until it is recreated, and `reset-all` gets back to full by recreating it. Under `None`, a
-   container restart or a deleted Pod replaces that Pod alone: IRO removes the lost member in place, and the
-   replacement's member stays a candidate until the engine can admit it (vLLM cannot), holding its GPU.
+   `Reset` answers `ErrUnsupported`, and any container restart, including one from a probe, recreates the
+   group: IRO waits and adopts it. Under `None`, LWS replaces only a deleted Pod, and kubelet restarts a
+   crashed container in place. Either way IRO removes the lost member in place. A deleted Pod's replacement
+   brings members that stay candidates until the engine can admit them (vLLM cannot), holding their GPU. An
+   engine container restarted in place keeps the Pod's UID: its new members are never candidates, and the Pod
+   is reset like any failed Pod (with vLLM, kept as it is). Neither policy tolerates a probe that fails while a
+   member is paused for recovery: see the engine's doc.
 2. **Restart limits for IRO resets.** `restartBackoff` and `maxGroupRestarts` are on LWS `main`, not in
    v0.11.1. Check that a recreation IRO causes, by deleting the leader, is paced and counted like any other.

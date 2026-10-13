@@ -519,6 +519,56 @@ func TestVerifyAfterReconfig(t *testing.T) {
 		test.poll()
 		test.wantReset(ResetVerifyFailed)
 	})
+	t.Run("passes on retry", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.eng.verifyErr = errors.New("no tokens")
+		test.shrunk()
+		test.eng.verifyErr = nil
+		test.clock = test.clock.Add(test.config.VerifyTimeout / 2)
+		test.poll()
+		record := test.record()
+		if len(record.Verifying) != 0 || !record.VerifyFailedSince.IsZero() || record.Reason != "verified" || len(test.wl.resetAlls) != 0 {
+			t.Fatalf("record %+v", record)
+		}
+		test.poll()
+		if len(test.wl.resets) != 1 || test.wl.resets[0].UID != "d1" {
+			t.Fatalf("resets %v", test.wl.resets)
+		}
+	})
+	t.Run("a fault during the window takes the fault path", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.config.VerifyTimeout = 30 * time.Second
+		test.eng.verifyErr = errors.New("no tokens")
+		test.shrunk()
+		test.eng.plan = engine.Plan{Kind: engine.Wait, Reason: "dp1 is diagnosing"}
+		test.poll()
+		record := test.record()
+		if record.Phase != Recovering || record.Verifying != nil || !record.VerifyFailedSince.IsZero() {
+			t.Fatalf("record %+v", record)
+		}
+		test.clock = test.clock.Add(40 * time.Second)
+		test.poll()
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("verify_failed reset during recovering: %+v", test.record())
+		}
+	})
+	for _, mode := range []CapacityRestore{RestoreResetPod, RestoreRelease, RestoreResetAll} {
+		t.Run("resets the group, never one Pod, with "+string(mode), func(t *testing.T) {
+			t.Parallel()
+			test := newHarness(t)
+			test.config.CapacityRestore = mode
+			test.eng.verifyErr = errors.New("no tokens")
+			test.shrunk()
+			test.clock = test.clock.Add(test.config.VerifyTimeout)
+			test.poll()
+			test.wantReset(ResetVerifyFailed)
+			if len(test.wl.resets) != 0 || len(test.wl.releases) != 0 {
+				t.Fatalf("resets %v, releases %v", test.wl.resets, test.wl.releases)
+			}
+		})
+	}
 	t.Run("no window", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)
