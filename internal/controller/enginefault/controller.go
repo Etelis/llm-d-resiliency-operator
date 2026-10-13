@@ -1,7 +1,7 @@
 // Copyright 2026 The llm-d Authors.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package enginefault is the controller. See docs/design/contracts/controller.md.
+// Package enginefault is the controller. See docs/components/controller.md.
 package enginefault
 
 import (

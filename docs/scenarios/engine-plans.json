@@ -1,0 +1,204 @@
+{
+  "title": "What the policy can say",
+  "callsTitle": "Plan, and what the controller does",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "t": "Healthy",
+      "title": "Healthy: nothing to do",
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(observation, admitted, candidates)",
+          "out": "Healthy"
+        },
+        {
+          "to": "controller",
+          "call": "serving",
+          "out": "stays in serving, or goes back to it"
+        }
+      ]
+    },
+    {
+      "t": "Wait",
+      "title": "Wait: the engine needs time",
+      "note": "Something is wrong but no member is proven gone yet, so nothing can be removed.",
+      "pods": {
+        "pod-0": {
+          "m0": "paused"
+        },
+        "pod-1": {
+          "m1": "paused"
+        },
+        "pod-2": {
+          "m2": "paused"
+        },
+        "pod-3": {
+          "m3": "paused"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Wait"
+        },
+        {
+          "to": "controller",
+          "call": "recovering",
+          "out": "waits, under the diagnosis deadline"
+        }
+      ]
+    },
+    {
+      "t": "retry",
+      "title": "Change, retry: nobody leaves or joins",
+      "note": "Every member paused, none dead. The same members try again.",
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Change: Participants m0-m3, Remove none, Add none"
+        },
+        {
+          "to": "driver",
+          "call": "Apply(...)",
+          "out": "all accept"
+        }
+      ]
+    },
+    {
+      "t": "shrink",
+      "title": "Change, shrink: the dead leave",
+      "pods": {
+        "pod-3": {
+          "m3": "dead"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Change: Participants m0-m2, Remove m3@idD"
+        },
+        {
+          "to": "driver",
+          "call": "Apply(...)",
+          "out": "m0, m1, m2 accept; m3 becomes excluded"
+        }
+      ]
+    },
+    {
+      "t": "grow",
+      "title": "Change, grow: a new member joins",
+      "note": "pod-3 was reset and its new member is Joinable. Needs an engine that can grow.",
+      "pods": {
+        "pod-0": {
+          "m0": "serving"
+        },
+        "pod-1": {
+          "m1": "serving"
+        },
+        "pod-2": {
+          "m2": "serving"
+        },
+        "pod-3": {
+          "uid": "d2",
+          "m3": "joining"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Change: Participants m0-m2, Add m3@idD2"
+        },
+        {
+          "to": "driver",
+          "call": "Apply(...)",
+          "out": "all accept"
+        }
+      ]
+    },
+    {
+      "t": "replace",
+      "title": "Change, replace: one leaves and one joins in one reconfig",
+      "note": "Only if the engine supports it: fewer reconfigs during a fault.",
+      "pods": {
+        "pod-2": {
+          "m2": "dead"
+        },
+        "pod-3": {
+          "m3": "joining"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Change: Participants m0, m1, Remove m2@idC, Add m3@idD2"
+        }
+      ]
+    },
+    {
+      "t": "Unrecoverable",
+      "title": "Unrecoverable: nothing in place can help",
+      "note": "For example, the survivors cannot hold every expert.",
+      "pods": {
+        "pod-0": {
+          "m0": "paused"
+        },
+        "pod-1": {
+          "m1": "dead"
+        },
+        "pod-2": {
+          "m2": "dead"
+        },
+        "pod-3": {
+          "m3": "dead"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Unrecoverable"
+        },
+        {
+          "to": "controller",
+          "call": "reset",
+          "out": "recreates the whole group"
+        }
+      ]
+    }
+  ]
+}

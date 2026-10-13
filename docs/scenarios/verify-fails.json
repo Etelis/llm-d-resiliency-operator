@@ -1,0 +1,126 @@
+{
+  "title": "The group cannot generate after a recovery",
+  "page": "failures/verify-fails",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "A reconfig removed m3 and succeeded",
+      "phase": "serving",
+      "pods": {
+        "pod-3": {
+          "m3": "excluded"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Progress(...)",
+          "out": "Succeeded"
+        }
+      ],
+      "journal": "serving \u00b7 verifying m0 m1 m2"
+    },
+    {
+      "title": "m1 reports serving but cannot generate",
+      "note": "One failed request is not a fault: IRO checks again every poll.",
+      "phase": "serving",
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Verify(observation, [m0, m1, m2])",
+          "out": "m1: completion failed"
+        }
+      ]
+    },
+    {
+      "title": "Still failing after --ft-verify-timeout",
+      "phase": "starting",
+      "pods": {
+        "pod-0": {
+          "gone": true
+        },
+        "pod-1": {
+          "gone": true
+        },
+        "pod-2": {
+          "gone": true
+        },
+        "pod-3": {
+          "gone": true
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "ResetAll([pod-0 ... pod-3])",
+          "in": "reason: verify_failed",
+          "out": "the whole group is recreated"
+        }
+      ],
+      "note": "2m by default. In expert parallel every member takes part in every step, so no smaller action is safe."
+    },
+    {
+      "title": "A new group serves",
+      "phase": "serving",
+      "pods": {
+        "pod-0": {
+          "uid": "a2",
+          "m0": "serving"
+        },
+        "pod-1": {
+          "uid": "b2",
+          "m1": "serving"
+        },
+        "pod-2": {
+          "uid": "c2",
+          "m2": "serving"
+        },
+        "pod-3": {
+          "uid": "d2",
+          "m3": "serving"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "4 new UIDs, none saved: a new group"
+        },
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ]
+    }
+  ]
+}

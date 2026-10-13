@@ -1,0 +1,83 @@
+{
+  "title": "The journal is lost",
+  "page": "failures/journal-lost",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "The group serves",
+      "phase": "serving",
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ]
+    },
+    {
+      "title": "The journal is deleted",
+      "note": "Someone deletes the ConfigMap, and the leader restarts.",
+      "phase": "starting",
+      "calls": [
+        {
+          "to": "journal",
+          "call": "Load()",
+          "out": "empty: a new group"
+        },
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "4 Pods, all Ready"
+        }
+      ],
+      "journal": "starting"
+    },
+    {
+      "title": "The serving members are admitted again",
+      "note": "Nothing is reset: the group never stopped serving.",
+      "phase": "serving",
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Observe(pods)",
+          "out": "m0 to m3 serving"
+        },
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ],
+      "journal": "serving \u00b7 admitted m0@idA m1@idB m2@idC m3@idD"
+    }
+  ]
+}

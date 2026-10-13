@@ -1,7 +1,7 @@
 // Copyright 2026 The llm-d Authors.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package lws is the LeaderWorkerSet workload. See docs/design/lws.md.
+// Package lws is the LeaderWorkerSet workload. See docs/components/workloads/lws.md.
 package lws
 
 import (

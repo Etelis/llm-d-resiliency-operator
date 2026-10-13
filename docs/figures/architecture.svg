@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" rx="8" fill="#ffffff"/>
+<text x="32.0" y="42.0" font-size="20" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">IRO at a glance</text>
+<text x="32.0" y="66.0" font-size="13" fill="#5f6368" text-anchor="start" xml:space="preserve">one manager per engine group · the controller only talks to its plugins</text>
+<rect x="30.0" y="92.0" width="790.0" height="620.0" rx="10" fill="#fbfcff" stroke="#1a73e8" stroke-width="2"/>
+<text x="48.0" y="118.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">IRO manager  (leader-elected)</text>
+<rect x="60.0" y="330.0" width="210.0" height="100.0" rx="6" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+<text x="74.0" y="354.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Controller</text>
+<text x="74.0" y="374.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">one step per poll</text>
+<text x="74.0" y="392.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">phases, deadlines, checks</text>
+<rect x="540.0" y="140.0" width="260.0" height="66.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="554.0" y="164.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Journal</text>
+<text x="554.0" y="184.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">versioned record, Load / Save</text>
+<rect x="540.0" y="260.0" width="260.0" height="78.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="554.0" y="284.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Workload</text>
+<text x="554.0" y="304.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">one group of Pods</text>
+<text x="554.0" y="322.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">Pod identity, Reset, Release</text>
+<rect x="540.0" y="380.0" width="260.0" height="170.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
+<text x="554.0" y="404.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Engine</text>
+<text x="554.0" y="424.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">one plugin per inference engine</text>
+<rect x="554.0" y="442.0" width="112.0" height="90.0" rx="6" fill="#ffffff" stroke="#1e8e3e" stroke-width="2"/>
+<text x="568.0" y="466.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Policy</text>
+<text x="568.0" y="486.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">pure: plans,</text>
+<text x="568.0" y="504.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">no I/O</text>
+<rect x="676.0" y="442.0" width="112.0" height="90.0" rx="6" fill="#ffffff" stroke="#1e8e3e" stroke-width="2"/>
+<text x="690.0" y="466.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Driver</text>
+<text x="690.0" y="486.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">reads, applies</text>
+<text x="690.0" y="504.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">over HTTP</text>
+<rect x="540.0" y="620.0" width="260.0" height="60.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="554.0" y="644.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Telemetry</text>
+<text x="554.0" y="664.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">metrics, Events, logs</text>
+<path d="M 165.0 330.0 L 165.0 173.0 L 540.0 173.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="540.0,173.0 530.8,176.9 530.8,169.1" fill="#1a73e8"/>
+<text x="350.0" y="165.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Load, Save</text>
+<path d="M 270.0 360.0 L 470.0 360.0 L 470.0 299.0 L 540.0 299.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="540.0,299.0 530.8,302.9 530.8,295.1" fill="#1a73e8"/>
+<text x="284.0" y="336.0" font-size="12" fill="#1a73e8" text-anchor="start" xml:space="preserve">Discover, Reset,</text>
+<text x="284.0" y="352.0" font-size="12" fill="#1a73e8" text-anchor="start" xml:space="preserve">ResetAll, Release</text>
+<path d="M 270.0 400.0 L 470.0 400.0 L 470.0 465.0 L 540.0 465.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="540.0,465.0 530.8,468.9 530.8,461.1" fill="#1a73e8"/>
+<text x="284.0" y="422.0" font-size="12" fill="#1a73e8" text-anchor="start" xml:space="preserve">Observe, Probe, Apply,</text>
+<text x="284.0" y="438.0" font-size="12" fill="#1a73e8" text-anchor="start" xml:space="preserve">Verify · Plan, Progress</text>
+<path d="M 165.0 430.0 L 165.0 650.0 L 540.0 650.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="540.0,650.0 530.8,653.9 530.8,646.1" fill="#1a73e8"/>
+<text x="350.0" y="642.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">what happened</text>
+<rect x="890.0" y="260.0" width="280.0" height="78.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="1030.0" y="295.0" font-size="14" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">Kubernetes + workload controller</text>
+<text x="1030.0" y="315.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">recreates deleted Pods</text>
+<rect x="890.0" y="420.0" width="280.0" height="80.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
+<text x="1030.0" y="456.0" font-size="14" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">Engine runtime</text>
+<text x="1030.0" y="476.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">members and their recovery API</text>
+<rect x="890.0" y="530.0" width="280.0" height="56.0" rx="6" fill="#f3e8fd" stroke="#8430ce" stroke-width="2"/>
+<text x="1030.0" y="563.0" font-size="14" fill="#8430ce" text-anchor="middle" font-weight="700" xml:space="preserve">Traffic router (EPP)</text>
+<rect x="890.0" y="620.0" width="280.0" height="60.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="1030.0" y="655.0" font-size="14" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">Prometheus, Events, logs</text>
+<path d="M 800.0 299.0 L 890.0 299.0" fill="none" stroke="#5f6368" stroke-width="1.8"/>
+<polygon points="890.0,299.0 880.8,302.9 880.8,295.1" fill="#5f6368"/>
+<text x="845.0" y="291.0" font-size="12" fill="#5f6368" text-anchor="middle" xml:space="preserve">Pods</text>
+<path d="M 788.0 465.0 L 890.0 465.0" fill="none" stroke="#1e8e3e" stroke-width="1.8"/>
+<polygon points="890.0,465.0 880.8,468.9 880.8,461.1" fill="#1e8e3e"/>
+<text x="840.0" y="457.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">HTTP</text>
+<path d="M 800.0 650.0 L 890.0 650.0" fill="none" stroke="#5f6368" stroke-width="1.8"/>
+<polygon points="890.0,650.0 880.8,653.9 880.8,646.1" fill="#5f6368"/>
+<text x="845.0" y="642.0" font-size="12" fill="#5f6368" text-anchor="middle" xml:space="preserve">export</text>
+<path d="M 1030.0 530.0 L 1030.0 500.0" fill="none" stroke="#8430ce" stroke-width="1.8"/>
+<polygon points="1030.0,500.0 1033.9,509.2 1026.1,509.2" fill="#8430ce"/>
+<text x="1042.0" y="520.0" font-size="12" fill="#8430ce" text-anchor="start" xml:space="preserve">routes on native health</text>
+<line x1="32.0" y1="756.0" x2="62.0" y2="756.0" stroke="#1a73e8" stroke-width="2"/>
+<text x="70.0" y="760.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">controller call</text>
+<line x1="203.1" y1="756.0" x2="233.1" y2="756.0" stroke="#1e8e3e" stroke-width="2"/>
+<text x="241.1" y="760.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">engine HTTP</text>
+<line x1="346.8" y1="756.0" x2="376.8" y2="756.0" stroke="#5f6368" stroke-width="2"/>
+<text x="384.8" y="760.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">Kubernetes / export</text>
+<line x1="545.4" y1="756.0" x2="575.4" y2="756.0" stroke="#8430ce" stroke-width="2"/>
+<text x="583.4" y="760.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">traffic</text>
+</svg>
