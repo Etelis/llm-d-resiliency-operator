@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/enginefault"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/engine"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/telemetry"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/journal"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
 )
 
@@ -104,27 +106,36 @@ func removedRanks(payload map[string]any) map[int]bool {
 }
 
 type memoryJournal struct {
-	mu   sync.Mutex
-	data []byte
+	mu      sync.Mutex
+	data    []byte
+	version int
 }
 
-func (store *memoryJournal) Load(context.Context) ([]byte, error) {
+//nolint:gocritic // The contract returns the record, its version and an error.
+func (store *memoryJournal) Load(context.Context) ([]byte, string, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	return slices.Clone(store.data), nil
+	if store.version == 0 {
+		return nil, "", nil
+	}
+	return slices.Clone(store.data), strconv.Itoa(store.version), nil
 }
 
-func (store *memoryJournal) Save(_ context.Context, data []byte) error {
+func (store *memoryJournal) Save(_ context.Context, data []byte, version string) (string, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	if (store.version == 0 && version != "") || (store.version > 0 && version != strconv.Itoa(store.version)) {
+		return "", journal.ErrConflict
+	}
+	store.version++
 	store.data = slices.Clone(data)
-	return nil
+	return strconv.Itoa(store.version), nil
 }
 
 func (store *memoryJournal) record(t *testing.T) enginefault.Record {
 	t.Helper()
 	var record enginefault.Record
-	data, err := store.Load(t.Context())
+	data, _, err := store.Load(t.Context())
 	if err == nil {
 		err = json.Unmarshal(data, &record)
 	}
@@ -143,7 +154,7 @@ func (wl *lwsToday) Discover(context.Context) (workload.Group, error) {
 	return workload.Group{Pods: slices.Clone(wl.pods)}, nil
 }
 
-func (*lwsToday) Reset(context.Context, workload.PodRef) error { return workload.ErrUnsupported }
+func (*lwsToday) Reset(context.Context, []workload.PodRef) error { return workload.ErrUnsupported }
 
 func (wl *lwsToday) ResetAll(context.Context, []workload.PodRef) error {
 	wl.resetAlls++
@@ -210,7 +221,7 @@ func (run *flow) fault(dead ...int) {
 }
 
 func served(record *enginefault.Record) bool {
-	return record.Phase == enginefault.Serving && record.Round == nil && len(record.Verifying) == 0 && record.Incident == nil
+	return record.Phase == enginefault.Serving && record.Reconfig == nil && len(record.Verifying) == 0 && record.Incident == nil
 }
 
 func kept(id string) func(enginefault.Record) bool {
@@ -296,7 +307,7 @@ func TestFlowEngineProcessGone(t *testing.T) {
 	run.until("shrunk and kept below full", kept("dp2@id2"))
 }
 
-func TestFlowFaultAfterTheRoundResetsAtOnce(t *testing.T) {
+func TestFlowFaultAfterTheReconfigResetsAtOnce(t *testing.T) {
 	t.Parallel()
 	run := newFlowWith(t, 30*time.Second)
 	run.sim.refault = true

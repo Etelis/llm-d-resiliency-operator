@@ -54,33 +54,33 @@ func (*Engine) Plan(observation engine.Observation, admitted, _ []engine.MemberI
 	return engine.Plan{Kind: engine.Change, Participants: survivors, Reason: "retry " + describe(members, survivors)}
 }
 
-//nolint:gocritic // The interface passes the round by value.
-func (*Engine) Progress(observation engine.Observation, round engine.Round) engine.Progress {
+//nolint:gocritic // The interface passes the reconfig by value.
+func (*Engine) Progress(observation engine.Observation, reconfig engine.Reconfig) engine.Progress {
 	members := membersOf(observation)
 	found := ranksOf(observation)
 	done := 0
-	for _, id := range round.Participants {
+	for _, id := range reconfig.Participants {
 		member, r := members[id], found[id]
 		switch {
 		case member != nil && member.Terminal:
-			return failed(fmt.Sprintf("%s died during the round: %s", id, member.Detail))
+			return failed(fmt.Sprintf("%s died during the reconfig: %s", id, member.Detail))
 		case member == nil || r == nil || !r.Reached:
 		case r.RequestID == "" && (r.Status == "unhealthy" || r.Status == "diagnosing"):
-			// The status keeps the round's request ID until the engine reports a new state, so a fault
-			// without it came after the round ended.
-			return failed(fmt.Sprintf("%s faulted again after the round: %s", id, member.Detail))
-		case r.FTState == "failed" && r.RequestID == round.ID:
-			return failed(fmt.Sprintf("%s failed the round: %s", id, r.FTError))
-		case r.FTState == "recovering" && r.RequestID != round.ID:
+			// The status keeps the reconfig's request ID until the engine reports a new state, so a fault
+			// without it came after the reconfig ended.
+			return failed(fmt.Sprintf("%s faulted again after the reconfig: %s", id, member.Detail))
+		case r.FTState == "failed" && r.RequestID == reconfig.ID:
+			return failed(fmt.Sprintf("%s failed the reconfig: %s", id, r.FTError))
+		case r.FTState == "recovering" && r.RequestID != reconfig.ID:
 			return failed(fmt.Sprintf("%s runs request %s instead", id, r.RequestID))
 		case member.Serving:
 			done++
 		}
 	}
-	if done == len(round.Participants) {
+	if done == len(reconfig.Participants) {
 		return engine.Progress{State: engine.Succeeded, Reason: fmt.Sprintf("%d ranks healthy", done)}
 	}
-	return engine.Progress{State: engine.Running, Reason: fmt.Sprintf("%d of %d ranks healthy", done, len(round.Participants))}
+	return engine.Progress{State: engine.Running, Reason: fmt.Sprintf("%d of %d ranks healthy", done, len(reconfig.Participants))}
 }
 
 func failed(reason string) engine.Progress {

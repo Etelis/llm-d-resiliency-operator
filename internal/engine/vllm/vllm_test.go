@@ -269,7 +269,7 @@ func TestPlan(t *testing.T) {
 			setup: func(r []*fakeRank) { r[2].down = true; r[0].unhealthy(); r[1].unhealthy(); r[3].unhealthy() },
 			kind:  engine.Wait,
 		},
-		"round in flight": {
+		"reconfig in flight": {
 			setup: func(r []*fakeRank) {
 				r[0].unhealthy()
 				r[1].unhealthy()
@@ -326,7 +326,7 @@ func TestPlanSeesControllerLostMembers(t *testing.T) {
 
 func TestProgress(t *testing.T) {
 	t.Parallel()
-	round := engine.Round{ID: "iro-ft-1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
+	reconfig := engine.Reconfig{ID: "iro-ft-1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
 	ft := func(state, request string) map[string]any {
 		return map[string]any{"ft_state": state, "last_ft_request_id": request, "ft_error": "status is HEALTHY"}
 	}
@@ -347,7 +347,7 @@ func TestProgress(t *testing.T) {
 			t.Parallel()
 			fleet := newFleet(t, 4, 1)
 			test.setup(fleet.ranks)
-			progress := fleet.eng.Progress(fleet.observe(t), round)
+			progress := fleet.eng.Progress(fleet.observe(t), reconfig)
 			if progress.State != test.state || (progress.State == engine.Failed) != (progress.Scope == engine.Group) {
 				t.Fatalf("progress %+v", progress)
 			}
@@ -360,8 +360,8 @@ func TestApply(t *testing.T) {
 	t.Run("scale down", func(t *testing.T) {
 		t.Parallel()
 		test := newFleet(t, 4, 1)
-		round := engine.Round{ID: "r1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
-		acceptances, err := test.eng.Apply(t.Context(), test.observe(t), round)
+		reconfig := engine.Reconfig{ID: "r1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
+		acceptances, err := test.eng.Apply(t.Context(), test.observe(t), reconfig)
 		if err != nil || len(acceptances) != 3 || len(test.ranks[1].applied) != 0 {
 			t.Fatalf("acceptances %+v, err %v", acceptances, err)
 		}
@@ -375,8 +375,8 @@ func TestApply(t *testing.T) {
 	t.Run("store host removed", func(t *testing.T) {
 		t.Parallel()
 		test := newFleet(t, 4, 1)
-		round := engine.Round{ID: "r2", Participants: ids("dp2@id2", "dp1@id1"), Remove: ids("dp3@id3", "dp0@id0")}
-		if _, err := test.eng.Apply(t.Context(), test.observe(t), round); err != nil {
+		reconfig := engine.Reconfig{ID: "r2", Participants: ids("dp2@id2", "dp1@id1"), Remove: ids("dp3@id3", "dp0@id0")}
+		if _, err := test.eng.Apply(t.Context(), test.observe(t), reconfig); err != nil {
 			t.Fatal(err)
 		}
 		found := params(t, test.ranks[2].applied[0])
@@ -388,8 +388,8 @@ func TestApply(t *testing.T) {
 	t.Run("retry", func(t *testing.T) {
 		t.Parallel()
 		test := newFleet(t, 2, 1)
-		round := engine.Round{ID: "r3", Participants: ids("dp0@id0", "dp1@id1")}
-		if _, err := test.eng.Apply(t.Context(), test.observe(t), round); err != nil {
+		reconfig := engine.Reconfig{ID: "r3", Participants: ids("dp0@id0", "dp1@id1")}
+		if _, err := test.eng.Apply(t.Context(), test.observe(t), reconfig); err != nil {
 			t.Fatal(err)
 		}
 		if payload := test.ranks[1].applied[0]; payload["instruction"] != "retry" || len(params(t, payload)) != 0 {
@@ -401,7 +401,7 @@ func TestApply(t *testing.T) {
 		test := newFleet(t, 2, 1)
 		obs := test.observe(t)
 		test.ranks[1].down = true
-		acceptances, err := test.eng.Apply(t.Context(), obs, engine.Round{ID: "r4", Participants: ids("dp0@id0", "dp1@id1")})
+		acceptances, err := test.eng.Apply(t.Context(), obs, engine.Reconfig{ID: "r4", Participants: ids("dp0@id0", "dp1@id1")})
 		if err == nil || !acceptances[0].Accepted || acceptances[1].Accepted {
 			t.Fatalf("acceptances %+v, err %v", acceptances, err)
 		}
@@ -409,8 +409,8 @@ func TestApply(t *testing.T) {
 	t.Run("add", func(t *testing.T) {
 		t.Parallel()
 		test := newFleet(t, 2, 1)
-		round := engine.Round{ID: "r5", Participants: ids("dp0@id0"), Add: ids("dp1@id9")}
-		if _, err := test.eng.Apply(t.Context(), test.observe(t), round); err == nil {
+		reconfig := engine.Reconfig{ID: "r5", Participants: ids("dp0@id0"), Add: ids("dp1@id9")}
+		if _, err := test.eng.Apply(t.Context(), test.observe(t), reconfig); err == nil {
 			t.Fatal("vLLM cannot add members")
 		}
 	})

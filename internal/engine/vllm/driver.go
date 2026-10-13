@@ -116,24 +116,24 @@ func (eng *Engine) Probe(ctx context.Context, observation engine.Observation) er
 	return errors.Join(errs...)
 }
 
-//nolint:gocritic // The interface passes the round by value.
-func (eng *Engine) Apply(ctx context.Context, observation engine.Observation, round engine.Round) ([]engine.Acceptance, error) {
-	if len(round.Add) > 0 {
+//nolint:gocritic // The interface passes the reconfig by value.
+func (eng *Engine) Apply(ctx context.Context, observation engine.Observation, reconfig engine.Reconfig) ([]engine.Acceptance, error) {
+	if len(reconfig.Add) > 0 {
 		return nil, errors.New("vLLM cannot admit members")
 	}
 	found := ranksOf(observation)
 	instruction, params := "retry", map[string]any{}
-	if len(round.Remove) > 0 {
+	if len(reconfig.Remove) > 0 {
 		var err error
 		instruction = "scale_down"
-		if params, err = eng.scaleDown(found, round); err != nil {
+		if params, err = eng.scaleDown(found, reconfig); err != nil {
 			return nil, err
 		}
 	}
-	payload := map[string]any{"instruction": instruction, "request_id": round.ID, "params": params}
-	acceptances := make([]engine.Acceptance, len(round.Participants))
+	payload := map[string]any{"instruction": instruction, "request_id": reconfig.ID, "params": params}
+	acceptances := make([]engine.Acceptance, len(reconfig.Participants))
 	var wg sync.WaitGroup
-	for index, id := range round.Participants {
+	for index, id := range reconfig.Participants {
 		acceptances[index].Member = id
 		r := found[id]
 		if r == nil {
@@ -161,13 +161,13 @@ func (eng *Engine) Apply(ctx context.Context, observation engine.Observation, ro
 	return acceptances, nil
 }
 
-//nolint:gocritic // The interface passes the round by value.
-func (eng *Engine) scaleDown(found ranks, round engine.Round) (map[string]any, error) {
-	removed, err := numbers(round.Remove)
+//nolint:gocritic // The interface passes the reconfig by value.
+func (eng *Engine) scaleDown(found ranks, reconfig engine.Reconfig) (map[string]any, error) {
+	removed, err := numbers(reconfig.Remove)
 	if err != nil {
 		return nil, err
 	}
-	alive, err := numbers(slices.Concat(round.Participants, round.Remove))
+	alive, err := numbers(slices.Concat(reconfig.Participants, reconfig.Remove))
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func (eng *Engine) scaleDown(found ranks, round engine.Round) (map[string]any, e
 	if !slices.Contains(removed, slices.Min(alive)) {
 		return params, nil
 	}
-	master := lowest(found, round.Participants)
+	master := lowest(found, reconfig.Participants)
 	if master == nil {
 		return nil, errors.New("no participant can host the FT store")
 	}

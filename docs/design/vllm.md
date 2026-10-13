@@ -28,7 +28,7 @@ stateDiagram-v2
 Rules that shape the driver:
 
 - An instruction is accepted only while the rank is `unhealthy`.
-- Every alive rank must get the same `request_id` within 10 seconds, or the round fails.
+- Every alive rank must get the same `request_id` within 10 seconds, or the reconfig fails.
 - `scale_down` keeps the original rank numbers. Removing the lowest alive rank also moves the store it
   hosts, so the request carries the next lowest rank's address and a port.
 - A failed `scale_down` is final: the ranks report `dead`.
@@ -45,8 +45,8 @@ Rules that shape the driver:
 | `Terminal` | status `dead`, or `/health` 503 |
 | unknown | the API does not answer, or answers for another rank: neither serving nor terminal |
 | `Probe` | one short completion to each serving rank, so idle peers run a step and notice a dead rank |
-| `Apply` | `retry` when nothing is removed, else `scale_down` with `removed_dp_ranks`; `request_id` is the round ID |
-| Store host | when the round removes the lowest alive rank: `dp_master_ip` of the lowest participant and `--vllm-store-port` |
+| `Apply` | `retry` when nothing is removed, else `scale_down` with `removed_dp_ranks`; `request_id` is the reconfig ID |
+| Store host | when the reconfig removes the lowest alive rank: `dp_master_ip` of the lowest participant and `--vllm-store-port` |
 | `Verify` | an 8-token completion on each member |
 | `Grow` | no: the fault tolerance API cannot add ranks |
 
@@ -64,12 +64,12 @@ Rules that shape the driver:
 A rank that stays `healthy` while its peers fault (stuck in a collective) never accepts an instruction.
 The plan stays `Wait` and the diagnosis deadline resets the group.
 
-| During a round | Progress |
+| During a reconfig | Progress |
 |---|---|
 | a participant is terminal | `Failed`, scope `Group` |
-| `ft_state` is `failed` for this round | `Failed`, scope `Group` |
+| `ft_state` is `failed` for this reconfig | `Failed`, scope `Group` |
 | a participant runs another `request_id` | `Failed`, scope `Group` |
-| a participant is `unhealthy` again with no `request_id`: it finished the round and faulted after it | `Failed`, scope `Group` |
+| a participant is `unhealthy` again with no `request_id`: it finished the reconfig and faulted after it | `Failed`, scope `Group` |
 | every participant serving | `Succeeded` |
 | otherwise | `Running` |
 
@@ -96,7 +96,7 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
   (`nixl_ep` or `deepep_low_latency`).
 - Size the redundant experts for the ranks you want to lose in place: the survivors' slots must hold every
   logical expert. With E experts, R redundant and N ranks, losing k ranks needs (N - k)(E + R)/N >= E.
-  Otherwise the round fails ("no redundant slot for missing expert") and the group is reset.
+  Otherwise the reconfig fails ("no redundant slot for missing expert") and the group is reset.
 - `nixl_ep` from NIXL 1.4 on uses GPU-initiated RDMA across Pods. Restrict `UCX_NET_DEVICES` to the RDMA
   devices the Pod can use for GPU memory, and make sure the nodes support it; within one Pod it runs over NVLink.
 
@@ -108,7 +108,7 @@ NIXL 1.3.2 and 1.5.0).
 
 | Issue | What IRO does |
 |---|---|
-| With NIXL before 1.4, removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep`. NIXL 1.5.0, which vLLM pins, removes it in place. For NIXL 1.3, `Etelis/vllm` branch `ft-nixl-ep-highest-rank` trims the expert output to the dispatched slots. | `Progress` fails the round on the new fault and the group is reset |
+| With NIXL before 1.4, removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep`. NIXL 1.5.0, which vLLM pins, removes it in place. For NIXL 1.3, `Etelis/vllm` branch `ft-nixl-ep-highest-rank` trims the expert output to the dispatched slots. | `Progress` fails the reconfig on the new fault and the group is reset |
 | A Pod that disappears (not just its processes) can wedge the survivors: their next step fails on a Gloo connection reset, but the `nixl_ep` fault of the step in flight is never raised, so the EngineCore never learns of it and blocks on the shared-memory broadcast with status `healthy`. Seen in 1 of 2 Pod deletions at `384ba19`, none of 11 at `fcfbd37`. | the plan waits; the diagnosis deadline resets the group |
 | The DP coordinator (rank 0) dying goes unnoticed under load; the first request after an idle period faults the group | the probe wakes the idle rank, then a retry; a second one within `FlapWindow` resets the group |
 | NIXL 1.4 and later fail across Pods on nodes without GPU-initiated RDMA: `invalid memh` on unusable devices, then `lane not found` | none: the group does not start |

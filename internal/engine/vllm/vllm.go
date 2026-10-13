@@ -27,7 +27,7 @@ func (options *Options) BindFlags(flags *flag.FlagSet) {
 	flags.IntVar(&options.APIPort, "vllm-api-port", 8000, "API port of a Pod's first rank; rank i listens on this port plus i")
 	flags.IntVar(&options.RanksPerPod, "vllm-ranks-per-pod", 1, "data parallel ranks in each Pod")
 	flags.IntVar(&options.StorePort, "vllm-store-port", 29600,
-		"port for a new FT store when a round removes the rank that hosts it")
+		"port for a new FT store when a reconfig removes the rank that hosts it")
 	flags.DurationVar(&options.Timeout, "vllm-timeout", 5*time.Second, "timeout of one status, health or apply request")
 }
 
