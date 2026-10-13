@@ -116,11 +116,14 @@ In order:
 1. **Discover.** If it fails, keep the phase and its deadline clock, note the time, and stop here.
 2. **Read Discover** against the journal: same group, new group, or going away. While the old group is going,
    repeat any owed `ResetAll` and stop here. See [Reading Discover](#reading-discover).
-3. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
-4. **Check the observation** (C4, C5). A violation resets the group.
-5. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [reconfig](#reconfigs) is in flight.
+3. **If `starting`**, record the Pods, `Observe`, and ask for a `Plan` over the members that are not Terminal.
+   Wait while a Pod is `Starting` or gives no members. On a `Healthy` plan, admit every member and go to
+   `serving`. Stop here: no member is admitted yet, so there is nothing to check.
+4. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
+5. **Check the observation** (C1, C4, C5). A violation resets the group.
+6. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [reconfig](#reconfigs) is in flight.
    Check and send a new reconfig, verify the members of a reconfig that succeeded, or reset.
-6. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
+7. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
 
 **Example**, the [running example](README.md#running-example) poll by poll:
 
@@ -158,8 +161,8 @@ stateDiagram-v2
   starting --> serving: plan Healthy
   serving --> recovering: a fault is observed
   recovering --> serving: plan Healthy, or reconfig Succeeded
-  serving --> starting: ResetAll, after a reconfig fails verification past window, C4 or C5 broken
-  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, deadline, flap guard
+  serving --> starting: ResetAll, after a reconfig fails verification past window, C1, C4 or C5 broken
+  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, deadline, flap guard, C1, C4 or C5 broken
 ```
 
 Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
@@ -168,7 +171,7 @@ described [below](#reconfigs). A reconfig can run in `recovering` (fixing a faul
 
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
-| `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
+| `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then records the Pods every poll, checks nothing, waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
 | `serving` | healthy, maybe below full | verifies the members of a reconfig that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A reconfig that admits candidates runs here. | a fault |
 | `recovering` | the engine reports a fault | probes once on entry. Without a reconfig: plans every poll, resets on `Unrecoverable`, and sends a reconfig no sooner than 2 polls in. With a reconfig: checks `Progress` every poll and never sends it again. | `Healthy` plan, or reconfig `Succeeded`. Or reset. |
 
@@ -200,8 +203,10 @@ flowchart TD
 A `ResetAll` is owed when every saved Pod is `Removing`. Once none of them remain, the first check
 fails, the second finds no saved Pod, and the new Pods form a new group.
 
-While `starting`, every Pod belongs to the group being started, and its members are admitted when the
-group first serves. The table applies from then on. An empty journal (IRO's first run) is a new group.
+While `starting`, every Pod belongs to the group being started. The controller records the Pods again on
+every poll and does not connect or check members. On the first `Healthy` plan it admits every member it saw.
+The table above, [connecting Pods and members](#connecting-pods-and-members) and checks C1, C4 and C5 apply
+from then on. An empty journal (IRO's first run) is a new group.
 
 ### Connecting Pods and members
 
@@ -290,8 +295,10 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 | C7 | One reconfig at a time. `Apply` refuses a reconfig that names a member missing from the current observation. | a stale reconfig cannot apply to a changed group |
 | C8 | `Reset` and `Release` name only Pods whose every member is excluded, after the reconfig that removed them finished | the engine must no longer depend on a Pod before it goes |
 
-A plan that fails C1 to C3 resets the group. An observation that fails C4 or C5 resets the group.
-C8 limits what the controller itself sends, so it is never violated at runtime.
+A plan that fails C1 to C3 resets the group. An observation that fails C1, C4 or C5 resets the group.
+The observation is checked in `serving` and `recovering`. In `starting` no member is admitted yet: the
+`Healthy` plan that ends `starting` admits them all. C8 limits what the controller itself sends, so it is
+never violated at runtime.
 
 ### Guarantees
 

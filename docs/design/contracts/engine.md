@@ -274,6 +274,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod restarts, so exclusions and reconfigs name exactly one process |
 | No memory. Addresses and anything else the driver needs travel in `Observation.Engine`. | a new leader needs no warm-up. The driver may still cache internally, keyed by Pod identity. |
 | Pods that are not `Ready` give no members, or members that are not Joinable | a loading Pod is not a candidate yet |
+| A Pod gives all of its members or none | the controller admits, at the end of `starting`, exactly the members it saw |
 | Once Terminal, always Terminal for that member | the controller's check C4 depends on it |
 | `Serving` means what the router uses: the engine's native health | checks C1 and C5 reason about traffic |
 | Candidates do not report `Serving` | check C5 |
