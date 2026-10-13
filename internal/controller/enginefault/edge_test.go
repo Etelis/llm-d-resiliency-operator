@@ -277,6 +277,32 @@ func TestResendCheckedAgain(t *testing.T) {
 	}
 }
 
+func TestDroppedResendRestartsTheDiagnosisDeadline(t *testing.T) {
+	t.Parallel()
+	test := newHarness(t)
+	test.serving()
+	test.dead()
+	test.eng.plan = test.shrinkPlan()
+	test.poll()
+	test.poll()
+	test.unconfirmed()
+	test.eng.progress = engine.Progress{State: engine.Running}
+	test.poll()
+	test.after(80 * time.Second)
+	test.eng.progress = engine.Progress{State: engine.NotStarted}
+	test.unknown("dp3")
+	test.poll()
+	if record := test.record(); record.Reconfig != nil || len(test.wl.resetAlls) != 0 {
+		t.Fatalf("record %+v", record)
+	}
+	test.readable()
+	test.poll()
+	test.poll()
+	if len(test.wl.resetAlls) != 0 || len(test.eng.applied) != 2 {
+		t.Fatalf("applied %d, group resets %d, record %+v", len(test.eng.applied), len(test.wl.resetAlls), test.record())
+	}
+}
+
 func (test *harness) restartedInPlace(serving bool) {
 	test.t.Helper()
 	test.serving()

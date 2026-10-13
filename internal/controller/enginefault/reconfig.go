@@ -56,14 +56,14 @@ func (fsm *controller) watch(ctx context.Context, next *Record, current *view, n
 }
 
 func (fsm *controller) send(ctx context.Context, next *Record, current *view, plan *engine.Plan, now time.Time) error {
-	for _, id := range slices.Concat(plan.Participants, plan.Add) {
+	if reason := checkPlan(next, current, plan); reason != "" {
+		return fsm.resetAll(ctx, next, ResetUnrecoverable, reason, now)
+	}
+	for _, id := range plan.Participants {
 		if member := current.members[id]; member != nil && member.Unknown {
 			next.Reason = "waiting to read " + string(id) + ": " + plan.Reason
 			return nil
 		}
-	}
-	if reason := checkPlan(next, current, plan); reason != "" {
-		return fsm.resetAll(ctx, next, ResetUnrecoverable, reason, now)
 	}
 	noChange := len(plan.Remove) == 0 && len(plan.Add) == 0
 	if noChange && !next.LastNoChangeReconfig.IsZero() && now.Sub(next.LastNoChangeReconfig) < fsm.config.FlapWindow {
@@ -95,6 +95,9 @@ func (fsm *controller) resend(ctx context.Context, next *Record, current *view, 
 	if reason := checkPlan(next, current, &plan); reason != "" {
 		fsm.finishReconfig(next, &engine.Progress{State: engine.NotStarted, Reason: reason}, now)
 		next.Reason = "dropped " + reconfig.ID + ", no member got it: " + reason
+		if next.Phase == Recovering {
+			next.Since = now
+		}
 		return nil
 	}
 	next.ReconfigSince = now

@@ -436,7 +436,7 @@ func TestReconfigOutcomes(t *testing.T) {
 		test.poll()
 		test.wantReset(ResetApplyDeadline)
 	})
-	t.Run("not resent by the leader that sent it", func(t *testing.T) {
+	t.Run("not resent once its acceptances are saved", func(t *testing.T) {
 		t.Parallel()
 		test := start(t)
 		test.poll()
@@ -468,6 +468,47 @@ func TestReconfigOutcomes(t *testing.T) {
 			t.Fatalf("record %+v", record)
 		}
 	})
+	t.Run("resent by the same leader when its acceptances were not saved", func(t *testing.T) {
+		t.Parallel()
+		test := start(t)
+		test.store.saveErrs = []error{nil, errors.New("api timeout")}
+		test.pollAnyway()
+		if record := test.record(); record.Reconfig == nil || len(record.Acceptances) != 0 {
+			t.Fatalf("record %+v", record)
+		}
+		test.eng.progress = engine.Progress{State: engine.NotStarted}
+		test.poll()
+		if len(test.eng.applied) != 2 || len(test.record().Acceptances) != 3 {
+			t.Fatalf("applied %d, record %+v", len(test.eng.applied), test.record())
+		}
+	})
+	t.Run("a resent retry restarts the apply deadline and is not a flap", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.serving()
+		for index := range test.eng.members {
+			test.eng.members[index].Serving = false
+		}
+		test.eng.plan = engine.Plan{Kind: engine.Change, Participants: ids("dp0@idA", "dp1@idB", "dp2@idC", "dp3@idD")}
+		test.poll()
+		test.poll()
+		test.unconfirmed()
+		test.eng.progress = engine.Progress{State: engine.Running}
+		test.poll()
+		test.clock = test.clock.Add(time.Minute)
+		test.eng.progress = engine.Progress{State: engine.NotStarted}
+		test.poll()
+		record := test.record()
+		if len(test.eng.applied) != 2 || !record.ReconfigSince.Equal(test.clock) || len(test.wl.resetAlls) != 0 {
+			t.Fatalf("applied %d, record %+v", len(test.eng.applied), record)
+		}
+		test.eng.progress = engine.Progress{State: engine.Running}
+		test.clock = test.clock.Add(test.config.ApplyTimeout - time.Second)
+		test.poll()
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("apply deadline counted from the first send: %+v", test.record())
+		}
+	})
 	t.Run("resend save fails", func(t *testing.T) {
 		t.Parallel()
 		test := start(t)
@@ -497,6 +538,24 @@ func TestReconfigOutcomes(t *testing.T) {
 			t.Fatal("reconfig not sent once the journal works")
 		}
 	})
+}
+
+func TestLeaderChangeWithAFailedSave(t *testing.T) {
+	t.Parallel()
+	test := newHarness(t)
+	test.serving()
+	test.eng.plan = engine.Plan{Kind: engine.Wait, Reason: "dp1 is diagnosing"}
+	test.poll()
+	test.after(60 * time.Second)
+	test.load()
+	test.store.saveErrs = []error{errors.New("etcd timeout")}
+	test.pollAnyway()
+	test.after(20 * time.Second)
+	if len(test.wl.resetAlls) != 0 {
+		t.Fatalf("reset before the restarted deadline: %+v", test.record())
+	}
+	test.after(80 * time.Second)
+	test.wantReset(ResetDiagnosisDeadline)
 }
 
 func TestVerifyAfterReconfig(t *testing.T) {
@@ -536,22 +595,59 @@ func TestVerifyAfterReconfig(t *testing.T) {
 			t.Fatalf("resets %v", test.wl.resets)
 		}
 	})
-	t.Run("a fault during the window takes the fault path", func(t *testing.T) {
+	t.Run("a fault during the window keeps the check", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)
-		test.config.VerifyTimeout = 30 * time.Second
 		test.eng.verifyErr = errors.New("no tokens")
 		test.shrunk()
 		test.eng.plan = engine.Plan{Kind: engine.Wait, Reason: "dp1 is diagnosing"}
 		test.poll()
-		record := test.record()
-		if record.Phase != Recovering || record.Verifying != nil || !record.VerifyFailedSince.IsZero() {
+		if record := test.record(); record.Phase != Recovering || len(record.Verifying) != 3 || record.Incident == nil {
 			t.Fatalf("record %+v", record)
 		}
-		test.clock = test.clock.Add(40 * time.Second)
+		test.eng.plan = engine.Plan{Kind: engine.Healthy}
+		test.poll()
+		if record := test.record(); record.Phase != Serving || record.Incident == nil || len(record.Verifying) != 3 {
+			t.Fatalf("incident closed before the check passed: %+v", record)
+		}
+		test.eng.verifyErr = nil
+		test.poll()
+		if record := test.record(); record.Incident != nil || len(record.Verifying) != 0 || len(test.wl.resetAlls) != 0 {
+			t.Fatalf("record %+v", record)
+		}
+	})
+	t.Run("one unreadable poll does not drop a failing check", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.eng.verifyErr = errors.New("no tokens")
+		test.shrunk()
+		test.unknown("dp1")
+		test.poll()
+		test.readable()
+		test.poll()
+		if record := test.record(); record.Phase != Serving || record.Incident == nil || len(record.Verifying) != 3 {
+			t.Fatalf("record %+v", record)
+		}
+		test.clock = test.clock.Add(test.config.VerifyTimeout)
+		test.poll()
+		test.wantReset(ResetVerifyFailed)
+	})
+	t.Run("a pause for the workload keeps the window paused", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.eng.verifyErr = errors.New("no tokens")
+		test.shrunk()
+		test.after(30 * time.Second)
+		test.wl.discoverErr = errors.New("api down")
+		test.pollAnyway()
+		test.after(5 * time.Minute)
+		test.wl.discoverErr = nil
+		test.wl.group.Recreating = true
+		test.poll()
+		test.wl.group.Recreating = false
 		test.poll()
 		if len(test.wl.resetAlls) != 0 {
-			t.Fatalf("verify_failed reset during recovering: %+v", test.record())
+			t.Fatalf("verify_failed reset after the pause: %+v", test.record())
 		}
 	})
 	for _, mode := range []CapacityRestore{RestoreResetPod, RestoreRelease, RestoreResetAll} {

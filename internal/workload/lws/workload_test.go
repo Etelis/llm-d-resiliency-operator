@@ -305,7 +305,22 @@ func TestIdentityCoversEngineContainers(t *testing.T) {
 			}
 		})
 	}
-	t.Run("a named container the Pod does not have", func(t *testing.T) {
+	t.Run("leader and workers name their engine containers differently", func(t *testing.T) {
+		t.Parallel()
+		leader, worker := readyPod(0), readyPod(1)
+		leader.Spec.Containers[0].Name, leader.Status.ContainerStatuses[0].Name = "vllm-leader", "vllm-leader"
+		worker.Spec.Containers[0].Name, worker.Status.ContainerStatuses[0].Name = "vllm-worker", "vllm-worker"
+		world := newCluster(t, leaderWorkerSet("None"), leader, worker)
+		options := &lws.Options{Namespace: "test", Name: "model", EngineContainers: []string{"vllm-leader", "vllm-worker"}}
+		instance, _, err := options.New(world.api, world.api)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if group := discover(t, instance); len(group.Pods) != 2 {
+			t.Fatalf("group %+v", group)
+		}
+	})
+	t.Run("a Pod with none of the named containers", func(t *testing.T) {
 		t.Parallel()
 		world := newCluster(t, leaderWorkerSet("None"), readyPod(0), readyPod(1))
 		options := &lws.Options{Namespace: "test", Name: "model", EngineContainers: []string{"vllm"}}

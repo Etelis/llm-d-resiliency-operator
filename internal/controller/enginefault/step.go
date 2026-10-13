@@ -213,20 +213,24 @@ func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group 
 	}
 	owed = owed && present
 	if !group.Recreating && !group.RecreateStopped && !owed {
-		if fsm.waited {
-			resume(next, now)
+		if !fsm.waited {
+			return false, nil
 		}
-		if fsm.waited && next.Phase == Recovering {
+		resume(next, now)
+		if next.Phase == Recovering {
 			next.Since = now
 		}
-		if fsm.waited && next.Reconfig != nil {
+		if next.Reconfig != nil {
 			next.ReconfigSince = now
+		}
+		if err := fsm.save(ctx, next); err != nil {
+			return true, err
 		}
 		fsm.waited = false
 		return false, nil
 	}
 	fsm.waited = true
-	next.UnseenSince = time.Time{}
+	resume(next, now)
 	if (group.Recreating || group.RecreateStopped) && next.Phase == Serving && next.Incident == nil {
 		cause := "workload is recreating the group"
 		if group.RecreateStopped {
@@ -456,7 +460,6 @@ func (fsm *controller) serve(ctx context.Context, next *Record, current *view, n
 }
 
 func (fsm *controller) enterRecovering(ctx context.Context, next *Record, current *view, plan *engine.Plan, now time.Time) error {
-	next.Verifying, next.VerifyFailedSince = nil, time.Time{}
 	enter(next, Recovering, plan.Reason, now)
 	if next.Incident == nil {
 		fsm.openIncident(next, plan.Reason, current, now)
@@ -478,7 +481,9 @@ func (fsm *controller) recover(ctx context.Context, next *Record, current *view,
 	switch {
 	case plan.Kind == engine.Healthy:
 		enter(next, Serving, plan.Reason, now)
-		fsm.closeIncident(next, outcome(next.Incident), now)
+		if len(next.Verifying) == 0 {
+			fsm.closeIncident(next, outcome(next.Incident), now)
+		}
 		return nil
 	case plan.Kind == engine.Unrecoverable:
 		return fsm.resetAll(ctx, next, ResetUnrecoverable, plan.Reason, now)

@@ -210,8 +210,7 @@ func TestSomeUnknown(t *testing.T) {
 		test := newHarness(t)
 		test.serving()
 		test.dead()
-		test.unknown("dp1", "dp3")
-		test.member("dp3").Terminal = true
+		test.unknown("dp1")
 		test.eng.plan = test.shrinkPlan()
 		test.poll()
 		test.poll()
