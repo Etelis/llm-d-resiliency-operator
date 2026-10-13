@@ -74,19 +74,19 @@ Reports the group as it is now.
 | **Errors** | only when the workload cannot be read, or its spec is not supported. Starting, terminating and missing Pods are facts, not errors. |
 | **Side effects** | none |
 
-**Example**, while `lws-0-3` is reset in the [running example](README.md#running-example):
+**Example**, while `pod-3` is reset in the [running example](README.md#running-example):
 
 ```yaml
 Recreating: false
 RecreateStopped: false
 Pods:
-- {Name: lws-0,   UID: a1, Index: 0, Identity: idA,  Node: gpu-node-1, State: Ready}
-- {Name: lws-0-1, UID: b1, Index: 1, Identity: idB,  Node: gpu-node-2, State: Ready}
-- {Name: lws-0-2, UID: c1, Index: 2, Identity: idC,  Node: gpu-node-3, State: Ready}
-- {Name: lws-0-3, UID: d2, Index: 3, Identity: idD2, Node: gpu-node-9, State: Starting}
+- {Name: pod-0,   UID: a1, Index: 0, Identity: idA,  Node: gpu-node-1, State: Ready}
+- {Name: pod-1, UID: b1, Index: 1, Identity: idB,  Node: gpu-node-2, State: Ready}
+- {Name: pod-2, UID: c1, Index: 2, Identity: idC,  Node: gpu-node-3, State: Ready}
+- {Name: pod-3, UID: d2, Index: 3, Identity: idD2, Node: gpu-node-9, State: Starting}
 ```
 
-`lws-0-3` has a new UID: it is a new Pod in the same place. `Discover` does not say that the old one
+`pod-3` has a new UID: it is a new Pod in the same place. `Discover` does not say that the old one
 was reset on purpose. The controller knows that from its journal.
 
 ### Reset
@@ -102,7 +102,7 @@ Replaces each named Pod with a new Pod in the same place. The rest of the group 
 **Example.**
 
 ```go
-Reset(ctx, []PodRef{{"lws-0-2", "c1"}, {"lws-0-3", "d1"}})
+Reset(ctx, []PodRef{{"pod-2", "c1"}, {"pod-3", "d1"}})
 // a workload that supports it: both are deleted and come back with new UIDs. Returns nil.
 // the same call again: no named Pod exists. Returns nil, changes nothing.
 // the list names a Pod the workload cannot replace alone, such as its leader: ErrUnsupported, changes nothing.
@@ -121,9 +121,9 @@ Recreates the group that the named Pods belong to.
 **Example.**
 
 ```go
-ResetAll(ctx, []PodRef{{"lws-0", "a1"}, {"lws-0-1", "b1"}, {"lws-0-2", "c1"}, {"lws-0-3", "d1"}})
-// first call: LWS deletes lws-0 (UID a1). LWS recreates the group. Returns nil.
-// after the new group exists: lws-0 now has UID f1, so no named Pod exists. Returns nil, changes nothing.
+ResetAll(ctx, []PodRef{{"pod-0", "a1"}, {"pod-1", "b1"}, {"pod-2", "c1"}, {"pod-3", "d1"}})
+// first call: the workload deletes pod-0 (UID a1), and the whole group is recreated. Returns nil.
+// after the new group exists: pod-0 now has UID f1, so no named Pod exists. Returns nil, changes nothing.
 ```
 
 The second call is why the controller can repeat `ResetAll` until the old Pods are gone: it can never
@@ -142,8 +142,8 @@ Removes the named Pods and frees their GPUs. Nothing is added in their place.
 **Example.**
 
 ```go
-Release(ctx, []PodRef{{"lws-0-3", "d1"}})
-// a workload that supports it: lws-0-3 starts terminating and is not replaced. Returns nil.
+Release(ctx, []PodRef{{"pod-3", "d1"}})
+// a workload that supports it: pod-3 starts terminating and is not replaced. Returns nil.
 // the same call again: no Pod with UID d1 exists. Returns nil, changes nothing.
 // a workload that cannot: returns ErrUnsupported, changes nothing.
 ```

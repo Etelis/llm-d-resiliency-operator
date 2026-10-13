@@ -238,26 +238,26 @@ def recovery_sequence():
         [
             ("t1–t2  remove the dead member  ·  recovering", [
                 ("msg", "c", "d", "Observe(pods)", False),
-                ("msg", "d", "c", "dp3 terminal, dp0–dp2 paused", True),
+                ("msg", "d", "c", "m3 terminal, m0–m2 paused", True),
                 ("msg", "c", "p", "Plan(...)", False),
-                ("msg", "p", "c", "Change: remove dp3", True),
-                ("msg", "c", "d", "Apply(remove dp3)", False),
+                ("msg", "p", "c", "Change: remove m3", True),
+                ("msg", "c", "d", "Apply(remove m3)", False),
                 ("msg", "c", "p", "Progress(...)", False),
                 ("msg", "p", "c", "Succeeded", True),
-                ("msg", "c", "d", "Verify(dp0, dp1, dp2)", False),
-                ("note", "c", "d", ["serving with 3 members; lws-0-3 holds only an excluded member"], "amber"),
+                ("msg", "c", "d", "Verify(m0, m1, m2)", False),
+                ("note", "c", "d", ["serving with 3 members; pod-3 holds only an excluded member"], "amber"),
             ]),
             ("t3  reset the failed Pod  ·  serving", [
-                ("msg", "c", "w", "Reset(lws-0-3, UID d1)", False),
-                ("msg", "w", "c", "lws-0-3 back with UID d2, then Ready", True, "grey"),
+                ("msg", "c", "w", "Reset(pod-3, UID d1)", False),
+                ("msg", "w", "c", "pod-3 back with UID d2, then Ready", True, "grey"),
             ]),
             ("t4–t5  admit the new member  ·  serving", [
                 ("msg", "c", "d", "Observe(pods)", False),
-                ("msg", "d", "c", "dp3 on lws-0-3 (d2) joinable", True),
+                ("msg", "d", "c", "m3 on pod-3 (d2) joinable", True),
                 ("msg", "c", "p", "Plan(...)", False),
-                ("msg", "p", "c", "Change: add dp3", True),
-                ("msg", "c", "d", "Apply(add dp3)", False),
-                ("msg", "c", "d", "Verify(dp0 … dp3)", False),
+                ("msg", "p", "c", "Change: add m3", True),
+                ("msg", "c", "d", "Apply(add m3)", False),
+                ("msg", "c", "d", "Verify(m0 … m3)", False),
                 ("note", "c", "d", ["serving with 4 members"], "green"),
             ]),
         ],
@@ -272,13 +272,13 @@ def recovery_timeline():
     s = Svg(1060, 0, "One member dies: 4 → 3 → 4", "four Pods with one member each · the group keeps serving the whole time")
     rows = [
         ("t0", "serving", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
-        ("t1", "dp3's worker dies", "recovering", "amber", ["paused", "paused", "paused", "failed"],
-         ["paused", "paused", "paused", "dead"], ("dp3",)),
-        ("t2", "a reconfig removes dp3", "serving 3", "blue", ["active", "active", "active", "failed"],
+        ("t1", "m3 dies", "recovering", "amber", ["paused", "paused", "paused", "failed"],
+         ["paused", "paused", "paused", "dead"], ("m3",)),
+        ("t2", "a reconfig removes m3", "serving 3", "blue", ["active", "active", "active", "failed"],
          ["serving", "serving", "serving", "excluded"], ()),
-        ("t3", "Reset replaces lws-0-3", "serving 3", "blue", ["active", "active", "active", "starting"],
+        ("t3", "Reset replaces pod-3", "serving 3", "blue", ["active", "active", "active", "starting"],
          ["serving", "serving", "serving", "new UID, starting"], ()),
-        ("t4", "a reconfig adds the new dp3", "serving 3", "blue", ["active", "active", "active", "joining"],
+        ("t4", "a reconfig adds the new m3", "serving 3", "blue", ["active", "active", "active", "joining"],
          ["serving", "serving", "serving", "joining"], ()),
         ("t5", "full again", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
     ]
@@ -294,13 +294,13 @@ def recovery_timeline():
         for i, (state, st) in enumerate(zip(states, status)):
             pod_state = state if state != "failed" else "failed"
             sub = "UID d2" if t in ("t3", "t4", "t5") and i == 3 else "UID d1" if i == 3 else f"UID {'abc'[i]}1"
-            pod(s, x, y, "lws-0" if i == 0 else f"lws-0-{i}", sub, [(f"dp{i}", state)], st, pod_state, w=170, crossed=crossed)
+            pod(s, x, y, f"pod-{i}", sub, [(f"m{i}", state)], st, pod_state, w=170, crossed=crossed)
             x += 182
         y += 140
     s.line(28, y - 10, 1032, y - 10, C["rule"], 1.2)
     s.legend(y + 22, [("active", "green", "serving"), ("paused", "amber", "paused or joining"), ("failed", "red", "dead or excluded"),
                       ("starting", "grey", "new Pod, not yet a member")])
-    s.text(32, y + 52, "One cell is one engine member (a vLLM DP rank). Pod names and UIDs come from the workload, member IDs from the engine.",
+    s.text(32, y + 52, "One cell is one engine member (for vLLM, one DP rank). Pod names and UIDs come from the workload, member IDs from the engine.",
            12, color=C["muted"])
     s.h = y + 74
     s.save("recovery-timeline.svg")

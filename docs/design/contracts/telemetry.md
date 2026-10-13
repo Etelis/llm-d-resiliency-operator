@@ -92,7 +92,7 @@ continues the same incident and its timings. Closed incidents leave the record a
 
 ## Functions
 
-All examples use the [running example](README.md#running-example). The group label is `ns1/lws`.
+All examples use the [running example](README.md#running-example). The group label is `ns1/group`.
 
 ### Stepped
 
@@ -103,7 +103,7 @@ Called at the end of every `Step`.
 | **Input** | the controller's [`Record`](controller.md#objects) after the step, and the step's error |
 | **Emits** | refreshes the gauges (phase, members, capacity, and how long the controller has not seen the group, from `UnseenSince`). Remembers the time, for `Ready`. Logs the error, if any. A `GroupUnseen` Warning Event when `UnseenSince` is first set. |
 
-**Example.** After poll 6: `llm_d_iro_phase{group="ns1/lws",phase="serving"} 1`,
+**Example.** After poll 6: `llm_d_iro_phase{group="ns1/group",phase="serving"} 1`,
 `llm_d_iro_members{state="admitted"} 3`, `llm_d_iro_members{state="excluded"} 1`.
 
 ### PhaseChanged
@@ -113,7 +113,7 @@ Called at the end of every `Step`.
 | **Input** | the old phase, the new phase, the reason |
 | **Emits** | a log line, a `PhaseChanged` Event, `llm_d_iro_phase_transitions_total{from,to}` |
 
-**Example.** `PhaseChanged(serving, recovering, "dp3 is dead; survivors paused")`
+**Example.** `PhaseChanged(serving, recovering, "m3 is dead; survivors paused")`
 
 ### IncidentOpened
 
@@ -122,8 +122,8 @@ Called at the end of every `Step`.
 | **Input** | the new [`Incident`](#objects), with `ID`, `Opened`, `Cause`, `Affected`, `Pods`, `Nodes` |
 | **Emits** | a log line and an `IncidentOpened` Warning Event. Every later Event of this incident names its ID. |
 
-**Example.** `IncidentOpened({ID: inc-7c1e, Cause: "dp3 is dead", Affected: [dp3@idD], Pods: [lws-0-3], Nodes: [gpu-node-7]})`
-→ Event: `inc-7c1e: dp3@idD on lws-0-3 (node gpu-node-7) is dead; recovering`
+**Example.** `IncidentOpened({ID: inc-7c1e, Cause: "m3 is dead", Affected: [m3@idD], Pods: [pod-3], Nodes: [gpu-node-7]})`
+→ Event: `inc-7c1e: m3@idD on pod-3 (node gpu-node-7) is dead; recovering`
 
 ### ReconfigStarted
 
@@ -132,7 +132,7 @@ Called at the end of every `Step`.
 | **Input** | the [`Reconfig`](engine.md#objects) just sent and the [`Plan`](engine.md#objects) it came from |
 | **Emits** | a log line and a `ReconfigStarted` Event, again when the reconfig is sent again (reason `resent: no member got it`) |
 
-**Example.** → Event: `inc-7c1e: reconfig iro-ft-7c1e started: shrink, remove dp3@idD`
+**Example.** → Event: `inc-7c1e: reconfig iro-ft-7c1e started: shrink, remove m3@idD`
 
 ### ReconfigFinished
 
@@ -150,7 +150,7 @@ Called at the end of every `Step`.
 | **Input** | the Pods named in `Reset`, and the workload's answer |
 | **Emits** | a log line, a `PodReset` Event and `llm_d_iro_pod_resets_total` (one per Pod), once per call (not every poll). A call answered with `ErrUnsupported` emits only the log line, and the Pods the workload cannot handle stay as they are. A list the workload cannot handle as a whole is not recorded; each Pod is then asked for, and recorded, alone. |
 
-**Example.** `PodResetRequested([{lws-0-2, c1}, {lws-0-3, d1}], nil)` → Event: `resetting lws-0-2, lws-0-3 to bring dp2, dp3 back`
+**Example.** `PodResetRequested([{pod-2, c1}, {pod-3, d1}], nil)` → Event: `resetting pod-2, pod-3 to bring m2, m3 back`
 
 ### ResetAllRequested
 
@@ -159,7 +159,7 @@ Called at the end of every `Step`.
 | **Input** | a fixed [`ResetReason`](#objects) and the Pods named in `ResetAll` |
 | **Emits** | a log line, a `GroupReset` Warning Event, `llm_d_iro_resets_total{reason}` |
 
-**Example.** `ResetAllRequested(reconfig_failed, [lws-0 ... lws-0-3])` → `llm_d_iro_resets_total{reason="reconfig_failed"}` +1
+**Example.** `ResetAllRequested(reconfig_failed, [pod-0 ... pod-3])` → `llm_d_iro_resets_total{reason="reconfig_failed"}` +1
 
 ### ReleaseRequested
 
@@ -168,7 +168,7 @@ Called at the end of every `Step`.
 | **Input** | the Pods named in `Release`, and the workload's answer |
 | **Emits** | a log line and a `PodsReleased` Event, once per request (not every poll). As for `PodResetRequested`, `ErrUnsupported` emits only the log line. |
 
-**Example.** `ReleaseRequested([{lws-0-3, d1}], nil)` → Event: `releasing lws-0-3; serving with 3 members`
+**Example.** `ReleaseRequested([{pod-3, d1}], nil)` → Event: `releasing pod-3; serving with 3 members`
 
 ### SaveFailed
 
@@ -177,7 +177,7 @@ Called at the end of every `Step`.
 | **Input** | the journal error |
 | **Emits** | a log line, `llm_d_iro_journal_save_failures_total` |
 
-**Example.** `SaveFailed(ErrConflict)` → `llm_d_iro_journal_save_failures_total{group="ns1/lws"}` +1
+**Example.** `SaveFailed(ErrConflict)` → `llm_d_iro_journal_save_failures_total{group="ns1/group"}` +1
 
 ### IncidentClosed
 
@@ -224,7 +224,7 @@ the group unseen for more than N minutes, journal saves failing, no leader.
 
 ### Events
 
-On the workload object (the LWS). Every Event of an incident starts with its ID.
+On the workload object. Every Event of an incident starts with its ID.
 
 | Reason | Type | When |
 |---|---|---|
@@ -241,7 +241,7 @@ On the workload object (the LWS). Every Event of an incident starts with its ID.
 
 ### Incident history
 
-The last 20 closed incidents, newest first, in ConfigMap `<lws-name>-ft-incidents`, owned by the LWS.
+The last 20 closed incidents, newest first, in ConfigMap `<workload-name>-ft-incidents`, owned by the workload object.
 Written best-effort: a failed write is logged and dropped. It is separate from the journal, so the
 journal stays small and its saves stay critical-path only.
 
@@ -265,7 +265,7 @@ journal stays small and its saves stay critical-path only.
   and every telemetry hiccup a recovery problem.
 - **Detection time.** Issue #30 lists a detect stage. Measuring it needs the time the engine saw the fault,
   and `Member` has no timestamp yet. Until it does, `Diagnose` starts when IRO opens the incident.
-- **Fault kinds.** Issue #30 lists kinds such as rank death, collective stall and frontend loss. Today the
+- **Fault kinds.** Issue #30 lists kinds such as member death, collective stall and frontend loss. Today the
   incident's `Cause` is the policy's free-text reason. A fixed `Plan.Fault` kind from the engine would let
   incidents be counted by kind.
 - **Tracing.** Not now. An OpenTelemetry trace per incident, following llm-d's tracing conventions, is
@@ -278,8 +278,8 @@ journal stays small and its saves stay critical-path only.
 |---|---|
 | Logs | the controller-runtime logger from the context, with `group`, `incident`, `reconfig` and `phase` keys |
 | Metrics | the controller-runtime metrics registry, served on the manager's `/metrics` |
-| Events | the manager's `EventRecorder`, on the LWS |
-| Incident history | ConfigMap `<lws-name>-ft-incidents`, owned by the LWS |
+| Events | the manager's `EventRecorder`, on the workload object |
+| Incident history | ConfigMap `<workload-name>-ft-incidents`, owned by the workload object |
 | Readiness | a `readyz` check that calls `Ready` |
 
 **Today** IRO logs errors only. It has no IRO metrics, no Events, and its readiness check is a plain ping.

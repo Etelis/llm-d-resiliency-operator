@@ -43,7 +43,7 @@ Reads the saved record.
 **Example.**
 
 ```go
-Load(ctx) // first run of IRO for this LWS: nil, "", nil. The controller starts a new group.
+Load(ctx) // first run of IRO for this group: nil, "", nil. The controller starts a new group.
 Load(ctx) // after a leader change: {"phase":"recovering","reconfig":{"id":"iro-ft-7c1e",...},...}, "v42", nil
 ```
 

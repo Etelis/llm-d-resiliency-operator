@@ -48,7 +48,7 @@ type Capabilities struct {
 type Member struct {
     Pod         PodRef
     PodIdentity string // copied from the Pod, so the ID changes when the Pod is replaced or its engine restarts
-    Name        string // the engine's name for it, unique within the Pod, e.g. "dp3"
+    Name        string // the engine's name for it, unique within the Pod, e.g. "m3"
     Serving     bool   // the router may send it traffic: the engine's native health
     Terminal    bool   // will never serve again
     Unknown     bool   // the driver could not read it now. Serving, Terminal and Joinable are false.
@@ -149,14 +149,14 @@ Reports the members running on the given Pods and their state.
 | **Output** | [`Observation`](#objects). Never fails: a member the driver cannot read is reported `Unknown`, and a Pod whose members it cannot list gives none. |
 | **Side effects** | none |
 
-**Example**, right after `dp3` dies:
+**Example**, right after `m3` dies:
 
 ```yaml
 Members:
-- {Pod: lws-0/a1,   PodIdentity: idA, Name: dp0, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
-- {Pod: lws-0-1/b1, PodIdentity: idB, Name: dp1, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
-- {Pod: lws-0-2/c1, PodIdentity: idC, Name: dp2, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
-- {Pod: lws-0-3/d1, PodIdentity: idD, Name: dp3, Serving: false, Terminal: true,  Detail: "dead"}
+- {Pod: pod-0/a1,   PodIdentity: idA, Name: m0, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
+- {Pod: pod-1/b1, PodIdentity: idB, Name: m1, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
+- {Pod: pod-2/c1, PodIdentity: idC, Name: m2, Serving: false, Terminal: false, Detail: "paused, waiting for instruction"}
+- {Pod: pod-3/d1, PodIdentity: idD, Name: m3, Serving: false, Terminal: true,  Detail: "dead"}
 Engine: <driver-private: API addresses, raw engine status>
 ```
 
@@ -164,8 +164,8 @@ Engine: <driver-private: API addresses, raw engine status>
 admitted members that ran on it. Before it calls `Plan`, `Progress`, `Apply` or `Verify`, the controller adds
 each one to `Observation.Members` with its Pod, `PodIdentity` and `Name`, `Terminal: true` and
 `Detail: "pod lost"`. `Observation.Engine` holds nothing for them. The policy plans them like any Terminal
-member, so a shrink names them in `Remove`. If `lws-0-3` is deleted, `Observe` returns `dp0`-`dp2` and the
-controller adds `{Pod: lws-0-3/d1, PodIdentity: idD, Name: dp3, Terminal: true, Detail: "pod lost"}`.
+member, so a shrink names them in `Remove`. If `pod-3` is deleted, `Observe` returns `m0`-`m2` and the
+controller adds `{Pod: pod-3/d1, PodIdentity: idD, Name: m3, Terminal: true, Detail: "pod lost"}`.
 
 ### Probe
 
@@ -177,10 +177,10 @@ Nudges the engine to notice a fault it has not seen yet. May do nothing.
 | **Output** | `nil`, or an error. The controller only adds the error to its reason. |
 | **Side effects** | engine-specific, bounded, never user-visible |
 
-**Example.** `dp3`'s process has exited, but `dp0`-`dp2` are idle and still report healthy: they only
+**Example.** `m3`'s process has exited, but `m0`-`m2` are idle and still report healthy: they only
 notice a dead peer inside a collective operation. The controller calls `Probe(obs)` once when it enters
 `recovering`. The driver sends one short completion through a healthy member. The collective fails, and on
-the next `Observe`, `dp3` is `Terminal` and the others are paused.
+the next `Observe`, `m3` is `Terminal` and the others are paused.
 
 ### Apply
 
@@ -197,12 +197,12 @@ Sends a reconfig to every participant and joiner.
 ```go
 Apply(ctx, obs, Reconfig{
     ID:           "iro-ft-7c1e",
-    Participants: []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"},
-    Remove:       []MemberID{"dp3@idD"},
+    Participants: []MemberID{"m0@idA", "m1@idB", "m2@idC"},
+    Remove:       []MemberID{"m3@idD"},
 })
-// all accept:  [{dp0@idA true} {dp1@idB true} {dp2@idC true}], nil
-// one refuses: [{dp0@idA true} {dp1@idB false "expected 202, got 409"} {dp2@idC true}], error
-// lws-0-3 deleted: obs holds dp3@idD as the controller added it, Apply sends to dp0-dp2 and all accept
+// all accept:  [{m0@idA true} {m1@idB true} {m2@idC true}], nil
+// one refuses: [{m0@idA true} {m1@idB false "expected 202, got 409"} {m2@idC true}], error
+// pod-3 deleted: obs holds m3@idD as the controller added it, Apply sends to m0-m2 and all accept
 ```
 
 An error means the reconfig did not start everywhere: `Apply` refused it before sending anything, or some
@@ -222,9 +222,9 @@ after a reconfig succeeds, for the members that took part or joined.
 **Example.**
 
 ```go
-Verify(ctx, obs, []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"})
+Verify(ctx, obs, []MemberID{"m0@idA", "m1@idB", "m2@idC"})
 // nil
-// or: error "dp1@idB: no tokens generated". The controller retries every poll for --ft-verify-timeout, then resets.
+// or: error "m1@idB: no tokens generated". The controller retries every poll for --ft-verify-timeout, then resets.
 ```
 
 ### Plan
@@ -239,15 +239,15 @@ Says what should happen now. Pure: no I/O, no clock.
 **Examples.**
 
 ```go
-// dp3 dead, dp0-dp2 paused:
-Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC dp3@idD], candidates: [])
-// {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Remove: [dp3@idD], Reason: "dp3 is dead; survivors paused"}
+// m3 dead, m0-m2 paused:
+Plan(obs, admitted: [m0@idA m1@idB m2@idC m3@idD], candidates: [])
+// {Kind: Change, Participants: [m0@idA m1@idB m2@idC], Remove: [m3@idD], Reason: "m3 is dead; survivors paused"}
 
-// later, lws-0-3 was reset, is back as UID d2, and dp3 on it is Joinable (needs Grow):
-Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC], candidates: [dp3@idD2])
-// {Kind: Change, Participants: [dp0@idA dp1@idB dp2@idC], Add: [dp3@idD2], Reason: "candidate ready"}
+// later, pod-3 was reset, is back as UID d2, and m3 on it is Joinable (needs Grow):
+Plan(obs, admitted: [m0@idA m1@idB m2@idC], candidates: [m3@idD2])
+// {Kind: Change, Participants: [m0@idA m1@idB m2@idC], Add: [m3@idD2], Reason: "candidate ready"}
 
-// dp2 is unhealthy, but dp3 is not dead yet:
+// m2 is unhealthy, but m3 is not dead yet:
 // {Kind: Wait, Reason: "waiting for the engine to finish diagnosis"}
 ```
 
@@ -265,9 +265,9 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 ```go
 // no participant got iro-ft-7c1e yet, and the engine can prove it: {State: NotStarted}
 // survivors still rebuilding:             {State: Running}
-// dp0-dp2 healthy, finished iro-ft-7c1e:  {State: Succeeded}
-// dp1 reports its FT operation failed:    {State: Failed, Scope: Group, Reason: "dp1@idB: FT failed: ..."}
-// a joiner failed, survivors untouched:   {State: Failed, Scope: Joiners, Reason: "dp3@idD2 could not join"}
+// m0-m2 healthy, finished iro-ft-7c1e:  {State: Succeeded}
+// m1 reports its FT operation failed:    {State: Failed, Scope: Group, Reason: "m1@idB: FT failed: ..."}
+// a joiner failed, survivors untouched:   {State: Failed, Scope: Joiners, Reason: "m3@idD2 could not join"}
 ```
 
 ## Rules

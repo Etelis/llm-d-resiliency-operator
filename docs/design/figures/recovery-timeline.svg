@@ -8,165 +8,165 @@
 <rect x="32.0" y="130.0" width="82.8" height="22.0" rx="11" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="1.2"/>
 <text x="41.0" y="146.0" font-size="12" fill="#1e8e3e" text-anchor="start" font-weight="700" xml:space="preserve">4 members</text>
 <rect x="300.0" y="96.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="312.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0</text>
+<text x="312.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-0</text>
 <text x="312.0" y="136.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID a1</text>
 <rect x="314.0" y="148.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="341.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp0</text>
+<text x="341.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m0</text>
 <rect x="314.0" y="184.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="385.0" y="198.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="482.0" y="96.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="494.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-1</text>
+<text x="494.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-1</text>
 <text x="494.0" y="136.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID b1</text>
 <rect x="496.0" y="148.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="523.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp1</text>
+<text x="523.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m1</text>
 <rect x="496.0" y="184.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="567.0" y="198.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="664.0" y="96.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="676.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-2</text>
+<text x="676.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-2</text>
 <text x="676.0" y="136.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID c1</text>
 <rect x="678.0" y="148.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="705.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp2</text>
+<text x="705.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m2</text>
 <rect x="678.0" y="184.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="749.0" y="198.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="846.0" y="96.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="858.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-3</text>
+<text x="858.0" y="118.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-3</text>
 <text x="858.0" y="136.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID d1</text>
 <rect x="860.0" y="148.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="887.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp3</text>
+<text x="887.0" y="167.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m3</text>
 <rect x="860.0" y="184.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="931.0" y="198.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <line x1="28.0" y1="226.0" x2="1032.0" y2="226.0" stroke="#dadce0" stroke-width="1.2"/>
 <text x="32.0" y="254.0" font-size="15" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t1</text>
-<text x="64.0" y="254.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">dp3&#x27;s worker dies</text>
+<text x="64.0" y="254.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">m3 dies</text>
 <rect x="32.0" y="270.0" width="90.0" height="22.0" rx="11" fill="#fef7e0" stroke="#f29900" stroke-width="1.2"/>
 <text x="41.0" y="286.0" font-size="12" fill="#f29900" text-anchor="start" font-weight="700" xml:space="preserve">recovering</text>
 <rect x="300.0" y="236.0" width="170.0" height="118.0" rx="6" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
-<text x="312.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0</text>
+<text x="312.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-0</text>
 <text x="312.0" y="276.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID a1</text>
 <rect x="314.0" y="288.0" width="54.0" height="28.0" rx="3" fill="#f9ab00" stroke="#f9ab00" stroke-width="1"/>
-<text x="341.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp0</text>
+<text x="341.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m0</text>
 <rect x="314.0" y="324.0" width="142.0" height="20.0" rx="3" fill="#f29900" stroke="#f29900" stroke-width="1"/>
 <text x="385.0" y="338.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">paused</text>
 <rect x="482.0" y="236.0" width="170.0" height="118.0" rx="6" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
-<text x="494.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-1</text>
+<text x="494.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-1</text>
 <text x="494.0" y="276.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID b1</text>
 <rect x="496.0" y="288.0" width="54.0" height="28.0" rx="3" fill="#f9ab00" stroke="#f9ab00" stroke-width="1"/>
-<text x="523.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp1</text>
+<text x="523.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m1</text>
 <rect x="496.0" y="324.0" width="142.0" height="20.0" rx="3" fill="#f29900" stroke="#f29900" stroke-width="1"/>
 <text x="567.0" y="338.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">paused</text>
 <rect x="664.0" y="236.0" width="170.0" height="118.0" rx="6" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
-<text x="676.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-2</text>
+<text x="676.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-2</text>
 <text x="676.0" y="276.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID c1</text>
 <rect x="678.0" y="288.0" width="54.0" height="28.0" rx="3" fill="#f9ab00" stroke="#f9ab00" stroke-width="1"/>
-<text x="705.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp2</text>
+<text x="705.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m2</text>
 <rect x="678.0" y="324.0" width="142.0" height="20.0" rx="3" fill="#f29900" stroke="#f29900" stroke-width="1"/>
 <text x="749.0" y="338.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">paused</text>
 <rect x="846.0" y="236.0" width="170.0" height="118.0" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="2"/>
-<text x="858.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-3</text>
+<text x="858.0" y="258.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-3</text>
 <text x="858.0" y="276.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID d1</text>
 <rect x="860.0" y="288.0" width="54.0" height="28.0" rx="3" fill="#d93025" stroke="#d93025" stroke-width="1"/>
-<text x="887.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp3</text>
+<text x="887.0" y="307.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m3</text>
 <line x1="866.0" y1="292.0" x2="908.0" y2="312.0" stroke="#ffffff" stroke-width="2.5"/>
 <line x1="908.0" y1="292.0" x2="866.0" y2="312.0" stroke="#ffffff" stroke-width="2.5"/>
 <rect x="860.0" y="324.0" width="142.0" height="20.0" rx="3" fill="#d93025" stroke="#d93025" stroke-width="1"/>
 <text x="931.0" y="338.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dead</text>
 <line x1="28.0" y1="366.0" x2="1032.0" y2="366.0" stroke="#dadce0" stroke-width="1.2"/>
 <text x="32.0" y="394.0" font-size="15" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t2</text>
-<text x="64.0" y="394.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">a reconfig removes dp3</text>
+<text x="64.0" y="394.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">a reconfig removes m3</text>
 <rect x="32.0" y="410.0" width="82.8" height="22.0" rx="11" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="1.2"/>
 <text x="41.0" y="426.0" font-size="12" fill="#1e8e3e" text-anchor="start" font-weight="700" xml:space="preserve">serving 3</text>
 <rect x="300.0" y="376.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="312.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0</text>
+<text x="312.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-0</text>
 <text x="312.0" y="416.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID a1</text>
 <rect x="314.0" y="428.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="341.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp0</text>
+<text x="341.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m0</text>
 <rect x="314.0" y="464.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="385.0" y="478.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="482.0" y="376.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="494.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-1</text>
+<text x="494.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-1</text>
 <text x="494.0" y="416.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID b1</text>
 <rect x="496.0" y="428.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="523.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp1</text>
+<text x="523.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m1</text>
 <rect x="496.0" y="464.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="567.0" y="478.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="664.0" y="376.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="676.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-2</text>
+<text x="676.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-2</text>
 <text x="676.0" y="416.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID c1</text>
 <rect x="678.0" y="428.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="705.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp2</text>
+<text x="705.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m2</text>
 <rect x="678.0" y="464.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="749.0" y="478.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="846.0" y="376.0" width="170.0" height="118.0" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="2"/>
-<text x="858.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-3</text>
+<text x="858.0" y="398.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-3</text>
 <text x="858.0" y="416.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID d1</text>
 <rect x="860.0" y="428.0" width="54.0" height="28.0" rx="3" fill="#d93025" stroke="#d93025" stroke-width="1"/>
-<text x="887.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp3</text>
+<text x="887.0" y="447.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m3</text>
 <rect x="860.0" y="464.0" width="142.0" height="20.0" rx="3" fill="#d93025" stroke="#d93025" stroke-width="1"/>
 <text x="931.0" y="478.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">excluded</text>
 <line x1="28.0" y1="506.0" x2="1032.0" y2="506.0" stroke="#dadce0" stroke-width="1.2"/>
 <text x="32.0" y="534.0" font-size="15" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t3</text>
-<text x="64.0" y="534.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">Reset replaces lws-0-3</text>
+<text x="64.0" y="534.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">Reset replaces pod-3</text>
 <rect x="32.0" y="550.0" width="82.8" height="22.0" rx="11" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="1.2"/>
 <text x="41.0" y="566.0" font-size="12" fill="#1e8e3e" text-anchor="start" font-weight="700" xml:space="preserve">serving 3</text>
 <rect x="300.0" y="516.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="312.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0</text>
+<text x="312.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-0</text>
 <text x="312.0" y="556.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID a1</text>
 <rect x="314.0" y="568.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="341.0" y="587.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp0</text>
+<text x="341.0" y="587.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m0</text>
 <rect x="314.0" y="604.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="385.0" y="618.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="482.0" y="516.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="494.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-1</text>
+<text x="494.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-1</text>
 <text x="494.0" y="556.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID b1</text>
 <rect x="496.0" y="568.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="523.0" y="587.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp1</text>
+<text x="523.0" y="587.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m1</text>
 <rect x="496.0" y="604.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="567.0" y="618.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="664.0" y="516.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="676.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-2</text>
+<text x="676.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-2</text>
 <text x="676.0" y="556.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID c1</text>
 <rect x="678.0" y="568.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="705.0" y="587.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp2</text>
+<text x="705.0" y="587.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m2</text>
 <rect x="678.0" y="604.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="749.0" y="618.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="846.0" y="516.0" width="170.0" height="118.0" rx="6" fill="#ffffff" stroke="#5f6368" stroke-width="2" stroke-dasharray="4 4"/>
-<text x="858.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-3</text>
+<text x="858.0" y="538.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-3</text>
 <text x="858.0" y="556.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID d2</text>
 <rect x="860.0" y="568.0" width="54.0" height="28.0" rx="3" fill="#dadce0" stroke="#dadce0" stroke-width="1"/>
-<text x="887.0" y="587.0" font-size="12" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">dp3</text>
+<text x="887.0" y="587.0" font-size="12" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">m3</text>
 <rect x="860.0" y="604.0" width="142.0" height="20.0" rx="3" fill="#dadce0" stroke="#5f6368" stroke-width="1"/>
 <text x="931.0" y="618.0" font-size="12" fill="#202124" text-anchor="middle" font-weight="700" xml:space="preserve">new UID, starting</text>
 <line x1="28.0" y1="646.0" x2="1032.0" y2="646.0" stroke="#dadce0" stroke-width="1.2"/>
 <text x="32.0" y="674.0" font-size="15" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t4</text>
-<text x="64.0" y="674.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">a reconfig adds the new dp3</text>
+<text x="64.0" y="674.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">a reconfig adds the new m3</text>
 <rect x="32.0" y="690.0" width="82.8" height="22.0" rx="11" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="1.2"/>
 <text x="41.0" y="706.0" font-size="12" fill="#1e8e3e" text-anchor="start" font-weight="700" xml:space="preserve">serving 3</text>
 <rect x="300.0" y="656.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="312.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0</text>
+<text x="312.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-0</text>
 <text x="312.0" y="696.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID a1</text>
 <rect x="314.0" y="708.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="341.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp0</text>
+<text x="341.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m0</text>
 <rect x="314.0" y="744.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="385.0" y="758.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="482.0" y="656.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="494.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-1</text>
+<text x="494.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-1</text>
 <text x="494.0" y="696.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID b1</text>
 <rect x="496.0" y="708.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="523.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp1</text>
+<text x="523.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m1</text>
 <rect x="496.0" y="744.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="567.0" y="758.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="664.0" y="656.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="676.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-2</text>
+<text x="676.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-2</text>
 <text x="676.0" y="696.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID c1</text>
 <rect x="678.0" y="708.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="705.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp2</text>
+<text x="705.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m2</text>
 <rect x="678.0" y="744.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="749.0" y="758.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="846.0" y="656.0" width="170.0" height="118.0" rx="6" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
-<text x="858.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-3</text>
+<text x="858.0" y="678.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-3</text>
 <text x="858.0" y="696.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID d2</text>
 <rect x="860.0" y="708.0" width="54.0" height="28.0" rx="3" fill="#f9ab00" stroke="#f9ab00" stroke-width="1"/>
-<text x="887.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp3</text>
+<text x="887.0" y="727.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m3</text>
 <rect x="860.0" y="744.0" width="142.0" height="20.0" rx="3" fill="#f29900" stroke="#f29900" stroke-width="1"/>
 <text x="931.0" y="758.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">joining</text>
 <line x1="28.0" y1="786.0" x2="1032.0" y2="786.0" stroke="#dadce0" stroke-width="1.2"/>
@@ -175,31 +175,31 @@
 <rect x="32.0" y="830.0" width="82.8" height="22.0" rx="11" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="1.2"/>
 <text x="41.0" y="846.0" font-size="12" fill="#1e8e3e" text-anchor="start" font-weight="700" xml:space="preserve">4 members</text>
 <rect x="300.0" y="796.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="312.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0</text>
+<text x="312.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-0</text>
 <text x="312.0" y="836.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID a1</text>
 <rect x="314.0" y="848.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="341.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp0</text>
+<text x="341.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m0</text>
 <rect x="314.0" y="884.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="385.0" y="898.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="482.0" y="796.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="494.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-1</text>
+<text x="494.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-1</text>
 <text x="494.0" y="836.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID b1</text>
 <rect x="496.0" y="848.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="523.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp1</text>
+<text x="523.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m1</text>
 <rect x="496.0" y="884.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="567.0" y="898.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="664.0" y="796.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="676.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-2</text>
+<text x="676.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-2</text>
 <text x="676.0" y="836.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID c1</text>
 <rect x="678.0" y="848.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="705.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp2</text>
+<text x="705.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m2</text>
 <rect x="678.0" y="884.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="749.0" y="898.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <rect x="846.0" y="796.0" width="170.0" height="118.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
-<text x="858.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">lws-0-3</text>
+<text x="858.0" y="818.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">pod-3</text>
 <text x="858.0" y="836.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">UID d2</text>
 <rect x="860.0" y="848.0" width="54.0" height="28.0" rx="3" fill="#34a853" stroke="#34a853" stroke-width="1"/>
-<text x="887.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">dp3</text>
+<text x="887.0" y="867.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">m3</text>
 <rect x="860.0" y="884.0" width="142.0" height="20.0" rx="3" fill="#1e8e3e" stroke="#1e8e3e" stroke-width="1"/>
 <text x="931.0" y="898.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
 <line x1="28.0" y1="926.0" x2="1032.0" y2="926.0" stroke="#dadce0" stroke-width="1.2"/>
@@ -211,5 +211,5 @@
 <text x="359.0" y="958.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">dead or excluded</text>
 <rect x="499.0" y="945.0" width="26.0" height="16.0" rx="3" fill="#f1f3f4" stroke="#5f6368" stroke-width="2" stroke-dasharray="4 3"/>
 <text x="533.0" y="958.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">new Pod, not yet a member</text>
-<text x="32.0" y="988.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">One cell is one engine member (a vLLM DP rank). Pod names and UIDs come from the workload, member IDs from the engine.</text>
+<text x="32.0" y="988.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">One cell is one engine member (for vLLM, one DP rank). Pod names and UIDs come from the workload, member IDs from the engine.</text>
 </svg>

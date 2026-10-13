@@ -1,20 +1,15 @@
 # IRO components and contracts
 
-- **Status:** draft for discussion
 - **Author:** Itay Etelis
 - **Date:** 2026-10-12
-- **Based on:** PR #11 at `9a3a10c` (controller, LWS), PR #19 at `5a03f3e` (vLLM). "Today" in these docs means that code.
-- **Code:** the interfaces and types are in [`internal/workload`](../../../internal/workload), [`internal/engine`](../../../internal/engine),
-  [`internal/journal`](../../../internal/journal) and [`internal/controller/enginefault`](../../../internal/controller/enginefault). Implementations: see [Code layout](#code-layout).
-- **Scope:** recovery of one engine group, including getting back to full capacity after a shrink by
-  resetting the failed Pod or the whole group. Capacity never comes from new Pods elsewhere.
 
 ## Problem
 
-The controller, the workload and the engine adapter share types that describe vLLM and LWS:
-DP ranks, a TCPStore address, vLLM status strings, a per-rank API port, a process observer.
-A second engine, a second workload type, or scaling up after a scale-down would each
-need changes in all three. This doc fixes the boundaries before more is built on them.
+Recovery involves three parties: the controller, the workload that runs the Pods, and the inference engine.
+If they share the details of one engine or one workload type, such as rank numbers, store addresses, status
+strings or ports, then every new engine, every new workload type, and scaling back up after a shrink means
+changing all three. This doc fixes the boundaries: the controller sees only Pods and members, and everything
+specific to an engine or a workload stays behind its plugin.
 
 ## Components
 
@@ -22,10 +17,10 @@ need changes in all three. This doc fixes the boundaries before more is built on
 
 | Component | Owns | Must not know | Doc |
 |---|---|---|---|
-| Controller | phases, deadlines, durability, whether it is still the same group, connecting Pods to members, resets, bringing capacity back, checks on every plan | engine states, ranks, Pod layout | [controller.md](controller.md) |
+| Controller | phases, deadlines, durability, whether it is still the same group, connecting Pods to members, resets, bringing capacity back, checks on every plan | engine states, what a member is inside the engine, Pod layout | [controller.md](controller.md) |
 | Journal | durable controller state, one writer at a time | what the bytes mean | [journal.md](journal.md) |
 | Telemetry | logs, metrics, Events, incident records, readiness. Best-effort, never read back. | how recovery decides anything | [telemetry.md](telemetry.md) |
-| Workload | reporting the group's Pods as they are now, resetting some Pods or all of them, releasing Pods | ranks, ports, engine processes, anything from before | [workload.md](workload.md) |
+| Workload | reporting the group's Pods as they are now, resetting some Pods or all of them, releasing Pods | engine members, ports, engine processes, anything from before | [workload.md](workload.md) |
 | Engine driver | reporting which members run on each Pod and their state, sending reconfigs, inference probes | phases, deadlines, Kubernetes, anything from before | [engine.md](engine.md#interface) |
 | Engine policy | which members to remove or admit and when, how a reconfig is going | I/O, time, Kubernetes | [engine.md](engine.md#interface) |
 
@@ -33,37 +28,25 @@ Outside IRO, but the contracts depend on them:
 
 | External | What IRO relies on |
 |---|---|
-| Kubernetes + LWS controller | recreates the group after a reset, and decides how often and whether to keep doing so (`restartBackoff`, `maxGroupRestarts`). Later: removes and adds Pods without recreating it. |
+| Kubernetes + the workload's controller | recreates the group after a reset, and decides how often and whether to keep doing so (for LWS, `restartBackoff` and `maxGroupRestarts`). Later: removes and adds Pods without recreating it. |
 | Engine runtime | exposes engine state and accepts recovery reconfigs |
 | Traffic router (EPP) | routes on the engine's native health. IRO never steers traffic. |
 | Leader election | one controller acts on a group at a time |
 
-## How the component docs are laid out
-
-Every component doc has the same parts, in this order:
-
-1. **What it is** and what it does not do.
-2. **Interface**: the Go interface.
-3. **Objects**: every type the component owns.
-4. **Functions**: one section per function, with its input, output and an example.
-5. **Behavior**, **Rules** and **Considerations**.
-
-Implementations are documented on their own pages: [LWS](../lws.md) and [vLLM](../vllm.md).
-
 ## Running example
 
-All examples use the same group. Four Pods, one engine member each (member names come from the engine; here, vLLM's `dp<rank>`):
+All examples use the same group. Four Pods, one engine member each. Pod names come from the workload, member names from the engine:
 
 | Pod | UID | Identity | Member | MemberID |
 |---|---|---|---|---|
-| `lws-0` (leader) | `a1` | `idA` | `dp0` | `dp0@idA` |
-| `lws-0-1` | `b1` | `idB` | `dp1` | `dp1@idB` |
-| `lws-0-2` | `c1` | `idC` | `dp2` | `dp2@idC` |
-| `lws-0-3` | `d1` | `idD` | `dp3` | `dp3@idD` |
+| `pod-0` (leader) | `a1` | `idA` | `m0` | `m0@idA` |
+| `pod-1` | `b1` | `idB` | `m1` | `m1@idB` |
+| `pod-2` | `c1` | `idC` | `m2` | `m2@idC` |
+| `pod-3` | `d1` | `idD` | `m3` | `m3@idD` |
 
-The story: the group serves. `dp3` dies. The engine shrinks to `dp0`-`dp2`. IRO asks the workload to
-reset `lws-0-3`. It comes back as a new Pod in the same place (UID `d2`, identity `idD2`) and runs `dp3`
-again. The engine admits `dp3@idD2`. The group is back to 4 members.
+The story: the group serves. `m3` dies. The engine shrinks to `m0`-`m2`. IRO asks the workload to
+reset `pod-3`. It comes back as a new Pod in the same place (UID `d2`, identity `idD2`) and runs `m3`
+again. The engine admits `m3@idD2`. The group is back to 4 members.
 
 ## One reconciliation step
 
@@ -82,10 +65,10 @@ Two kinds of action, with opposite delivery rules:
 
 ![The same recovery as calls between the controller and its plugins](../figures/recovery-sequence.svg)
 
-1. **Remove the dead member.** The driver reports `dp3` Terminal. The policy proposes `Remove`, the reconfig
-   runs, and `Progress` reports `Succeeded`. Only then does the controller record `dp3@idD` as excluded and
+1. **Remove the dead member.** The driver reports `m3` Terminal. The policy proposes `Remove`, the reconfig
+   runs, and `Progress` reports `Succeeded`. Only then does the controller record `m3@idD` as excluded and
    verify the survivors.
-2. **Reset the failed Pod.** Each member names its Pod, so the controller knows `lws-0-3` now holds only
+2. **Reset the failed Pod.** Each member names its Pod, so the controller knows `pod-3` now holds only
    excluded members. It calls `Reset` on it. The rest of the group keeps serving. There is no deadline;
    scheduling and model loading take as long as they take.
 3. **Admit the new member.** The new Pod's members show up as candidates. The policy plans `Add` when the
@@ -141,6 +124,6 @@ Every file the design needs, and the PR that brings it.
 
 1. **Disaggregated sets.** A prefill/decode set has several engine groups with different roles.
    Proposal: one recovery unit per engine group, each with its own Group, journal and controller loop.
-2. **Pods with some members excluded.** With several ranks per Pod, losing one rank does not let IRO
+2. **Pods with some members excluded.** With several members per Pod, losing one member does not let IRO
    reset the Pod (C8), so that capacity stays lost until `ResetAll`. Should the policy be allowed to remove
    the healthy rest of the Pod so the Pod can be reset?

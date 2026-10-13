@@ -137,24 +137,24 @@ In order:
 | Poll | Discover | Observe | Policy says | Controller does | Phase, reconfig |
 |---|---|---|---|---|---|
 | 1 | 4 Pods `Ready` | all `Serving` | `Plan`: Healthy | nothing | serving |
-| 2 | same | `dp3` Terminal, `dp0`-`dp2` paused | `Plan`: Change, remove `dp3@idD` | enters `recovering`, saves, calls `Probe` once | recovering |
+| 2 | same | `m3` Terminal, `m0`-`m2` paused | `Plan`: Change, remove `m3@idD` | enters `recovering`, saves, calls `Probe` once | recovering |
 | 3 | same | same | same | waits: under 2 polls in `recovering` | recovering |
 | 4 | same | same | same | checks C1-C7, saves reconfig `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, reconfig in flight |
 | 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, reconfig in flight |
-| 6 | same | `dp0`-`dp2` healthy | `Progress`: Succeeded | marks `dp3@idD` excluded, clears the reconfig, `Verify(dp0, dp1, dp2)` | serving |
-| 7 | same | same | `Plan`: Healthy | `lws-0-3` holds only excluded members: marks it `Removing`, saves, `Reset([lws-0-3 d1])` | serving |
-| 8 | `lws-0-3` (d1) Terminating | `dp0`-`dp2` Serving | `Plan`: Healthy | waits | serving |
-| 9 | `lws-0-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `dp3@idD`. No deadline. | serving |
-| ... | `lws-0-3` (d2) Ready | `dp3` on d2 Joinable | `Plan`: Change, add `dp3@idD2` | checks, saves reconfig, `Apply` | serving, reconfig in flight |
-| ... | same | `dp3@idD2` healthy | `Progress`: Succeeded | marks `dp3@idD2` admitted, `Verify(dp3@idD2)` | serving |
+| 6 | same | `m0`-`m2` healthy | `Progress`: Succeeded | marks `m3@idD` excluded, clears the reconfig, `Verify(m0, m1, m2)` | serving |
+| 7 | same | same | `Plan`: Healthy | `pod-3` holds only excluded members: marks it `Removing`, saves, `Reset([pod-3 d1])` | serving |
+| 8 | `pod-3` (d1) Terminating | `m0`-`m2` Serving | `Plan`: Healthy | waits | serving |
+| 9 | `pod-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `m3@idD`. No deadline. | serving |
+| ... | `pod-3` (d2) Ready | `m3` on d2 Joinable | `Plan`: Change, add `m3@idD2` | checks, saves reconfig, `Apply` | serving, reconfig in flight |
+| ... | same | `m3@idD2` healthy | `Progress`: Succeeded | marks `m3@idD2` admitted, `Verify(m3@idD2)` | serving |
 
 The [`Record`](#objects) after poll 5, as the journal stores it and `Recorder.Stepped` receives it:
 
 ```yaml
 Phase: recovering
-Reason: "dp3 is dead; survivors paused"
-Reconfig: {ID: iro-ft-7c1e, Participants: [dp0@idA, dp1@idB, dp2@idC], Remove: [dp3@idD]}
-Members: {dp0@idA: admitted, dp1@idB: admitted, dp2@idC: admitted, dp3@idD: admitted}
+Reason: "m3 is dead; survivors paused"
+Reconfig: {ID: iro-ft-7c1e, Participants: [m0@idA, m1@idB, m2@idC], Remove: [m3@idD]}
+Members: {m0@idA: admitted, m1@idB: admitted, m2@idC: admitted, m3@idD: admitted}
 RecreateStopped: false
 ```
 
@@ -204,7 +204,7 @@ from then on. An empty journal (IRO's first run) is a new group.
 ### Connecting Pods and members
 
 `Discover` reports Pods. `Observe` reports members, each with the Pod it runs on. The controller joins
-the two by `Member.ID()` (`dp3@idD`) and keeps each ID as candidate, admitted, excluded or rejected.
+the two by `Member.ID()` (`m3@idD`) and keeps each ID as candidate, admitted, excluded or rejected.
 Excluded means a reconfig removed it, and its Pod may still be reset. Rejected means it stays out until the
 next group: a candidate that could not join, or an excluded member whose Pod is kept as it is.
 
@@ -371,16 +371,16 @@ Each engine and workload implementation registers its own flags.
 - **Why a failed check resets the whole group.** It happens only when the engine reports every checked
   member `Serving` and one still cannot generate after `VerifyTimeout`. The checked members are admitted and
   the engine depends on them: after a shrink or a retry they are every member left, and in expert parallel
-  every rank takes part in every step. No smaller action is safe. A reconfig removes only Terminal members
+  every member takes part in every step. No smaller action is safe. A reconfig removes only Terminal members
   (C1), and a Pod is reset only once the engine no longer depends on it (C8). Resetting the failing member's
   Pod would be a new fault for every member that shares a step with it, and its replacement comes back only
   if the engine can grow. Keeping the member admitted is not safe either: the router keeps sending it traffic
   that fails. `--ft-capacity-restore` does not apply: it is about Pods whose members a reconfig already removed.
 - **No give-up state.** IRO resets whenever recovery in place cannot help. How often a group may be
-  recreated, and when to stop, is the workload's restart policy (LWS `restartBackoff`, `maxGroupRestarts`).
+  recreated, and when to stop, is the workload's restart policy (for LWS, `restartBackoff` and `maxGroupRestarts`).
 - **Restarts in place.** Kubelet restarts a crashed or probe-failed container without replacing its Pod. A
   workload that recreates the group for that reports `Recreating`, and the controller waits for the new group.
-  One that does not (LWS `restartPolicy: None`) reports the same UID with a new identity, and the controller
+  One that does not (for example LWS with `restartPolicy: None`) reports the same UID with a new identity, and the controller
   handles it like a lost Pod: a reconfig removes the old members, and capacity comes back only through the
   Pod's reset. The restarted container's members are never candidates: IRO did not ask for them, and a
   container that restarted once may restart again, so the fresh Pod from `Reset` is the one try. A restart
