@@ -196,7 +196,7 @@ Sends a reconfig to every participant and joiner.
 |---|---|
 | **Input** | the [`Observation`](#objects) the reconfig was planned on, and the [`Reconfig`](#objects) |
 | **Output** | one [`Acceptance`](#objects) per member it sent to. An error unless every one accepted. |
-| **Side effects** | the engine starts the reconfig. Sent again only after a leader change, when no acceptances were saved and `Progress` says `NotStarted`. |
+| **Side effects** | the engine starts the reconfig. Sent again only when no acceptances were saved (after a leader change, or when the save after `Apply` failed) and `Progress` says `NotStarted`. |
 
 **Example.**
 
@@ -211,7 +211,8 @@ Apply(ctx, obs, Reconfig{
 // lws-0-3 deleted: obs holds dp3@idD as the controller added it, Apply sends to dp0-dp2 and all accept
 ```
 
-A refusal means some members started the reconfig and some did not. The controller resets the group.
+An error means the reconfig did not start everywhere: `Apply` refused it before sending anything, or some
+members refused it. Either way the controller resets the group.
 
 ### Verify
 
@@ -283,8 +284,8 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 |---|---|
 | Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod is replaced or its engine restarts, so exclusions and reconfigs name exactly one process |
 | No memory. Addresses and anything else the driver needs travel in `Observation.Engine`. | a new leader needs no warm-up. The driver may still cache internally, keyed by Pod identity. |
-| Pods that are not `Ready` give no members, or members that are not Joinable | a loading Pod is not a candidate yet |
-| A Pod gives all of its members or none | the controller admits, at the end of `starting`, exactly the members it saw |
+| Pods that are not `Ready` give members that are not Joinable | a loading Pod is not a candidate yet, and an admitted Pod whose sidecar restarts keeps its members |
+| A Pod gives all of its members, or none when the driver cannot list them | the controller admits, at the end of `starting`, exactly the members it saw |
 | Once Terminal, never Serving again: later reported Terminal or `Unknown` | the controller's check C4 depends on it |
 | A member the driver cannot read is `Unknown`, never Terminal by guess | only a process known to be gone may be removed (C1) |
 | `Serving` means what the router uses: the engine's native health | checks C1 and C5 reason about traffic |

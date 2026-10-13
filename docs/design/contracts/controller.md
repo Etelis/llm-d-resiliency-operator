@@ -166,8 +166,8 @@ stateDiagram-v2
   starting --> serving: plan Healthy
   serving --> recovering: a fault is observed
   recovering --> serving: plan Healthy, or reconfig Succeeded
-  serving --> starting: ResetAll, after a reconfig fails verification past window, C1, C4 or C5 broken
-  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, deadline, flap guard, C1, C4 or C5 broken
+  serving --> starting: ResetAll, after verification fails past window, capacity (reset-all), a grow that fails or misses its deadline, a plan failing C2 or C3, C4 or C5 broken
+  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, Apply refused, deadline, flap guard, a plan failing C1 to C3, C1, C4 or C5 broken
 ```
 
 Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
@@ -177,7 +177,7 @@ described [below](#reconfigs). A reconfig can run in `recovering` (fixing a faul
 | Phase | Meaning | Controller does | Leaves when |
 |---|---|---|---|
 | `starting` | a new group, or the old one is being reset | while old Pods remain, repeats any owed `ResetAll` and acts on nothing. Then records the Pods every poll, checks nothing, waits for a `Healthy` plan and ignores any other plan. No deadline: the workload's startup probe owns that, and the workload decides how fast to recreate the group, and whether to stop. | plan `Healthy` |
-| `serving` | healthy, maybe below full | verifies the members of a reconfig that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A reconfig that admits candidates runs here. | a fault |
+| `serving` | healthy, maybe below full | verifies the members of a reconfig that just succeeded, plans every poll, and [restores capacity](#restoring-capacity). A reconfig that admits candidates runs here. | a fault, or a reset (verification, capacity with `reset-all`, a failed grow) |
 | `recovering` | the engine reports a fault | probes once on entry. Without a reconfig: plans every poll, resets on `Unrecoverable`, and sends a reconfig no sooner than 2 polls in. With a reconfig: checks `Progress` every poll, and sends it again only as in [Reconfigs](#reconfigs). | `Healthy` plan, or reconfig `Succeeded`. Or reset. |
 
 In `serving`, a `Healthy` plan is fine and a `Change` that only adds members is a reconfig to grow back.
@@ -202,7 +202,7 @@ flowchart TD
 | saved, same identity, not `Terminating` | unchanged | nothing |
 | saved as `Removing`, now gone or `Terminating` | the `Reset` or `Release` is happening | forgets it once it is gone |
 | saved, not `Removing`, now gone or `Terminating` | its members are lost | adds them to the observation as Terminal ([lost members](engine.md#observe)), so the policy plans as usual and a reconfig can remove them |
-| saved, not `Removing`, same UID with a new identity: an engine container restarted in place | its members are lost. The restarted container's members are not in the group. | the same for the old members. It keeps the Pod's old identity while it tracks them, so once a reconfig removed them the Pod is [restored](#restoring-capacity) like a failed Pod. The new members are never candidates. |
+| saved, not `Removing`, same UID with a new identity: an engine container restarted in place | its members are lost. The restarted container's members are not in the group. | the same for the old members. It keeps the Pod's old identity while it tracks them, so once a reconfig removed them the Pod is [restored](#restoring-capacity) like a failed Pod. The new members are never candidates. A Pod that restarts before its members were recorded is only a slower start. |
 | not saved, `Starting` | a replacement Pod is loading | saves it and waits |
 | not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
 
@@ -231,14 +231,14 @@ next group: a candidate that could not join, or an excluded member whose Pod is 
 
 ### Unknown members
 
-An unknown member is one IRO cannot read now: it is never Serving, never Terminal, and never in `Remove`.
-What happens depends on how many admitted members IRO can read.
+An unknown member is one IRO cannot read now: it is never Serving, never Terminal, and never put in `Remove`
+by a new plan. What happens depends on how many admitted members IRO can read. Lost members do not count as read.
 
-| Admitted members unknown | Controller does |
+| Admitted members IRO can read | Controller does |
 |---|---|
-| none | as usual |
-| some | the group is not healthy: a `Healthy` plan, or a grow in `serving`, counts as a fault. If they stay unknown, the diagnosis deadline resets the group, which is what stops them. |
-| all | it cannot see the group, as when `Discover` fails: no incident, no plan, and its deadlines are paused |
+| all that are not lost | as usual |
+| some, and others are unknown | the group is not healthy: a `Healthy` plan, or a grow in `serving`, counts as a fault. A `Change` that passes the checks but names an unknown participant is not sent: the controller waits. If they stay unknown, the diagnosis deadline resets the group, which is what stops them. |
+| none, and some are unknown (the rest lost) | it cannot see the group, as when `Discover` fails: no incident, no plan, and its deadlines are paused |
 
 An unknown member never becomes Terminal by timeout. IRO cannot tell a hung member from one only IRO cannot
 reach, and the router may still send it traffic: removing it would break C1. Only the engine (`Terminal`) or
@@ -275,9 +275,10 @@ or runs into its deadline, and the group is reset.
 `Verify` on them every poll until it passes. Members the reconfig removed are already out and are not
 checked. One failed request is not a fault: a failure is retried for `VerifyTimeout`, and only a member that
 still cannot generate after that resets the group (reason `verify_failed`, naming every member that failed).
-If the engine reports a fault meanwhile, or a member becomes unknown, the check is dropped and the group goes
-to `recovering`, where the policy can remove a dead member in place. While IRO cannot see the group, the
-retry window is paused like the deadlines. A new leader finds `Verifying` in the journal and continues the check. Verify runs only here: IRO checks
+If the engine reports a fault meanwhile, or a member becomes unknown, the group goes to `recovering`, where
+the policy can remove a dead member in place. The check is kept: when the group serves again it resumes, and
+the incident stays open until it passes, unless a new reconfig succeeds and replaces it. While IRO cannot see
+the group, the retry window is paused like the deadlines. A new leader finds `Verifying` in the journal and continues the check. Verify runs only here: IRO checks
 what it changed, nothing else. A fresh group, or one that recovered without a reconfig, goes to `serving`
 on a `Healthy` plan.
 
@@ -327,7 +328,7 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 
 | # | Rule | Why |
 |---|---|---|
-| C1 | `Remove` holds only members that are Terminal, and they stay Terminal until the reconfig succeeds. An unknown one is not checked. | the router follows native health. A removed member that still serves gets traffic outside the group. |
+| C1 | `Remove` holds only members that are Terminal when the plan is checked: an unknown one fails. They stay Terminal until the reconfig succeeds; one that later reads unknown is not checked. | the router follows native health. A removed member that still serves gets traffic outside the group. |
 | C2 | `Add` holds only candidates that are Joinable, on Pods that are `Ready` and unchanged | a stale Pod must not join |
 | C3 | `Participants` and `Remove` are admitted members, `Add` holds candidates, the three are disjoint, and `Participants` is not empty | a reconfig must name a real, consistent membership change |
 | C4 | Excluded members stay Terminal. An unknown one is not checked: it cannot serve. | otherwise an excluded member could take traffic again |
@@ -378,8 +379,9 @@ Each engine and workload implementation registers its own flags.
 - **IRO cannot see the group.** A failed `Discover`, or an `Observe` that reads no admitted member, proves
   nothing about the group: IRO may be the one cut off. The controller keeps the phase, opens no incident,
   asks for no plan, and pauses its deadlines. A group whose every member hangs looks the same, so that case
-  is left to the workload's probes. A real fault does not wait forever either: an engine that gives up
-  on recovery reports its members Terminal, and the group is reset once IRO sees it again.
+  is left to the workload's probes where the engine doc allows them; otherwise the unseen gauge and alert in
+  [telemetry](telemetry.md) are the only signal. A real fault does not wait forever either: an engine that
+  gives up on recovery reports its members Terminal, and the group is reset once IRO sees it again.
 - **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry
   reports it so people can see it. Recovery resumes when the workload recreates the group.
 - **Why verify only after a reconfig.** Verify does not gate traffic: the router follows the engine's native
