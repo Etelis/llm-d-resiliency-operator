@@ -6,7 +6,9 @@ package lws_test
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -229,6 +231,106 @@ func TestDiscoverIdentity(t *testing.T) {
 	}
 }
 
+func withSidecars(pod *corev1.Pod) *corev1.Pod {
+	always := corev1.ContainerRestartPolicyAlways
+	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "proxy"})
+	pod.Spec.InitContainers = []corev1.Container{{Name: "setup"}, {Name: "routing-proxy", RestartPolicy: &always}}
+	pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+		Name: "proxy", ContainerID: pod.Name + "-proxy", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+	})
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+		{Name: "setup", ContainerID: pod.Name + "-setup", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}}},
+		{
+			Name: "routing-proxy", ContainerID: pod.Name + "-routing",
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		},
+	}
+	return pod
+}
+
+func identityWith(t *testing.T, engines []string, mutate func(*corev1.Pod)) string {
+	t.Helper()
+	worker := withSidecars(readyPod(1))
+	mutate(worker)
+	world := newCluster(t, leaderWorkerSet("None"), withSidecars(readyPod(0)), worker)
+	options := &lws.Options{Namespace: "test", Name: "model", EngineContainers: engines}
+	instance, _, err := options.New(world.api, world.api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return discover(t, instance).Pods[1].Identity
+}
+
+func TestIdentityCoversEngineContainers(t *testing.T) {
+	t.Parallel()
+	restartRegular := func(name string) func(*corev1.Pod) {
+		return func(pod *corev1.Pod) {
+			for index := range pod.Status.ContainerStatuses {
+				if pod.Status.ContainerStatuses[index].Name == name {
+					pod.Status.ContainerStatuses[index].RestartCount++
+				}
+			}
+		}
+	}
+	restartInit := func(name string) func(*corev1.Pod) {
+		return func(pod *corev1.Pod) {
+			for index := range pod.Status.InitContainerStatuses {
+				if status := &pod.Status.InitContainerStatuses[index]; status.Name == name {
+					status.RestartCount++
+					status.ContainerID += "-again"
+				}
+			}
+		}
+	}
+	for name, test := range map[string]struct {
+		engines []string
+		mutate  func(*corev1.Pod)
+		changed bool
+	}{
+		"native sidecar restart":         {mutate: restartInit("routing-proxy")},
+		"init container status":          {mutate: restartInit("setup")},
+		"regular sidecar restart":        {mutate: restartRegular("proxy"), changed: true},
+		"engine restart":                 {mutate: restartRegular("engine"), changed: true},
+		"named: regular sidecar restart": {engines: []string{"engine"}, mutate: restartRegular("proxy")},
+		"named: engine restart":          {engines: []string{"engine"}, mutate: restartRegular("engine"), changed: true},
+		"named: native sidecar as engine": {
+			engines: []string{"engine", "routing-proxy"}, mutate: restartInit("routing-proxy"), changed: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			before := identityWith(t, test.engines, func(*corev1.Pod) {})
+			if got := identityWith(t, test.engines, test.mutate); (got != before) != test.changed {
+				t.Fatalf("identity %s, before %s", got, before)
+			}
+		})
+	}
+	t.Run("a named container the Pod does not have", func(t *testing.T) {
+		t.Parallel()
+		world := newCluster(t, leaderWorkerSet("None"), readyPod(0), readyPod(1))
+		options := &lws.Options{Namespace: "test", Name: "model", EngineContainers: []string{"vllm"}}
+		instance, _, err := options.New(world.api, world.api)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := instance.Discover(t.Context()); err == nil {
+			t.Fatal("Discover accepted a Pod without the engine container")
+		}
+	})
+	t.Run("flag", func(t *testing.T) {
+		t.Parallel()
+		var options lws.Options
+		flags := flag.NewFlagSet("test", flag.ContinueOnError)
+		options.BindFlags(flags)
+		if err := flags.Parse([]string{"--lws-engine-containers=vllm, other,"}); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(options.EngineContainers, []string{"vllm", "other"}) {
+			t.Fatalf("containers %q", options.EngineContainers)
+		}
+	})
+}
+
 func TestDiscoverReportsPodsAsTheyAre(t *testing.T) {
 	t.Parallel()
 	other := readyPod(1)
@@ -282,12 +384,15 @@ func TestDiscoverRecreating(t *testing.T) {
 		want    bool
 		stopped bool
 	}{
-		"steady":                 {policy: "RecreateGroupOnPodRestart"},
-		"leader terminating":     {policy: "None", leader: terminating, want: true},
-		"recreate pending":       {policy: "None", leader: annotate("leaderworkerset.sigs.k8s.io/group-recreate-pending"), want: true},
-		"worker older":           {policy: "None", worker: func(pod *corev1.Pod) { pod.CreationTimestamp = older }, want: true},
-		"restart recreates":      {policy: "RecreateGroupOnPodRestart", worker: restart, want: true},
-		"restart under None":     {policy: "None", worker: restart},
+		"steady":             {policy: "RecreateGroupOnPodRestart"},
+		"leader terminating": {policy: "None", leader: terminating, want: true},
+		"recreate pending":   {policy: "None", leader: annotate("leaderworkerset.sigs.k8s.io/group-recreate-pending"), want: true},
+		"worker older":       {policy: "None", worker: func(pod *corev1.Pod) { pod.CreationTimestamp = older }, want: true},
+		"restart recreates":  {policy: "RecreateGroupOnPodRestart", worker: restart, want: true},
+		"restart under None": {policy: "None", worker: restart},
+		"sidecar restart recreates": {policy: "RecreateGroupOnPodRestart", worker: func(pod *corev1.Pod) {
+			withSidecars(pod).Status.InitContainerStatuses[1].RestartCount = 1
+		}, want: true},
 		"terminating recreates":  {policy: "RecreateGroupOnPodRestart", worker: terminating, want: true},
 		"terminating under None": {policy: "None", worker: terminating},
 		"budget used up": {
@@ -324,32 +429,46 @@ func annotate(key string) func(*corev1.Pod) {
 
 func restart(pod *corev1.Pod) { pod.Status.ContainerStatuses[0].RestartCount = 1 }
 
+var errNoUID = errors.New("no UID")
+
 func TestReset(t *testing.T) {
 	t.Parallel()
 	worker := workload.PodRef{Name: "model-0-1", UID: "model-0-1-uid"}
+	other := workload.PodRef{Name: "model-0-2", UID: "model-0-2-uid"}
+	leader := workload.PodRef{Name: "model-0", UID: "model-0-uid"}
 	for name, test := range map[string]struct {
 		policy  string
-		pod     workload.PodRef
-		deleted bool
+		pods    []workload.PodRef
+		deletes int
 		err     error
 	}{
-		"recreates group": {policy: "RecreateGroupOnPodRestart", pod: worker, err: workload.ErrUnsupported},
-		"leader":          {policy: "None", pod: workload.PodRef{Name: "model-0", UID: "model-0-uid"}, err: workload.ErrUnsupported},
-		"worker":          {policy: "None", pod: worker, deleted: true},
-		"stale UID":       {policy: "None", pod: workload.PodRef{Name: "model-0-1", UID: "old"}},
+		"recreates group":  {policy: "RecreateGroupOnPodRestart", pods: []workload.PodRef{worker}, err: workload.ErrUnsupported},
+		"leader":           {policy: "None", pods: []workload.PodRef{leader}, err: workload.ErrUnsupported},
+		"leader in a list": {policy: "None", pods: []workload.PodRef{worker, leader}, err: workload.ErrUnsupported},
+		"worker":           {policy: "None", pods: []workload.PodRef{worker}, deletes: 1},
+		"two workers":      {policy: "None", pods: []workload.PodRef{worker, other}, deletes: 2},
+		"stale UID":        {policy: "None", pods: []workload.PodRef{{Name: "model-0-1", UID: "old"}}},
+		"no UID":           {policy: "None", pods: []workload.PodRef{worker, {Name: "model-0-2"}}, err: errNoUID},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			world := newCluster(t, leaderWorkerSet(test.policy), readyPod(0), readyPod(1))
+			world := newCluster(t, leaderWorkerSet(test.policy), readyPod(0), readyPod(1), readyPod(2))
 			instance := newWorkload(t, world)
-			if err := instance.Reset(t.Context(), test.pod); !errors.Is(err, test.err) {
+			err := instance.Reset(t.Context(), test.pods)
+			if errors.Is(test.err, errNoUID) {
+				if err == nil || errors.Is(err, workload.ErrUnsupported) {
+					t.Fatalf("error %v, want a missing UID", err)
+				}
+			} else if !errors.Is(err, test.err) {
 				t.Fatalf("error %v, want %v", err, test.err)
 			}
-			if (len(world.deletes) == 1) != test.deleted {
+			if len(world.deletes) != test.deletes {
 				t.Fatalf("deletes: %+v", world.deletes)
 			}
-			if err := instance.Reset(t.Context(), test.pod); !errors.Is(err, test.err) {
-				t.Fatalf("repeat: %v", err)
+			if test.err == nil {
+				if err := instance.Reset(t.Context(), test.pods); err != nil {
+					t.Fatalf("repeat: %v", err)
+				}
 			}
 		})
 	}

@@ -52,10 +52,10 @@ func (options *Options) BindFlags(flags *flag.FlagSet) {
 	flags.StringVar(&options.Engine, "engine", "", "inference engine implementation")
 	flags.StringVar(&options.Workload, "workload", "lws", "workload implementation")
 	flags.DurationVar(&config.DiagnosisTimeout, "ft-diagnosis-timeout", config.DiagnosisTimeout,
-		"longest time recovering without a round")
-	flags.DurationVar(&config.ApplyTimeout, "ft-apply-timeout", config.ApplyTimeout, "longest time a round may stay in flight")
+		"longest time recovering without a reconfig")
+	flags.DurationVar(&config.ApplyTimeout, "ft-apply-timeout", config.ApplyTimeout, "longest time a reconfig may stay in flight")
 	flags.DurationVar(&config.VerifyTimeout, "ft-verify-timeout", config.VerifyTimeout,
-		"how long a failed check after a round is retried (0 resets on the first failure)")
+		"how long a failed check after a reconfig is retried (0 resets on the first failure)")
 	flags.StringVar((*string)(&config.CapacityRestore), "ft-capacity-restore", string(config.CapacityRestore),
 		"how capacity comes back after a shrink: reset-pod, reset-all or release")
 	for _, name := range slices.Sorted(maps.Keys(options.Engines)) {

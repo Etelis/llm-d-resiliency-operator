@@ -63,9 +63,9 @@ func (current *view) pick(match func(*engine.Member) bool) []engine.MemberID {
 
 func outcome(inc *Incident) Outcome {
 	removed := 0
-	for index := 0; inc != nil && index < len(inc.Rounds); index++ {
-		if result := &inc.Rounds[index]; result.Progress.State == engine.Succeeded {
-			removed += len(result.Round.Remove) - len(result.Round.Add)
+	for index := 0; inc != nil && index < len(inc.Reconfigs); index++ {
+		if result := &inc.Reconfigs[index]; result.Progress.State == engine.Succeeded {
+			removed += len(result.Reconfig.Remove) - len(result.Reconfig.Add)
 		}
 	}
 	if removed > 0 {

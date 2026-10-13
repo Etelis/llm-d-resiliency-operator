@@ -15,6 +15,7 @@ import (
 	"net"
 	"slices"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,20 +37,36 @@ const (
 )
 
 type Options struct {
-	Namespace string
-	Name      string
+	Namespace        string
+	Name             string
+	EngineContainers []string
 }
 
 func (options *Options) BindFlags(flags *flag.FlagSet) {
 	flags.StringVar(&options.Namespace, "lws-namespace", "default", "namespace of the LeaderWorkerSet")
 	flags.StringVar(&options.Name, "lws-name", "", "name of the LeaderWorkerSet")
+	flags.Func("lws-engine-containers",
+		"comma-separated containers that run the engine; their restarts change a Pod's identity "+
+			"(default: every container in spec.containers)",
+		func(value string) error {
+			options.EngineContainers = nil
+			for name := range strings.SplitSeq(value, ",") {
+				if name = strings.TrimSpace(name); name != "" {
+					options.EngineContainers = append(options.EngineContainers, name)
+				}
+			}
+			return nil
+		})
 }
 
 func (options *Options) New(reader client.Reader, writer client.Client) (workload.Workload, journal.Journal, error) {
 	if reader == nil || writer == nil || options.Namespace == "" || options.Name == "" {
 		return nil, nil, errors.New("LWS workload needs --lws-namespace and --lws-name")
 	}
-	lws := &Workload{reader: reader, writer: writer, namespace: options.Namespace, name: options.Name}
+	lws := &Workload{
+		reader: reader, writer: writer, namespace: options.Namespace, name: options.Name,
+		engines: slices.Clone(options.EngineContainers),
+	}
 	return lws, configmap.New(reader, writer, lws.object()), nil
 }
 
@@ -58,6 +75,7 @@ type Workload struct {
 	writer    client.Client
 	namespace string
 	name      string
+	engines   []string
 }
 
 func (lws *Workload) Discover(ctx context.Context) (workload.Group, error) {
@@ -86,9 +104,13 @@ func (lws *Workload) Discover(ctx context.Context) (workload.Group, error) {
 		if worker == 0 {
 			leader = pod
 		}
+		id, err := identity(pod, lws.engines)
+		if err != nil {
+			return workload.Group{}, err
+		}
 		group.Pods = append(group.Pods, workload.Pod{
 			Name: pod.Name, UID: string(pod.UID), IP: pod.Status.PodIP, Index: worker,
-			Identity: identity(pod), Node: pod.Spec.NodeName, State: state(pod),
+			Identity: id, Node: pod.Spec.NodeName, State: state(pod),
 		})
 	}
 	slices.SortFunc(group.Pods, func(left, right workload.Pod) int { return cmp.Compare(left.Index, right.Index) })
@@ -97,9 +119,14 @@ func (lws *Workload) Discover(ctx context.Context) (workload.Group, error) {
 	return group, nil
 }
 
-func (lws *Workload) Reset(ctx context.Context, pod workload.PodRef) error {
-	if pod.Name == lws.podName(0) {
-		return workload.ErrUnsupported
+func (lws *Workload) Reset(ctx context.Context, pods []workload.PodRef) error {
+	for _, pod := range pods {
+		if pod.Name == lws.podName(0) {
+			return workload.ErrUnsupported
+		}
+		if pod.UID == "" {
+			return fmt.Errorf("pod %s has no UID", pod.Name)
+		}
 	}
 	set := lws.object()
 	if err := lws.reader.Get(ctx, client.ObjectKeyFromObject(set), set); err != nil {
@@ -112,7 +139,11 @@ func (lws *Workload) Reset(ctx context.Context, pod workload.PodRef) error {
 	if recreates {
 		return workload.ErrUnsupported
 	}
-	return lws.delete(ctx, pod)
+	var errs []error
+	for _, pod := range pods {
+		errs = append(errs, lws.delete(ctx, pod))
+	}
+	return errors.Join(errs...)
 }
 
 func (lws *Workload) ResetAll(ctx context.Context, pods []workload.PodRef) error {
@@ -215,14 +246,31 @@ func annotated(pod *corev1.Pod, key string) bool {
 	return ok
 }
 
-func identity(pod *corev1.Pod) string {
+func identity(pod *corev1.Pod, engines []string) (string, error) {
 	hash := sha256.New()
 	hash.Write([]byte(pod.UID))
-	list := statuses(pod)
-	for index := range list {
-		fmt.Fprintf(hash, "/%s/%s/%d", list[index].Name, list[index].ContainerID, list[index].RestartCount)
+	for _, name := range engines {
+		if !slices.ContainsFunc(slices.Concat(pod.Spec.Containers, pod.Spec.InitContainers),
+			func(container corev1.Container) bool { return container.Name == name }) {
+			return "", fmt.Errorf("pod %s has no container %s", pod.Name, name)
+		}
 	}
-	return hex.EncodeToString(hash.Sum(nil))[:16]
+	add := func(specs []corev1.Container, list []corev1.ContainerStatus) {
+		for index := range specs {
+			name := specs[index].Name
+			if len(engines) > 0 && !slices.Contains(engines, name) {
+				continue
+			}
+			if status, ok := find(list, name); ok {
+				fmt.Fprintf(hash, "/%s/%s/%d", status.Name, status.ContainerID, status.RestartCount)
+			}
+		}
+	}
+	add(pod.Spec.Containers, pod.Status.ContainerStatuses)
+	if len(engines) > 0 {
+		add(pod.Spec.InitContainers, pod.Status.InitContainerStatuses)
+	}
+	return hex.EncodeToString(hash.Sum(nil))[:16], nil
 }
 
 func state(pod *corev1.Pod) workload.PodState {

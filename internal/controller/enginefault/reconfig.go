@@ -13,78 +13,111 @@ import (
 )
 
 func (fsm *controller) watch(ctx context.Context, next *Record, current *view, now time.Time) error {
-	round := *next.Round
-	progress := fsm.eng.Progress(current.obs, round)
+	reconfig := *next.Reconfig
+	progress := fsm.eng.Progress(current.obs, reconfig)
 	switch progress.State {
 	case engine.Succeeded:
-		for _, id := range round.Remove {
+		for _, id := range reconfig.Remove {
 			next.Members[id] = Excluded
 		}
-		for _, id := range round.Add {
+		for _, id := range reconfig.Add {
 			next.Members[id] = Admitted
 		}
-		fsm.finishRound(next, &progress, now)
-		next.Verifying = append(slices.Clone(round.Participants), round.Add...)
+		fsm.finishReconfig(next, &progress, now)
+		next.Verifying = append(slices.Clone(reconfig.Participants), reconfig.Add...)
 		next.VerifyFailedSince = time.Time{}
-		enter(next, Serving, "round "+round.ID+" succeeded", now)
+		enter(next, Serving, "reconfig "+reconfig.ID+" succeeded", now)
 		if err := fsm.save(ctx, next); err != nil {
 			return err
 		}
 		return fsm.verify(ctx, next, current, now)
 	case engine.Failed:
-		fsm.finishRound(next, &progress, now)
+		fsm.finishReconfig(next, &progress, now)
 		if progress.Scope != engine.Joiners {
-			return fsm.resetAll(ctx, next, ResetRoundFailed, progress.Reason, now)
+			return fsm.resetAll(ctx, next, ResetReconfigFailed, progress.Reason, now)
 		}
-		for _, id := range round.Add {
+		for _, id := range reconfig.Add {
 			next.Members[id] = Rejected
 		}
 		if next.Phase == Recovering {
 			next.Since = now
 		}
 		return nil
+	case engine.NotStarted:
+		if len(next.Acceptances) == 0 {
+			return fsm.resend(ctx, next, current, &progress, now)
+		}
 	}
-	if now.Sub(next.RoundSince) > fsm.config.ApplyTimeout {
-		fsm.finishRound(next, &progress, now)
-		return fsm.resetAll(ctx, next, ResetApplyDeadline, "round "+round.ID+" did not finish", now)
+	if now.Sub(next.ReconfigSince) > fsm.config.ApplyTimeout {
+		fsm.finishReconfig(next, &progress, now)
+		return fsm.resetAll(ctx, next, ResetApplyDeadline, "reconfig "+reconfig.ID+" did not finish", now)
 	}
 	return nil
 }
 
 func (fsm *controller) send(ctx context.Context, next *Record, current *view, plan *engine.Plan, now time.Time) error {
+	for _, id := range slices.Concat(plan.Participants, plan.Add) {
+		if member := current.members[id]; member != nil && member.Unknown {
+			next.Reason = "waiting to read " + string(id) + ": " + plan.Reason
+			return nil
+		}
+	}
 	if reason := checkPlan(next, current, plan); reason != "" {
 		return fsm.resetAll(ctx, next, ResetUnrecoverable, reason, now)
 	}
 	noChange := len(plan.Remove) == 0 && len(plan.Add) == 0
-	if noChange && !next.LastNoChangeRound.IsZero() && now.Sub(next.LastNoChangeRound) < fsm.config.FlapWindow {
+	if noChange && !next.LastNoChangeReconfig.IsZero() && now.Sub(next.LastNoChangeReconfig) < fsm.config.FlapWindow {
 		return fsm.resetAll(ctx, next, ResetFlap, "C6: "+plan.Reason, now)
 	}
-	round := engine.Round{
+	reconfig := engine.Reconfig{
 		ID: newID("iro-ft-", 16), Participants: slices.Clone(plan.Participants),
 		Remove: slices.Clone(plan.Remove), Add: slices.Clone(plan.Add),
 	}
-	next.Round, next.RoundSince, next.Acceptances, next.Reason = &round, now, nil, plan.Reason
+	next.Reconfig, next.ReconfigSince, next.Acceptances, next.Reason = &reconfig, now, nil, plan.Reason
 	if noChange {
-		next.LastNoChangeRound = now
+		next.LastNoChangeReconfig = now
 	}
 	if inc := next.Incident; inc != nil {
 		if inc.Durations.Diagnose == 0 {
 			inc.Durations.Diagnose = now.Sub(inc.Opened)
 		}
-		affect(next, inc, round.Remove)
+		affect(next, inc, reconfig.Remove)
 	}
+	return fsm.apply(ctx, next, current, &reconfig, plan, now)
+}
+
+func (fsm *controller) resend(ctx context.Context, next *Record, current *view, progress *engine.Progress, now time.Time) error {
+	reconfig := *next.Reconfig
+	plan := engine.Plan{
+		Kind: engine.Change, Participants: reconfig.Participants, Remove: reconfig.Remove, Add: reconfig.Add,
+		Reason: "resent: no member got it",
+	}
+	if reason := checkPlan(next, current, &plan); reason != "" {
+		fsm.finishReconfig(next, &engine.Progress{State: engine.NotStarted, Reason: reason}, now)
+		next.Reason = "dropped " + reconfig.ID + ", no member got it: " + reason
+		return nil
+	}
+	next.ReconfigSince = now
+	next.Reason = plan.Reason + ": " + progress.Reason
+	return fsm.apply(ctx, next, current, &reconfig, &plan, now)
+}
+
+func (fsm *controller) apply(
+	ctx context.Context, next *Record, current *view, reconfig *engine.Reconfig, plan *engine.Plan, now time.Time,
+) error {
+	next.Acceptances = nil
 	if err := fsm.save(ctx, next); err != nil {
 		return err
 	}
-	acceptances, err := fsm.eng.Apply(ctx, current.obs, round)
-	fsm.recorder.RoundStarted(&round, plan)
+	acceptances, err := fsm.eng.Apply(ctx, current.obs, *reconfig)
+	fsm.recorder.ReconfigStarted(reconfig, plan)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 	next.Acceptances = acceptances
 	if err != nil {
-		fsm.finishRound(next, &engine.Progress{State: engine.Failed, Scope: engine.Group, Reason: err.Error()}, now)
-		return fsm.resetAll(ctx, next, ResetRoundFailed, err.Error(), now)
+		fsm.finishReconfig(next, &engine.Progress{State: engine.Failed, Scope: engine.Group, Reason: err.Error()}, now)
+		return fsm.resetAll(ctx, next, ResetReconfigFailed, err.Error(), now)
 	}
 	return nil
 }
@@ -148,14 +181,14 @@ func (fsm *controller) verify(ctx context.Context, next *Record, current *view, 
 }
 
 func (fsm *controller) resetAll(ctx context.Context, next *Record, reason ResetReason, detail string, now time.Time) error {
-	if next.Round != nil {
-		fsm.finishRound(next, &engine.Progress{State: engine.Running, Reason: "dropped by reset"}, now)
+	if next.Reconfig != nil {
+		fsm.finishReconfig(next, &engine.Progress{State: engine.Running, Reason: "dropped by reset"}, now)
 	}
 	for uid, pod := range next.Pods {
 		pod.Removing = true
 		next.Pods[uid] = pod
 	}
-	next.Members, next.Verifying, next.VerifyFailedSince, next.LastNoChangeRound = nil, nil, time.Time{}, time.Time{}
+	next.Members, next.Verifying, next.VerifyFailedSince, next.LastNoChangeReconfig = nil, nil, time.Time{}, time.Time{}
 	if inc := next.Incident; inc != nil && inc.Durations.Diagnose == 0 {
 		inc.Durations.Diagnose = now.Sub(inc.Opened)
 	}
@@ -170,12 +203,12 @@ func (fsm *controller) resetAll(ctx context.Context, next *Record, reason ResetR
 	return nil
 }
 
-func (fsm *controller) finishRound(next *Record, progress *engine.Progress, now time.Time) {
-	round, result := *next.Round, *progress
+func (fsm *controller) finishReconfig(next *Record, progress *engine.Progress, now time.Time) {
+	reconfig, result := *next.Reconfig, *progress
 	if inc := next.Incident; inc != nil {
-		inc.Rounds = append(inc.Rounds, RoundResult{Round: round, Progress: result})
-		inc.Durations.Apply += now.Sub(next.RoundSince)
+		inc.Reconfigs = append(inc.Reconfigs, ReconfigResult{Reconfig: reconfig, Progress: result})
+		inc.Durations.Apply += now.Sub(next.ReconfigSince)
 	}
-	next.Round, next.RoundSince, next.Acceptances = nil, time.Time{}, nil
-	fsm.later(func() { fsm.recorder.RoundFinished(&round, result) })
+	next.Reconfig, next.ReconfigSince, next.Acceptances = nil, time.Time{}, nil
+	fsm.later(func() { fsm.recorder.ReconfigFinished(&reconfig, result) })
 }

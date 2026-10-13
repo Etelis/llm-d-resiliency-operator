@@ -6,7 +6,10 @@ package configmap
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +28,6 @@ type Journal struct {
 	writer client.Client
 	owner  *unstructured.Unstructured
 	name   types.NamespacedName
-	stored *corev1.ConfigMap
 }
 
 func New(reader client.Reader, writer client.Client, owner *unstructured.Unstructured) *Journal {
@@ -35,69 +37,81 @@ func New(reader client.Reader, writer client.Client, owner *unstructured.Unstruc
 	}
 }
 
-func (store *Journal) Load(ctx context.Context) ([]byte, error) {
+//nolint:gocritic // The contract returns the record, its version and an error.
+func (store *Journal) Load(ctx context.Context) ([]byte, string, error) {
 	var current corev1.ConfigMap
 	err := store.reader.Get(ctx, store.name, &current)
 	if apierrors.IsNotFound(err) {
-		store.stored = nil
-		return nil, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	store.stored = &current
-	if data := current.Data[key]; data != "" {
-		return []byte(data), nil
+	var data []byte
+	if value := current.Data[key]; value != "" {
+		data = []byte(value)
 	}
-	return nil, nil
+	return data, versionOf(&current), nil
 }
 
-func (store *Journal) Save(ctx context.Context, data []byte) error {
-	err := store.write(ctx, data)
-	switch {
-	case apierrors.IsNotFound(err) && store.stored != nil:
-		store.stored = nil
-		err = store.write(ctx, data)
-	case apierrors.IsConflict(err) && store.stored != nil:
-		// An edit that leaves the record alone, such as a new annotation, is not another writer.
-		var current corev1.ConfigMap
-		if getErr := store.reader.Get(ctx, store.name, &current); getErr == nil && current.Data[key] == store.stored.Data[key] {
-			store.stored = &current
-			err = store.write(ctx, data)
-		}
+func (store *Journal) Save(ctx context.Context, data []byte, previous string) (string, error) {
+	if previous == "" {
+		return store.create(ctx, data)
 	}
-	if apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err) {
+	resourceVersion, digest, _ := strings.Cut(previous, "/")
+	var current corev1.ConfigMap
+	err := store.reader.Get(ctx, store.name, &current)
+	switch {
+	case apierrors.IsNotFound(err):
+		return "", fmt.Errorf("%w: the record was deleted", journal.ErrConflict)
+	case err != nil:
+		return "", err
+	case current.ResourceVersion != resourceVersion && hash(current.Data[key]) != digest:
+		return "", fmt.Errorf("%w: the record changed", journal.ErrConflict)
+	}
+	// An edit that leaves the record alone, such as a new annotation, is not another writer.
+	if current.Data == nil {
+		current.Data = map[string]string{}
+	}
+	current.Data[key] = string(data)
+	if err := store.writer.Update(ctx, &current); err != nil {
+		return "", conflict(err)
+	}
+	return versionOf(&current), nil
+}
+
+func (store *Journal) create(ctx context.Context, data []byte) (string, error) {
+	owner := store.owner.DeepCopy()
+	if err := store.reader.Get(ctx, client.ObjectKeyFromObject(owner), owner); err != nil {
+		return "", err
+	}
+	next := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: store.name.Namespace, Name: store.name.Name,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: owner.GetAPIVersion(), Kind: owner.GetKind(), Name: owner.GetName(), UID: owner.GetUID(),
+			}},
+		},
+		Data: map[string]string{key: string(data)},
+	}
+	if err := store.writer.Create(ctx, next); err != nil {
+		return "", conflict(err)
+	}
+	return versionOf(next), nil
+}
+
+func conflict(err error) error {
+	if apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err) || apierrors.IsNotFound(err) {
 		return fmt.Errorf("%w: %w", journal.ErrConflict, err)
 	}
 	return err
 }
 
-func (store *Journal) write(ctx context.Context, data []byte) error {
-	next := store.stored.DeepCopy()
-	if next == nil {
-		owner := store.owner.DeepCopy()
-		if err := store.reader.Get(ctx, client.ObjectKeyFromObject(owner), owner); err != nil {
-			return err
-		}
-		next = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-			Namespace: store.name.Namespace, Name: store.name.Name,
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: owner.GetAPIVersion(), Kind: owner.GetKind(), Name: owner.GetName(), UID: owner.GetUID(),
-			}},
-		}}
-	}
-	if next.Data == nil {
-		next.Data = map[string]string{}
-	}
-	next.Data[key] = string(data)
-	var err error
-	if store.stored == nil {
-		err = store.writer.Create(ctx, next)
-	} else {
-		err = store.writer.Update(ctx, next)
-	}
-	if err == nil {
-		store.stored = next
-	}
-	return err
+func versionOf(state *corev1.ConfigMap) string {
+	return state.ResourceVersion + "/" + hash(state.Data[key])
+}
+
+func hash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:8])
 }

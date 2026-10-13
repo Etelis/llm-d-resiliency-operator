@@ -7,6 +7,7 @@ package enginefault
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,6 +123,49 @@ func TestStarting(t *testing.T) {
 			t.Fatal("served without a member on every Pod")
 		}
 	})
+	t.Run("serving members are admitted, not checked", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.eng.plan = engine.Plan{Kind: engine.Healthy, Reason: "4 ranks healthy"}
+		test.load()
+		test.poll()
+		record := test.record()
+		if record.Phase != Serving || len(record.Members) != 4 || len(test.wl.resetAlls) != 0 || record.Reason != "4 ranks healthy" {
+			t.Fatalf("record %+v", record)
+		}
+		for id, state := range record.Members {
+			if state != Admitted {
+				t.Fatalf("%s is %s", id, state)
+			}
+		}
+	})
+	t.Run("a reset group that already serves is admitted once", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.serving()
+		test.eng.plan = engine.Plan{Kind: engine.Unrecoverable}
+		test.poll()
+		test.poll()
+		test.wantReset(ResetUnrecoverable)
+		test.wl.group.Pods = nil
+		test.poll()
+		for index := range names {
+			test.wl.group.Pods = append(test.wl.group.Pods, workload.Pod{
+				Name: names[index], UID: names[index] + "-new", IP: "10.0.1.1", Index: index, Identity: "new" + names[index],
+				State: workload.PodReady,
+			})
+			test.eng.members[index].Pod.UID, test.eng.members[index].PodIdentity = names[index]+"-new", "new"+names[index]
+		}
+		test.eng.plan = engine.Plan{Kind: engine.Healthy}
+		resets := len(test.wl.resetAlls)
+		test.poll()
+		test.poll()
+		test.poll()
+		record := test.record()
+		if record.Phase != Serving || len(record.Members) != 4 || len(test.wl.resetAlls) != resets {
+			t.Fatalf("record %+v, group resets %d", record, len(test.wl.resetAlls)-resets)
+		}
+	})
 	t.Run("admits a terminal member", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)
@@ -161,6 +205,10 @@ func TestPodLostWhileServing(t *testing.T) {
 			if len(harness.eng.applied) != 1 || !slices.Contains(harness.eng.admitted, "dp3@idD") {
 				t.Fatalf("applied %d, admitted %v", len(harness.eng.applied), harness.eng.admitted)
 			}
+			lost := slices.IndexFunc(harness.eng.appliedOn[0].Members, func(member engine.Member) bool { return member.ID() == "dp3@idD" })
+			if member := harness.eng.appliedOn[0].Members; lost < 0 || !member[lost].Terminal || member[lost].Detail != "pod lost" {
+				t.Fatalf("Apply did not see the lost member: %+v", harness.eng.appliedOn[0].Members)
+			}
 			harness.eng.progress = engine.Progress{State: engine.Succeeded}
 			harness.eng.plan = engine.Plan{Kind: engine.Healthy}
 			harness.poll()
@@ -174,14 +222,14 @@ func TestPodLostWhileServing(t *testing.T) {
 
 func TestOutcome(t *testing.T) {
 	t.Parallel()
-	round := func(remove, add []engine.MemberID) RoundResult {
-		return RoundResult{Round: engine.Round{Remove: remove, Add: add}, Progress: engine.Progress{State: engine.Succeeded}}
+	reconfig := func(remove, add []engine.MemberID) ReconfigResult {
+		return ReconfigResult{Reconfig: engine.Reconfig{Remove: remove, Add: add}, Progress: engine.Progress{State: engine.Succeeded}}
 	}
-	for want, rounds := range map[Outcome][]RoundResult{
-		Shrunk:    {round(ids("a@1"), nil)},
-		Recovered: {round(ids("a@1"), ids("b@2"))},
+	for want, reconfigs := range map[Outcome][]ReconfigResult{
+		Shrunk:    {reconfig(ids("a@1"), nil)},
+		Recovered: {reconfig(ids("a@1"), ids("b@2"))},
 	} {
-		if got := outcome(&Incident{Rounds: rounds}); got != want {
+		if got := outcome(&Incident{Reconfigs: reconfigs}); got != want {
 			t.Fatalf("outcome %s, want %s", got, want)
 		}
 	}
@@ -210,4 +258,81 @@ func TestIncidentNamesTheRemovedMember(t *testing.T) {
 	if closed == nil || !slices.Contains(closed.Affected, "dp3@idD") || !slices.Contains(closed.Nodes, "gpu-node-4") {
 		t.Fatalf("closed incident %+v", closed)
 	}
+}
+
+func TestResendCheckedAgain(t *testing.T) {
+	t.Parallel()
+	test := newHarness(t)
+	test.replacementCandidate()
+	test.eng.plan = engine.Plan{Kind: engine.Change, Participants: ids("dp0@idA", "dp1@idB", "dp2@idC"), Add: ids("dp3@idD2")}
+	test.unconfirmed()
+	sent := len(test.eng.applied)
+	test.wl.group.Pods[3].State = workload.PodStarting
+	test.eng.plan = engine.Plan{Kind: engine.Healthy}
+	test.poll()
+	record := test.record()
+	if len(test.eng.applied) != sent || record.Reconfig != nil || len(test.wl.resetAlls) != 0 ||
+		!strings.Contains(record.Reason, "dropped") {
+		t.Fatalf("applied %d, record %+v", len(test.eng.applied), record)
+	}
+}
+
+func (test *harness) restartedInPlace(serving bool) {
+	test.t.Helper()
+	test.serving()
+	test.wl.group.Pods[3].Identity = "idD9"
+	test.eng.members = append(test.eng.members, engine.Member{
+		Pod: workload.PodRef{Name: "lws-0-3", UID: "d1"}, PodIdentity: "idD9", Name: "dp3", Joinable: true, Serving: serving,
+	})
+}
+
+func TestPodRestartedInPlace(t *testing.T) {
+	t.Parallel()
+	for _, grow := range []bool{true, false} {
+		t.Run(map[bool]string{true: "engine can grow", false: "engine cannot grow"}[grow], func(t *testing.T) {
+			t.Parallel()
+			test := newHarness(t)
+			test.eng.grow = grow
+			test.restartedInPlace(false)
+			for index := range test.eng.members[:3] {
+				test.eng.members[index].Serving = false
+			}
+			test.eng.plan = test.shrinkPlan()
+			test.poll()
+			test.poll()
+			test.poll()
+			record := test.record()
+			if len(test.eng.applied) != 1 || !slices.Equal(test.eng.applied[0].Remove, ids("dp3@idD")) ||
+				record.Pods["d1"].Identity != "idD" || slices.Contains(test.eng.candidates, "dp3@idD9") {
+				t.Fatalf("applied %v, candidates %v, record %+v", test.eng.applied, test.eng.candidates, record)
+			}
+			if _, tracked := record.Members["dp3@idD9"]; tracked {
+				t.Fatalf("the restarted member is tracked: %+v", record.Members)
+			}
+			test.eng.progress = engine.Progress{State: engine.Succeeded}
+			for index := range test.eng.members[:3] {
+				test.eng.members[index].Serving = true
+			}
+			test.eng.plan = engine.Plan{Kind: engine.Healthy}
+			test.poll()
+			test.poll()
+			record = test.record()
+			if grow && (len(test.wl.resets) != 1 || test.wl.resets[0].UID != "d1") {
+				t.Fatalf("resets %v", test.wl.resets)
+			}
+			if !grow && (len(test.wl.resets) != 0 || record.Members["dp3@idD"] != Rejected) {
+				t.Fatalf("resets %v, record %+v", test.wl.resets, record)
+			}
+			if _, tracked := record.Members["dp3@idD9"]; tracked {
+				t.Fatalf("the restarted member is tracked: %+v", record.Members)
+			}
+		})
+	}
+	t.Run("a restarted member that serves breaks C5", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.restartedInPlace(true)
+		test.poll()
+		test.wantReset(ResetExclusionBroken)
+	})
 }
