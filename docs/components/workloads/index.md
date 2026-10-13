@@ -9,7 +9,7 @@ The workload owns the Pods of one engine group. It does four things:
 
 It remembers nothing: no earlier calls, no earlier groups. Deciding whether this is still the same group
 is the [controller's](../controller.md#same-group-or-a-new-one) job. It knows nothing about engines beyond which of its
-containers run one, which is configuration: no ranks, ports or processes. The first implementation, LWS, comes with its own PR and doc.
+containers run one, which is configuration: no ranks, ports or processes.
 
 ## Interface
 

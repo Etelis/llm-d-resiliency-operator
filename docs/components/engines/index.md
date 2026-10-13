@@ -4,8 +4,7 @@
 
 The engine plugin is everything IRO knows about one inference engine. It reads the engine's members, says what
 should happen to them, and sends the engine its recovery instructions. The controller never sees an engine's
-ranks, ports or status strings: only what this plugin reports. Each engine brings its own plugin; the first is
-[vLLM](vllm.md).
+ranks, ports or status strings: only what this plugin reports. Each engine brings its own plugin.
 
 ![The engine plugin: driver and policy](../../figures/engine.svg)
 
