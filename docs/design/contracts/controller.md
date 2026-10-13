@@ -25,6 +25,7 @@ type Controller interface {
 ```
 
 A runner calls `New` until the journal loads, then `Step` every `PollInterval` while this process leads.
+When `Step` returns `ErrConflict`, the runner drops the controller and calls `New` again.
 `New` and the defaults below come with the implementation; the code defines `Controller` and its objects.
 
 ## Objects
@@ -98,6 +99,8 @@ Builds the controller and loads its state.
 New(...) // empty journal (first run):       Record{Phase: starting}
 New(...) // leader changed during a reconfig:   Record{Phase: recovering, Reconfig: iro-ft-7c1e, ...}. The next Step watches Progress; it never resends.
 New(...) // journal unreadable or not valid: error. The runner logs it and calls New again next poll.
+New(...) // after a save conflicted: Record as saved by the other writer. Deadlines restart, as after a leader change.
+New(...) // the record was deleted while running: the last save conflicted, and now the journal is empty: starting.
 New(...) // a phase this version does not know: starts over, as with an empty journal.
 ```
 
@@ -310,7 +313,7 @@ never violated at runtime.
 
 | Guarantee | How |
 |---|---|
-| One writer per group | runs only on the elected leader. Journal saves are compare-and-swap. |
+| One writer per group | runs only on the elected leader. Journal saves are compare-and-swap on the version this controller loaded or saved; after a conflict it loads again. |
 | At-most-once reconfigs | the reconfig is saved before `Apply`. A new leader only watches `Progress`. |
 | Repeatable workload calls | `Reset`, `ResetAll` and `Release` are saved first and repeated until `Discover` shows the result |
 | One reconfig at a time | a new plan is asked for only when no reconfig is in flight |
