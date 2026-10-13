@@ -1,0 +1,142 @@
+{
+  "title": "Another member dies after a shrink",
+  "page": "failures/another-member-dies",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "m3 died and was removed",
+      "phase": "serving",
+      "pods": {
+        "pod-3": {
+          "m3": "excluded"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ],
+      "journal": "serving \u00b7 admitted m0 m1 m2 \u00b7 excluded m3@idD"
+    },
+    {
+      "title": "m1 dies too",
+      "phase": "recovering",
+      "pods": {
+        "pod-0": {
+          "m0": "paused"
+        },
+        "pod-1": {
+          "m1": "dead"
+        },
+        "pod-2": {
+          "m2": "paused"
+        }
+      },
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Observe(pods)",
+          "out": "m1 terminal \u00b7 m0, m2 paused \u00b7 m3 still excluded"
+        },
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "in": "admitted m0, m1, m2",
+          "out": "Change: remove m1@idB"
+        }
+      ]
+    },
+    {
+      "title": "A second reconfig removes m1",
+      "phase": "recovering",
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Apply(observation, reconfig)",
+          "in": "iro-ft-2 to m0, m2",
+          "out": "m0, m2 accept"
+        }
+      ]
+    },
+    {
+      "title": "The group serves with 2 members",
+      "phase": "serving",
+      "pods": {
+        "pod-0": {
+          "m0": "serving"
+        },
+        "pod-1": {
+          "m1": "excluded"
+        },
+        "pod-2": {
+          "m2": "serving"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Progress(...)",
+          "out": "Succeeded"
+        },
+        {
+          "to": "driver",
+          "call": "Verify(observation, [m0, m2])",
+          "out": "inference works"
+        }
+      ]
+    },
+    {
+      "title": "Both failed Pods are reset",
+      "note": "From here it is the same as a member dying once.",
+      "phase": "serving",
+      "pods": {
+        "pod-1": {
+          "uid": "b2",
+          "m1": "starting"
+        },
+        "pod-3": {
+          "uid": "d2",
+          "m3": "starting"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Reset([pod-1 b1, pod-3 d1])",
+          "out": "both recreated with new UIDs"
+        }
+      ]
+    }
+  ]
+}

@@ -1,31 +1,28 @@
----
-title: Examples
-sidebar_position: 1
----
-
 # Examples
 
-Each example walks one fault from start to end. Step through it with the buttons, or click it and use the arrow keys: every step
-shows the group's Pods and members, the controller's phase, and each call IRO makes with its input and output.
-
-All examples use the same group: four Pods, `pod-0` to `pod-3`, one engine member each, `m0` to `m3`.
+End-to-end walkthroughs. Step through each with the buttons, or click it and use the arrow keys. For one page
+per failure, see [Failures](../failures/index.md).
 
 | Example | What happens |
 |---|---|
-| [A member dies](member-dies.mdx) | One member dies. The rest keep serving, and the group is full again once the failed Pod is reset. |
-| [Two members die](two-members-die.mdx) | Two members die at once. One reconfig removes both, and one reset brings both Pods back. |
-| [A transient fault](transient-fault.mdx) | A step fails but nobody dies. IRO retries in place and no member is lost. |
-| [The leader dies mid-reconfig](leader-change.mdx) | The IRO leader dies while a reconfig runs. The new leader finishes it from the journal without sending it twice. |
-| [IRO cannot see the group](controller-blind.mdx) | IRO loses sight of every member. It waits, and resets only after --ft-unseen-timeout. |
-| [A reconfig fails](reconfig-fails.mdx) | The engine cannot complete a shrink. IRO resets the whole group. |
+| [A group starts](first-start.md) | IRO finds a new group and admits it once every member is up |
+| [From a fault back to full](back-to-full.md) | a member dies, the group keeps serving, and is full again |
 
 ## Adding an example
 
-An example is a JSON file next to these pages, plus a three-line page that shows it. The file lists the Pods
-once, then the steps; each step names only what changed.
+An example is a JSON file in `docs/scenarios`, shown on any page by one line:
+
+```markdown
+[example my-scenario]: ../scenarios/my-scenario.json
+```
+
+GitHub hides that line; the site replaces it with the stepper, and with it any figure right above it. The file
+lists the Pods once, then the steps; each step names only what changed.
 
 ```json
 {
+  "title": "m0 dies",
+  "page": "failures/my-page",
   "pods": [{"name": "pod-0", "uid": "a1", "members": {"m0": "serving"}}],
   "steps": [
     {"title": "m0 dies", "phase": "recovering",
@@ -41,4 +38,4 @@ once, then the steps; each step names only what changed.
 | member state | `serving`, `paused`, `dead`, `excluded`, `starting`, `joining`, `unknown` |
 | Pod change | member states, a new `uid`, or `"gone": true` |
 | `calls[].to` | `workload`, `driver`, `policy`, `journal`, `telemetry` |
-| optional | `note` and `journal` on a step, `in` and `out` on a call |
+| optional | `page` (where the title links), `note` and `journal` on a step, `in` and `out` on a call |

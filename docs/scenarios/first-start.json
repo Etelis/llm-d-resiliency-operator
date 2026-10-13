@@ -1,0 +1,109 @@
+{
+  "title": "A group starts",
+  "page": "examples/first-start",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "starting"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "starting"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "starting"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "starting"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "IRO finds a new group",
+      "phase": "starting",
+      "calls": [
+        {
+          "to": "journal",
+          "call": "Load()",
+          "out": "empty"
+        },
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "4 Pods, Starting"
+        }
+      ],
+      "journal": "starting \u00b7 Pods a1 b1 c1 d1"
+    },
+    {
+      "title": "Pods load the model",
+      "note": "No deadline: the workload's startup probe owns that.",
+      "phase": "starting",
+      "pods": {
+        "pod-0": {
+          "m0": "paused"
+        },
+        "pod-1": {
+          "m1": "paused"
+        }
+      },
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Observe(pods)",
+          "out": "m0, m1 up \u00b7 m2, m3 not yet"
+        },
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Wait"
+        }
+      ]
+    },
+    {
+      "title": "Every member is up",
+      "phase": "serving",
+      "pods": {
+        "pod-0": {
+          "m0": "serving"
+        },
+        "pod-1": {
+          "m1": "serving"
+        },
+        "pod-2": {
+          "m2": "serving"
+        },
+        "pod-3": {
+          "m3": "serving"
+        }
+      },
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Observe(pods)",
+          "out": "m0 to m3 serving"
+        },
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ],
+      "journal": "serving \u00b7 admitted m0@idA m1@idB m2@idC m3@idD"
+    }
+  ]
+}
