@@ -43,7 +43,7 @@ Rules that shape the driver:
 | `Observe` | status and `/health` of every rank of every Pod that has an IP and is not terminating |
 | `Serving` | status `healthy` and `/health` 200 |
 | `Terminal` | status `dead`, or `/health` 503 |
-| `Unknown` | the API does not answer, or answers for another rank. If IRO can read no admitted rank, it waits with its deadlines paused; if it can read some, the unknown ranks are a fault. |
+| `Unknown` | the API does not answer, or answers for another rank. If IRO can read no admitted rank, it waits with its deadlines paused and resets the group after `--ft-unseen-timeout`; if it can read some, the unknown ranks are a fault. |
 | `Probe` | one short completion to each serving rank, so idle peers run a step and notice a dead rank |
 | `Apply` | `retry` when nothing is removed, else `scale_down` with `removed_dp_ranks`; `request_id` is the reconfig ID. Refused before anything is sent when a participant cannot be reached or a removed rank is not terminal in the observation. A lost rank needs no address: its number comes from its name. |
 | Store host | when the reconfig removes the lowest alive rank: `dp_master_ip` of the lowest participant and `--vllm-store-port` plus its rank, so a second move inside one Pod does not reuse the port the previous host still holds. Ports from `--vllm-store-port` up to it plus the group size must be free. |
