@@ -1,47 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="580" viewBox="0 0 1100 580" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="400" viewBox="0 0 1100 400" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
 <rect width="100%" height="100%" rx="8" fill="#ffffff"/>
 <text x="32.0" y="42.0" font-size="20" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Controller phases</text>
-<text x="32.0" y="66.0" font-size="13" fill="#5f6368" text-anchor="start" xml:space="preserve">three phases · a ResetAll is the only way back to starting</text>
-<rect x="70.0" y="110.0" width="200.0" height="104.0" rx="22" fill="#f1f3f4" stroke="#5f6368" stroke-width="2.5"/>
-<text x="170.0" y="146.0" font-size="18" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">starting</text>
-<text x="170.0" y="174.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">waiting for every member</text>
-<text x="170.0" y="192.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">to come up, planned Healthy</text>
-<rect x="450.0" y="110.0" width="200.0" height="104.0" rx="22" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2.5"/>
-<text x="550.0" y="146.0" font-size="18" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
-<text x="550.0" y="174.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">all admitted members serve;</text>
-<text x="550.0" y="192.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">capacity restore runs here</text>
-<rect x="830.0" y="110.0" width="200.0" height="104.0" rx="22" fill="#fef7e0" stroke="#f29900" stroke-width="2.5"/>
-<text x="930.0" y="146.0" font-size="18" fill="#f29900" text-anchor="middle" font-weight="700" xml:space="preserve">recovering</text>
-<text x="930.0" y="174.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">a fault is being repaired,</text>
-<text x="930.0" y="192.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">one reconfig at a time</text>
-<path d="M 270.0 150.0 L 450.0 150.0" fill="none" stroke="#1e8e3e" stroke-width="1.8"/>
-<polygon points="450.0,150.0 440.8,153.9 440.8,146.1" fill="#1e8e3e"/>
-<text x="360.0" y="140.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">plan Healthy</text>
-<path d="M 650.0 140.0 L 830.0 140.0" fill="none" stroke="#f29900" stroke-width="1.8"/>
-<polygon points="830.0,140.0 820.8,143.9 820.8,136.1" fill="#f29900"/>
-<text x="740.0" y="130.0" font-size="12" fill="#f29900" text-anchor="middle" xml:space="preserve">a fault is observed</text>
-<path d="M 830.0 184.0 L 650.0 184.0" fill="none" stroke="#1e8e3e" stroke-width="1.8"/>
-<polygon points="650.0,184.0 659.2,180.1 659.2,187.9" fill="#1e8e3e"/>
-<text x="740.0" y="204.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">plan Healthy, or</text>
-<text x="740.0" y="220.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">reconfig Succeeded</text>
-<path d="M 550.0 214.0 L 550.0 290.0 L 200.0 290.0 L 200.0 214.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
+<text x="32.0" y="66.0" font-size="13" fill="#5f6368" text-anchor="start" xml:space="preserve">where the controller is, and what moves it</text>
+<rect x="70.0" y="130.0" width="200.0" height="84.0" rx="42" fill="#f1f3f4" stroke="#5f6368" stroke-width="2.5"/>
+<text x="170.0" y="166.0" font-size="19" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">starting</text>
+<text x="170.0" y="190.0" font-size="13" fill="#5f6368" text-anchor="middle" xml:space="preserve">the group comes up</text>
+<rect x="450.0" y="130.0" width="200.0" height="84.0" rx="42" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2.5"/>
+<text x="550.0" y="166.0" font-size="19" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">serving</text>
+<text x="550.0" y="190.0" font-size="13" fill="#5f6368" text-anchor="middle" xml:space="preserve">the group serves</text>
+<rect x="830.0" y="130.0" width="200.0" height="84.0" rx="42" fill="#fef7e0" stroke="#f29900" stroke-width="2.5"/>
+<text x="930.0" y="166.0" font-size="19" fill="#f29900" text-anchor="middle" font-weight="700" xml:space="preserve">recovering</text>
+<text x="930.0" y="190.0" font-size="13" fill="#5f6368" text-anchor="middle" xml:space="preserve">a fault is repaired</text>
+<path d="M 270.0 172.0 L 450.0 172.0" fill="none" stroke="#1e8e3e" stroke-width="1.8"/>
+<polygon points="450.0,172.0 440.8,175.9 440.8,168.1" fill="#1e8e3e"/>
+<text x="360.0" y="162.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">every member is up</text>
+<path d="M 650.0 158.0 L 830.0 158.0" fill="none" stroke="#f29900" stroke-width="1.8"/>
+<polygon points="830.0,158.0 820.8,161.9 820.8,154.1" fill="#f29900"/>
+<text x="740.0" y="148.0" font-size="12" fill="#f29900" text-anchor="middle" xml:space="preserve">a fault</text>
+<path d="M 830.0 192.0 L 650.0 192.0" fill="none" stroke="#1e8e3e" stroke-width="1.8"/>
+<polygon points="650.0,192.0 659.2,188.1 659.2,195.9" fill="#1e8e3e"/>
+<text x="740.0" y="212.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">repaired</text>
+<path d="M 550.0 214.0 L 550.0 270.0 L 200.0 270.0 L 200.0 214.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
 <polygon points="200.0,214.0 203.9,223.2 196.1,223.2" fill="#d93025"/>
-<path d="M 930.0 214.0 L 930.0 330.0 L 140.0 330.0 L 140.0 214.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
+<path d="M 930.0 214.0 L 930.0 310.0 L 140.0 310.0 L 140.0 214.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
 <polygon points="140.0,214.0 143.9,223.2 136.1,223.2" fill="#d93025"/>
-<text x="560.0" y="282.0" font-size="13" fill="#d93025" text-anchor="start" font-weight="700" xml:space="preserve">ResetAll</text>
-<text x="940.0" y="322.0" font-size="13" fill="#d93025" text-anchor="start" font-weight="700" xml:space="preserve">ResetAll</text>
-<rect x="32.0" y="380.0" width="500.0" height="160.0" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="1.2"/>
-<text x="48.0" y="406.0" font-size="13.5" fill="#d93025" text-anchor="start" font-weight="700" xml:space="preserve">from serving</text>
-<text x="48.0" y="432.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· verification still failing after its window</text>
-<text x="48.0" y="452.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· capacity restore set to reset-all</text>
-<text x="48.0" y="472.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· a grow that fails or misses its deadline</text>
-<text x="48.0" y="492.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· a plan failing C2 or C3; C4 or C5 broken</text>
-<text x="48.0" y="512.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· no member readable for --ft-unseen-timeout</text>
-<rect x="568.0" y="380.0" width="500.0" height="160.0" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="1.2"/>
-<text x="584.0" y="406.0" font-size="13.5" fill="#d93025" text-anchor="start" font-weight="700" xml:space="preserve">from recovering</text>
-<text x="584.0" y="432.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· plan Unrecoverable; reconfig Failed for the group</text>
-<text x="584.0" y="452.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· Apply refused; the reconfig deadline passes</text>
-<text x="584.0" y="472.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· the flap guard trips</text>
-<text x="584.0" y="492.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· a plan failing C1 to C3; C1, C4 or C5 broken</text>
-<text x="584.0" y="512.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">· no member readable for --ft-unseen-timeout</text>
+<text x="375.0" y="262.0" font-size="13" fill="#d93025" text-anchor="middle" font-weight="700" xml:space="preserve">reset the group</text>
+<text x="535.0" y="302.0" font-size="13" fill="#d93025" text-anchor="middle" font-weight="700" xml:space="preserve">reset the group: it cannot be repaired in place</text>
+<line x1="32.0" y1="356.0" x2="62.0" y2="356.0" stroke="#1e8e3e" stroke-width="2"/>
+<text x="70.0" y="360.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">things get better</text>
+<line x1="216.9" y1="356.0" x2="246.9" y2="356.0" stroke="#f29900" stroke-width="2"/>
+<text x="254.9" y="360.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">a fault</text>
+<line x1="333.0" y1="356.0" x2="363.0" y2="356.0" stroke="#d93025" stroke-width="2"/>
+<text x="371.0" y="360.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">a reset: every Pod is recreated</text>
 </svg>

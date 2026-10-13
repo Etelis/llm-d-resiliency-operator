@@ -307,33 +307,22 @@ def recovery_timeline():
 
 
 def phases():
-    s = Svg(1100, 580, "Controller phases", "three phases · a ResetAll is the only way back to starting")
-    pill = [("starting", 70, "grey", "waiting for every member", "to come up, planned Healthy"),
-            ("serving", 450, "green", "all admitted members serve;", "capacity restore runs here"),
-            ("recovering", 830, "amber", "a fault is being repaired,", "one reconfig at a time")]
-    for name, x, tone, a, b in pill:
-        s.rect(x, 110, 200, 104, C[tone], C[tone + "_bg"], r=22, sw=2.5)
-        s.text(x + 100, 146, name, 18, color=C[tone], bold=True, anchor="middle")
-        s.text(x + 100, 174, a, 12.5, color=C["muted"], anchor="middle")
-        s.text(x + 100, 192, b, 12.5, color=C["muted"], anchor="middle")
-    s.arrow([(270, 150), (450, 150)], C["green"], "plan Healthy", (360, 140))
-    s.arrow([(650, 140), (830, 140)], C["amber"], "a fault is observed", (740, 130))
-    s.arrow([(830, 184), (650, 184)], C["green"], ["plan Healthy, or", "reconfig Succeeded"], (740, 204))
-    s.arrow([(550, 214), (550, 290), (200, 290), (200, 214)], C["red"])
-    s.arrow([(930, 214), (930, 330), (140, 330), (140, 214)], C["red"])
-    s.text(560, 282, "ResetAll", 13, color=C["red"], bold=True)
-    s.text(940, 322, "ResetAll", 13, color=C["red"], bold=True)
-    for x, title, lines in [
-        (32, "from serving", ["verification still failing after its window", "capacity restore set to reset-all",
-                              "a grow that fails or misses its deadline", "a plan failing C2 or C3; C4 or C5 broken",
-                              "no member readable for --ft-unseen-timeout"]),
-        (568, "from recovering", ["plan Unrecoverable; reconfig Failed for the group", "Apply refused; the reconfig deadline passes",
-                                  "the flap guard trips", "a plan failing C1 to C3; C1, C4 or C5 broken",
-                                  "no member readable for --ft-unseen-timeout"])]:
-        s.rect(x, 380, 500, 160, C["red"], C["red_bg"], r=6, sw=1.2)
-        s.text(x + 16, 406, title, 13.5, color=C["red"], bold=True)
-        for i, line in enumerate(lines):
-            s.text(x + 16, 432 + 20 * i, "· " + line, 12.5)
+    s = Svg(1100, 400, "Controller phases", "where the controller is, and what moves it")
+    pill = [("starting", 70, "grey", "the group comes up"),
+            ("serving", 450, "green", "the group serves"),
+            ("recovering", 830, "amber", "a fault is repaired")]
+    for name, x, tone, line in pill:
+        s.rect(x, 130, 200, 84, C[tone], C[tone + "_bg"], r=42, sw=2.5)
+        s.text(x + 100, 166, name, 19, color=C[tone], bold=True, anchor="middle")
+        s.text(x + 100, 190, line, 13, color=C["muted"], anchor="middle")
+    s.arrow([(270, 172), (450, 172)], C["green"], "every member is up", (360, 162))
+    s.arrow([(650, 158), (830, 158)], C["amber"], "a fault", (740, 148))
+    s.arrow([(830, 192), (650, 192)], C["green"], "repaired", (740, 212))
+    s.arrow([(550, 214), (550, 270), (200, 270), (200, 214)], C["red"])
+    s.arrow([(930, 214), (930, 310), (140, 310), (140, 214)], C["red"])
+    s.text(375, 262, "reset the group", 13, color=C["red"], bold=True, anchor="middle")
+    s.text(535, 302, "reset the group: it cannot be repaired in place", 13, color=C["red"], bold=True, anchor="middle")
+    s.legend(360, [("line", "green", "things get better"), ("line", "amber", "a fault"), ("line", "red", "a reset: every Pod is recreated")])
     s.save("phases.svg")
 
 
