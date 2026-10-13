@@ -107,6 +107,49 @@ func TestNothingReadable(t *testing.T) {
 			t.Fatalf("reset while Discover fails: %+v", test.record())
 		}
 	})
+	t.Run("time Discover failed does not count toward the engine's UnseenTimeout", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.serving()
+		test.wl.discoverErr = errors.New("api down")
+		test.pollAnyway()
+		test.after(2 * test.config.UnseenTimeout)
+		if !test.record().UnseenByDiscover {
+			t.Fatalf("record %+v", test.record())
+		}
+		test.wl.discoverErr = nil
+		test.unknown("dp0", "dp1", "dp2", "dp3")
+		back := test.clock.Add(test.config.PollInterval)
+		test.pollAnyway()
+		record := test.record()
+		if len(test.wl.resetAlls) != 0 || record.UnseenByDiscover || record.UnseenSince.Before(back) {
+			t.Fatalf("reset %d, record %+v", len(test.wl.resetAlls), record)
+		}
+		test.after(test.config.UnseenTimeout - 10*time.Second)
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("reset before the engine's own UnseenTimeout: %+v", test.record())
+		}
+		test.after(10 * time.Second)
+		test.wantReset(ResetUnseen)
+	})
+	t.Run("Discover failing restarts the clock of an engine already unseen", func(t *testing.T) {
+		t.Parallel()
+		test := newHarness(t)
+		test.serving()
+		test.unknown("dp0", "dp1", "dp2", "dp3")
+		test.pollAnyway()
+		test.after(test.config.UnseenTimeout - time.Minute)
+		test.wl.discoverErr = errors.New("api down")
+		test.after(2 * time.Minute)
+		test.wl.discoverErr = nil
+		test.pollAnyway()
+		test.after(test.config.UnseenTimeout - 10*time.Second)
+		if len(test.wl.resetAlls) != 0 {
+			t.Fatalf("reset before a full UnseenTimeout after Discover came back: %+v", test.record())
+		}
+		test.after(10 * time.Second)
+		test.wantReset(ResetUnseen)
+	})
 	t.Run("an unreadable excluded member is not a C4 violation", func(t *testing.T) {
 		t.Parallel()
 		test := newHarness(t)
