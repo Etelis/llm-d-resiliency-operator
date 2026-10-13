@@ -41,7 +41,8 @@ type Options struct {
 func Defaults() Config {
 	return Config{
 		PollInterval: time.Second, DiagnosisTimeout: 75 * time.Second, ApplyTimeout: 90 * time.Second,
-		VerifyTimeout: 2 * time.Minute, FlapWindow: 2 * time.Minute, CapacityRestore: RestoreResetPod,
+		VerifyTimeout: 2 * time.Minute, UnseenTimeout: 10 * time.Minute, FlapWindow: 2 * time.Minute,
+		CapacityRestore: RestoreResetPod,
 	}
 }
 
@@ -56,6 +57,8 @@ func (options *Options) BindFlags(flags *flag.FlagSet) {
 	flags.DurationVar(&config.ApplyTimeout, "ft-apply-timeout", config.ApplyTimeout, "longest time a reconfig may stay in flight")
 	flags.DurationVar(&config.VerifyTimeout, "ft-verify-timeout", config.VerifyTimeout,
 		"how long a failed check after a reconfig is retried (0 resets on the first failure)")
+	flags.DurationVar(&config.UnseenTimeout, "ft-unseen-timeout", config.UnseenTimeout,
+		"how long no admitted member may be readable before the group is reset (0 waits forever)")
 	flags.StringVar((*string)(&config.CapacityRestore), "ft-capacity-restore", string(config.CapacityRestore),
 		"how capacity comes back after a shrink: reset-pod, reset-all or release")
 	for _, name := range slices.Sorted(maps.Keys(options.Engines)) {
@@ -94,8 +97,8 @@ func (options *Options) Setup(mgr ctrl.Manager, recorder Recorder) error {
 
 func (config *Config) validate() error {
 	if config.PollInterval <= 0 || config.DiagnosisTimeout <= 0 || config.ApplyTimeout <= 0 ||
-		config.FlapWindow <= 0 || config.VerifyTimeout < 0 {
-		return errors.New("engine FT timeouts must be positive (--ft-verify-timeout may be 0)")
+		config.FlapWindow <= 0 || config.VerifyTimeout < 0 || config.UnseenTimeout < 0 {
+		return errors.New("engine FT timeouts must be positive (--ft-verify-timeout and --ft-unseen-timeout may be 0)")
 	}
 	if !slices.Contains([]CapacityRestore{RestoreResetPod, RestoreResetAll, RestoreRelease}, config.CapacityRestore) {
 		return fmt.Errorf("unknown --ft-capacity-restore %q", config.CapacityRestore)

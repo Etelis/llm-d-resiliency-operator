@@ -53,6 +53,7 @@ func TestSetupRejects(t *testing.T) {
 		"unknown workload": {func(options *Options) { options.Workload = "jobset" }, "unknown --workload"},
 		"zero timeout":     {func(options *Options) { options.Config.ApplyTimeout = 0 }, "timeouts"},
 		"negative verify":  {func(options *Options) { options.Config.VerifyTimeout = -time.Second }, "timeouts"},
+		"negative unseen":  {func(options *Options) { options.Config.UnseenTimeout = -time.Second }, "timeouts"},
 		"zero poll":        {func(options *Options) { options.Config.PollInterval = 0 }, "timeouts"},
 		"restore mode":     {func(options *Options) { options.Config.CapacityRestore = "grow" }, "--ft-capacity-restore"},
 	} {
@@ -76,14 +77,15 @@ func TestBindFlags(t *testing.T) {
 		t.Fatalf("defaults: %+v", opts)
 	}
 	args := []string{
-		"--enable-engine-ft", "--engine=stub", "--ft-capacity-restore=release", "--ft-verify-timeout=0", "--stub-engine=x",
+		"--enable-engine-ft", "--engine=stub", "--ft-capacity-restore=release", "--ft-verify-timeout=0", "--ft-unseen-timeout=0",
+		"--stub-engine=x",
 	}
 	if err := flags.Parse(args); err != nil {
 		t.Fatal(err)
 	}
 	stub, ok := opts.Engines["stub"].(*stubEngine)
 	if !opts.Enabled || opts.Engine != "stub" || opts.Config.CapacityRestore != RestoreRelease ||
-		opts.Config.VerifyTimeout != 0 || !ok || stub.flag != "x" {
+		opts.Config.VerifyTimeout != 0 || opts.Config.UnseenTimeout != 0 || !ok || stub.flag != "x" {
 		t.Fatalf("parsed: %+v", opts)
 	}
 }
