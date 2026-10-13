@@ -116,7 +116,7 @@ the Pods saved in its journal.
 |---|---|---|
 | saved, same identity, not `Terminating` | unchanged | nothing |
 | saved as `Removing`, now gone or `Terminating` | the `Reset` or `Release` is happening | forgets it once it is gone |
-| saved, not `Removing`, now gone or `Terminating` | its members are lost | adds them to the observation as Terminal ([lost members](engines/index.md#observe)), so the policy plans as usual and a reconfig can remove them |
+| saved, not `Removing`, now gone or `Terminating` | its members are lost | adds them to the observation as Terminal ([lost members](engines/index.md#members)), so the policy plans as usual and a reconfig can remove them |
 | saved, not `Removing`, same UID with a new identity: an engine container restarted in place | its members are lost. The restarted container's members are not in the group. | the same for the old members. It keeps the Pod's old identity while it tracks them, so once a reconfig removed them the Pod is [restored](#getting-back-to-full) like a failed Pod. The new members are never candidates. A Pod that restarts before its members were recorded is only a slower start. |
 | not saved, `Starting` | a replacement Pod is loading | saves it and waits |
 | not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
