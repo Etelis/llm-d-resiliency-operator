@@ -10,7 +10,7 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 | Group | one LWS with `replicas: 1`, Pods with label `group-index=0` |
 | Required spec | `size >= 1`, `groupIdentity: Ordinal` or unset, `restartPolicy` unset, `RecreateGroupOnPodRestart` or `None` |
 | `Pod.Index` | label `leaderworkerset.sigs.k8s.io/worker-index`. Names are `<lws>-0` and `<lws>-0-<i>`. |
-| `Pod.Identity` | a hash of the Pod UID and, per container, its ID and restart count |
+| `Pod.Identity` | a hash of the Pod UID and, per engine container, its ID and restart count. Engine containers are `--lws-engine-containers`, by default every container in `spec.containers`. Init containers, native sidecars included, count only when named. Changing the flag changes every identity, which IRO reads as a new group. |
 | `Pod.Node` | `spec.nodeName` |
 | `Pod.State` | `Terminating` when the Pod is being deleted. `Ready` when every container runs and the Pod has an IP. Otherwise `Starting`. |
 | `Recreating` | the leader Pod is missing or terminating, carries `leaderworkerset.sigs.k8s.io/group-recreate-pending`, or is newer than a worker (LWS replaced it while old workers remain). Under `RecreateGroupOnPodRestart`, also any Pod terminating or with a restarted or exited container. |
@@ -19,7 +19,7 @@ contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 | `Reset` | under `RecreateGroupOnPodRestart`: `ErrUnsupported`, because deleting any Pod recreates the whole group. Under `None`: delete each named worker with a UID precondition, and LWS recreates each one alone. A list that names the leader: `ErrUnsupported` before anything is deleted, because deleting it takes its workers with it. |
 | `ResetAll` | delete the leader with a UID precondition and foreground propagation, so the old leader stays `Terminating` until its workers are gone. `NotFound` or `Conflict` count as done. |
 | `Release` | `ErrUnsupported`: LWS cannot remove a chosen Pod from a running group |
-| Flags | `--lws-namespace` (default `default`), `--lws-name` |
+| Flags | `--lws-namespace` (default `default`), `--lws-name`, `--lws-engine-containers` (a named container a Pod lacks makes `Discover` fail) |
 
 ## Journal
 
