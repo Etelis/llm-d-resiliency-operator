@@ -1,30 +1,34 @@
-# IRO Documentation
+# Architecture
 
-| I want to… | Read |
-| --- | --- |
-| understand what IRO is made of | [Components and contracts](design/contracts/README.md) |
-| see the phases and what the controller does in each | [Controller](design/contracts/controller.md) |
-| add a new engine | [Engine](design/contracts/engine.md) |
-| add a new workload type | [Workload](design/contracts/workload.md) |
-| understand restarts and leader changes | [Journal](design/contracts/journal.md) |
-| find logs, metrics and Events | [Telemetry](design/contracts/telemetry.md) |
-| see the LWS side and its RBAC | [LeaderWorkerSet](design/lws.md) |
-| deploy vLLM for IRO | [vLLM](design/vllm.md) |
-| look up a flag | [Controller](design/contracts/controller.md#configuration), [LeaderWorkerSet](design/lws.md), [vLLM](design/vllm.md#flags) |
-| check pinned dependency versions | [Upstream versions](upstream-versions.md) |
+IRO keeps a multi-node inference engine serving through faults. It watches one engine group, the Pods that
+run the engine's members (for vLLM, its DP ranks). When a member fails, IRO removes it in place so the rest keep
+serving, then brings the group back to full capacity by resetting the failed Pod. Only when that cannot work
+does it restart the whole group.
 
-```text
-docs/
-├── README.md                 this page
-├── design/
-│   ├── contracts/
-│   │   ├── README.md         start here
-│   │   ├── controller.md
-│   │   ├── engine.md
-│   │   ├── workload.md
-│   │   ├── journal.md
-│   │   └── telemetry.md
-│   ├── lws.md                LeaderWorkerSet workload and journal
-│   └── vllm.md               vLLM engine
-└── upstream-versions.md
-```
+![IRO manager, its plugins and what they talk to](design/figures/architecture.svg)
+
+The controller knows no engine and no workload type. It talks to them through two plugins: the
+[workload](design/contracts/workload.md) (LeaderWorkerSet today) and the [engine](design/contracts/engine.md)
+(vLLM today). Its state lives in a versioned [journal](design/contracts/journal.md), so a new leader picks up a
+recovery where the old one stopped.
+
+## A fault, end to end
+
+![One member dies and the group goes 4, 3, 4 while serving](design/figures/recovery-timeline.svg)
+
+The controller is always in one of three phases. A fault moves it from `serving` to `recovering`; a reconfig that
+removes the dead member brings it back. A `ResetAll` is the only way back to `starting`.
+
+![Controller phases: starting, serving, recovering](design/figures/phases.svg)
+
+## Components
+
+| Component | What it does | Read |
+|---|---|---|
+| Controller | phases, deadlines, checks on every plan, resets, restoring capacity | [controller.md](design/contracts/controller.md) |
+| Workload | reports the group's Pods, resets or releases them | [workload.md](design/contracts/workload.md), [LWS](design/lws.md) |
+| Engine | reports members and their state, plans and sends reconfigs | [engine.md](design/contracts/engine.md), [vLLM](design/vllm.md) |
+| Journal | durable controller state, one writer at a time | [journal.md](design/contracts/journal.md) |
+| Telemetry | logs, metrics, Events, incident records | [telemetry.md](design/contracts/telemetry.md) |
+
+The boundaries between them, and why they are drawn there, are in [Components and contracts](design/contracts/README.md).

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1046" height="1078" viewBox="0 0 1046 1078" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" rx="8" fill="#ffffff"/>
+<text x="32.0" y="42.0" font-size="20" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Who does what when one member dies</text>
+<text x="32.0" y="66.0" font-size="13" fill="#5f6368" text-anchor="start" xml:space="preserve">the same recovery as the timeline above, as calls</text>
+<rect x="196.0" y="94.0" width="182.0" height="44.0" rx="6" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+<text x="287.0" y="121.0" font-size="13.5" fill="#1a73e8" text-anchor="middle" font-weight="700" xml:space="preserve">Controller</text>
+<rect x="406.0" y="94.0" width="182.0" height="44.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
+<text x="497.0" y="121.0" font-size="13.5" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">Engine policy</text>
+<rect x="616.0" y="94.0" width="182.0" height="44.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
+<text x="707.0" y="121.0" font-size="13.5" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">Engine driver</text>
+<rect x="826.0" y="94.0" width="182.0" height="44.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="917.0" y="121.0" font-size="13.5" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">Workload</text>
+<g>
+<line x1="917.0" y1="138" x2="917.0" y2="1012.0" stroke="#c4c7c5" stroke-width="1.3" stroke-dasharray="5 5"/>
+<line x1="707.0" y1="138" x2="707.0" y2="1012.0" stroke="#c4c7c5" stroke-width="1.3" stroke-dasharray="5 5"/>
+<line x1="497.0" y1="138" x2="497.0" y2="1012.0" stroke="#c4c7c5" stroke-width="1.3" stroke-dasharray="5 5"/>
+<line x1="287.0" y1="138" x2="287.0" y2="1012.0" stroke="#c4c7c5" stroke-width="1.3" stroke-dasharray="5 5"/>
+<line x1="24.0" y1="150.0" x2="1030.0" y2="150.0" stroke="#dadce0" stroke-width="1.2"/>
+<text x="32.0" y="170.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t1–t2  remove the dead member  ·  recovering</text>
+<path d="M 287.0 198.0 L 704.0 198.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="704.0,198.0 694.8,201.9 694.8,194.1" fill="#1a73e8"/>
+<text x="497.0" y="191.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Observe(pods)</text>
+<path d="M 707.0 238.0 L 290.0 238.0" fill="none" stroke="#1e8e3e" stroke-width="1.8" stroke-dasharray="7 5"/>
+<polygon points="290.0,238.0 299.2,234.1 299.2,241.9" fill="#1e8e3e"/>
+<text x="497.0" y="231.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">dp3 terminal, dp0–dp2 paused</text>
+<path d="M 287.0 278.0 L 494.0 278.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="494.0,278.0 484.8,281.9 484.8,274.1" fill="#1a73e8"/>
+<text x="392.0" y="271.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Plan(...)</text>
+<path d="M 497.0 318.0 L 290.0 318.0" fill="none" stroke="#1e8e3e" stroke-width="1.8" stroke-dasharray="7 5"/>
+<polygon points="290.0,318.0 299.2,314.1 299.2,321.9" fill="#1e8e3e"/>
+<text x="392.0" y="311.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">Change: remove dp3</text>
+<path d="M 287.0 358.0 L 704.0 358.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="704.0,358.0 694.8,361.9 694.8,354.1" fill="#1a73e8"/>
+<text x="497.0" y="351.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Apply(remove dp3)</text>
+<path d="M 287.0 398.0 L 494.0 398.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="494.0,398.0 484.8,401.9 484.8,394.1" fill="#1a73e8"/>
+<text x="392.0" y="391.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Progress(...)</text>
+<path d="M 497.0 438.0 L 290.0 438.0" fill="none" stroke="#1e8e3e" stroke-width="1.8" stroke-dasharray="7 5"/>
+<polygon points="290.0,438.0 299.2,434.1 299.2,441.9" fill="#1e8e3e"/>
+<text x="392.0" y="431.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">Succeeded</text>
+<path d="M 287.0 478.0 L 704.0 478.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="704.0,478.0 694.8,481.9 694.8,474.1" fill="#1a73e8"/>
+<text x="497.0" y="471.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Verify(dp0, dp1, dp2)</text>
+<rect x="207.0" y="504.0" width="580.0" height="34.0" rx="5" fill="#fef7e0" stroke="#f29900" stroke-width="1.5"/>
+<text x="219.0" y="524.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">serving with 3 members; lws-0-3 holds only an excluded member</text>
+<line x1="24.0" y1="562.0" x2="1030.0" y2="562.0" stroke="#dadce0" stroke-width="1.2"/>
+<text x="32.0" y="582.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t3  reset the failed Pod  ·  serving</text>
+<path d="M 287.0 610.0 L 914.0 610.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="914.0,610.0 904.8,613.9 904.8,606.1" fill="#1a73e8"/>
+<text x="602.0" y="603.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Reset(lws-0-3, UID d1)</text>
+<path d="M 917.0 650.0 L 290.0 650.0" fill="none" stroke="#5f6368" stroke-width="1.8" stroke-dasharray="7 5"/>
+<polygon points="290.0,650.0 299.2,646.1 299.2,653.9" fill="#5f6368"/>
+<text x="602.0" y="643.0" font-size="12" fill="#5f6368" text-anchor="middle" xml:space="preserve">lws-0-3 back with UID d2, then Ready</text>
+<line x1="24.0" y1="682.0" x2="1030.0" y2="682.0" stroke="#dadce0" stroke-width="1.2"/>
+<text x="32.0" y="702.0" font-size="14" fill="#1a73e8" text-anchor="start" font-weight="700" xml:space="preserve">t4–t5  admit the new member  ·  serving</text>
+<path d="M 287.0 730.0 L 704.0 730.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="704.0,730.0 694.8,733.9 694.8,726.1" fill="#1a73e8"/>
+<text x="497.0" y="723.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Observe(pods)</text>
+<path d="M 707.0 770.0 L 290.0 770.0" fill="none" stroke="#1e8e3e" stroke-width="1.8" stroke-dasharray="7 5"/>
+<polygon points="290.0,770.0 299.2,766.1 299.2,773.9" fill="#1e8e3e"/>
+<text x="497.0" y="763.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">dp3 on lws-0-3 (d2) joinable</text>
+<path d="M 287.0 810.0 L 494.0 810.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="494.0,810.0 484.8,813.9 484.8,806.1" fill="#1a73e8"/>
+<text x="392.0" y="803.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Plan(...)</text>
+<path d="M 497.0 850.0 L 290.0 850.0" fill="none" stroke="#1e8e3e" stroke-width="1.8" stroke-dasharray="7 5"/>
+<polygon points="290.0,850.0 299.2,846.1 299.2,853.9" fill="#1e8e3e"/>
+<text x="392.0" y="843.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">Change: add dp3</text>
+<path d="M 287.0 890.0 L 704.0 890.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="704.0,890.0 694.8,893.9 694.8,886.1" fill="#1a73e8"/>
+<text x="497.0" y="883.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Apply(add dp3)</text>
+<path d="M 287.0 930.0 L 704.0 930.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="704.0,930.0 694.8,933.9 694.8,926.1" fill="#1a73e8"/>
+<text x="497.0" y="923.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">Verify(dp0 … dp3)</text>
+<rect x="207.0" y="956.0" width="580.0" height="34.0" rx="5" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="1.5"/>
+<text x="219.0" y="976.0" font-size="12.5" fill="#202124" text-anchor="start" xml:space="preserve">serving with 4 members</text>
+</g>
+<line x1="24.0" y1="1022.0" x2="1030.0" y2="1022.0" stroke="#dadce0" stroke-width="1.2"/>
+<line x1="32.0" y1="1052.0" x2="62.0" y2="1052.0" stroke="#1a73e8" stroke-width="2"/>
+<text x="70.0" y="1056.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">controller call</text>
+<line x1="203.1" y1="1052.0" x2="233.1" y2="1052.0" stroke="#1e8e3e" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="241.1" y="1056.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">engine reply</text>
+<line x1="353.6" y1="1052.0" x2="383.6" y2="1052.0" stroke="#5f6368" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="391.6" y="1056.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">workload reply</text>
+<rect x="517.9" y="1043.0" width="26.0" height="16.0" rx="3" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
+<text x="551.9" y="1056.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">group state</text>
+</svg>

@@ -18,35 +18,7 @@ need changes in all three. This doc fixes the boundaries before more is built on
 
 ## Components
 
-```mermaid
-flowchart LR
-  subgraph IRO["IRO manager (leader-elected)"]
-    C[Controller]
-    J[(Journal)]
-    T[Telemetry]
-    subgraph W[Workload]
-      LWS[LWS]
-    end
-    subgraph E[Engine]
-      D[Driver]
-      P[Policy]
-    end
-  end
-  K8S["Kubernetes + LWS controller"]
-  RT["Engine runtime: FT API, process observer"]
-  EPP["Traffic router (EPP)"]
-  OBS["Prometheus, Events, logs"]
-
-  C -->|Load, Save| J
-  C -->|what happened| T
-  T --> OBS
-  C -->|Discover, Reset, ResetAll, Release| W
-  C -->|Capabilities, Observe, Probe, Apply, Verify| D
-  C -->|Plan, Progress| P
-  LWS -->|read, replace and remove Pods| K8S
-  D -->|HTTP| RT
-  EPP -->|routes on native health| RT
-```
+![IRO manager, its plugins and what they talk to](../figures/architecture.svg)
 
 | Component | Owns | Must not know | Doc |
 |---|---|---|---|
@@ -95,31 +67,7 @@ again. The engine admits `dp3@idD2`. The group is back to 4 members.
 
 ## One reconciliation step
 
-```mermaid
-sequenceDiagram
-  participant C as Controller
-  participant W as Workload
-  participant D as Engine driver
-  participant P as Engine policy
-  participant J as Journal
-  C->>W: Discover()
-  W-->>C: Group (Pods, Recreating)
-  C->>D: Observe(pods)
-  D-->>C: Observation (members per Pod, their state)
-  alt a reconfig is in flight
-    C->>P: Progress(observation, reconfig)
-  else no reconfig
-    C->>P: Plan(observation, admitted, candidates)
-  end
-  opt plan is Change and passes the checks
-    C->>J: Save(reconfig)
-    C->>D: Apply(observation, reconfig)
-    C->>J: Save(acceptances)
-  end
-  opt serving below full
-    C->>W: Reset(failed Pod), ResetAll or Release
-  end
-```
+![One controller step: discover, decide, act, restore capacity](../figures/controller-step.svg)
 
 Two kinds of action, with opposite delivery rules:
 
@@ -130,41 +78,9 @@ Two kinds of action, with opposite delivery rules:
 
 ## From a fault back to full capacity
 
-```mermaid
-sequenceDiagram
-  participant C as Controller
-  participant P as Engine policy
-  participant D as Engine driver
-  participant W as Workload
-  rect rgba(66, 133, 244, 0.12)
-    Note over C,W: 1. Remove the dead member (phase: recovering)
-    C->>D: Observe(pods)
-    D-->>C: dp3 Terminal, dp0-dp2 paused
-    C->>P: Plan(observation, admitted, candidates)
-    P-->>C: Change, remove dp3@idD
-    C->>D: Apply(reconfig: remove dp3@idD)
-    C->>P: Progress(observation, reconfig)
-    P-->>C: Succeeded
-    C->>D: Verify(dp0, dp1, dp2)
-  end
-  rect rgba(251, 188, 5, 0.15)
-    Note over C,W: 2. Reset the failed Pod (phase: serving, 3 members)
-    C->>W: Reset([lws-0-3, UID d1])
-    W-->>C: Discover: lws-0-3 back with UID d2, starting, then Ready
-  end
-  rect rgba(52, 168, 83, 0.12)
-    Note over C,W: 3. Admit the new member (phase: serving)
-    C->>D: Observe(pods)
-    D-->>C: dp3 on lws-0-3 (d2), Joinable
-    C->>P: Plan(observation, admitted, candidates)
-    P-->>C: Change, add dp3@idD2
-    C->>D: Apply(reconfig: add dp3@idD2)
-    C->>P: Progress(observation, reconfig)
-    P-->>C: Succeeded
-    C->>D: Verify(dp0, dp1, dp2, dp3@idD2)
-  end
-  Note over C,W: serving with 4 members
-```
+![One member dies and the group goes 4, 3, 4 while serving](../figures/recovery-timeline.svg)
+
+![The same recovery as calls between the controller and its plugins](../figures/recovery-sequence.svg)
 
 1. **Remove the dead member.** The driver reports `dp3` Terminal. The policy proposes `Remove`, the reconfig
    runs, and `Progress` reports `Succeeded`. Only then does the controller record `dp3@idD` as excluded and

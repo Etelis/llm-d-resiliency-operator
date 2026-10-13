@@ -8,16 +8,7 @@ from [vllm-project/vllm#46370](https://github.com/vllm-project/vllm/pull/46370).
 Each data parallel rank runs its own API server (external load balancing, `--data-parallel-size-local 1`).
 On `--enable-fault-tolerance`, a rank that hits a fault stops serving and waits for an instruction:
 
-```mermaid
-stateDiagram-v2
-  [*] --> healthy
-  healthy --> diagnosing: fault in the busy loop
-  diagnosing --> unhealthy: mask of unreachable peers known
-  healthy --> dead: own worker died
-  diagnosing --> dead: own worker died
-  unhealthy --> healthy: retry or scale_down succeeded
-  unhealthy --> dead: scale_down failed, or no instruction for engine_recovery_timeout_sec
-```
+![A vLLM rank's fault-tolerance states](figures/vllm-states.svg)
 
 | Endpoint | Use |
 |---|---|

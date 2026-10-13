@@ -10,13 +10,7 @@ One plugin per inference engine. It has two halves:
 The engine never talks to the workload, and knows nothing about phases, deadlines or Kubernetes.
 The first implementation, vLLM, comes with its own PR and doc.
 
-```mermaid
-flowchart LR
-  C[Controller] -->|Capabilities, Observe, Probe, Apply, Verify| D[Driver]
-  C -->|Plan, Progress| P[Policy]
-  D -->|HTTP| R[Engine runtime]
-  D -.->|private engine data| P
-```
+![The engine plugin: driver and policy](../figures/engine.svg)
 
 ## Interface
 

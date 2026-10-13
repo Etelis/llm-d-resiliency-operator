@@ -162,15 +162,7 @@ RecreateStopped: false
 
 ### State machine
 
-```mermaid
-stateDiagram-v2
-  [*] --> starting
-  starting --> serving: plan Healthy
-  serving --> recovering: a fault is observed
-  recovering --> serving: plan Healthy, or reconfig Succeeded
-  serving --> starting: ResetAll, after verification fails past window, capacity (reset-all), a grow that fails or misses its deadline, a plan failing C2 or C3, C4 or C5 broken, unseen too long
-  recovering --> starting: ResetAll, after Unrecoverable, reconfig Failed for group, Apply refused, deadline, flap guard, a plan failing C1 to C3, C1, C4 or C5 broken, unseen too long
-```
+![Controller phases: starting, serving, recovering](../figures/phases.svg)
 
 Three phases, none terminal. A reset is not a phase either: `ResetAll` marks every saved Pod `Removing`
 and the group goes to `starting`, which waits until the old Pods are gone (see [Reading Discover](#reading-discover)). Whether a reconfig is in flight is not a phase; it is the `Reconfig` field,
@@ -190,14 +182,7 @@ Any other plan is a fault.
 The workload only reports Pods as they are now. The controller decides what they mean by comparing
 them with the Pods saved in its journal.
 
-```mermaid
-flowchart TD
-  A[Discover] --> R{Recreating, RecreateStopped, or an owed ResetAll with old Pods left?}
-  R -- yes --> W[Wait and act on nothing. Repeat the owed ResetAll.]
-  R -- no --> K{Any saved Pod still there with the same identity?}
-  K -- no --> N[New group: clear the journal, go to starting]
-  K -- yes --> P[Same group: compare Pod by Pod]
-```
+![Deciding on Discover whether this is the same group or a new one](../figures/adopt.svg)
 
 | Pod compared with the journal | Meaning | Controller does |
 |---|---|---|
@@ -289,17 +274,7 @@ on a `Healthy` plan.
 Capacity never comes from new Pods. It comes back by resetting the failed Pod, or the whole group.
 This runs only while the group is `serving`; a fault comes first.
 
-```mermaid
-flowchart TD
-  X[A Pod holds only excluded members] --> M{--ft-capacity-restore}
-  M -- reset-pod --> R[Reset the Pod]
-  M -- reset-all --> A[ResetAll]
-  M -- release --> L[Release the Pod]
-  R -- its new members join --> F[Full again]
-  R -- unsupported, or the join fails --> K[Keep the Pod as it is, serve with fewer members]
-  L --> K
-  A --> F
-```
+![Restoring capacity with reset-pod, reset-all or release](../figures/capacity.svg)
 
 1. Once the members of the last reconfig passed `Verify`, on a poll whose plan is `Healthy`, the controller
    looks for Pods that hold only excluded members. It marks them all `Removing`, saves once, and names them
