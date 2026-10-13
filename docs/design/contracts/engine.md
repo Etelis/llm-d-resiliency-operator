@@ -3,9 +3,9 @@
 One plugin per inference engine. It has two halves:
 
 - **Driver** does I/O. It reports which members run on each Pod and their state, sends recovery
-  rounds and runs inference probes. It keeps no memory.
+  reconfigs and runs inference probes. It keeps no memory.
 - **Policy** decides. Given what the driver saw, it says which members should leave or join, and how
-  the round in flight is going. It does no I/O.
+  the reconfig in flight is going. It does no I/O.
 
 The engine never talks to the workload, and knows nothing about phases, deadlines or Kubernetes.
 The first implementation, vLLM, comes with its own PR and doc.
@@ -30,13 +30,13 @@ type Engine interface {
 type Driver interface {
     Observe(ctx context.Context, pods []Pod) Observation
     Probe(ctx context.Context, observation Observation) error
-    Apply(ctx context.Context, observation Observation, round Round) ([]Acceptance, error)
+    Apply(ctx context.Context, observation Observation, reconfig Reconfig) ([]Acceptance, error)
     Verify(ctx context.Context, observation Observation, members []MemberID) error
 }
 
 type Policy interface {
     Plan(observation Observation, admitted, candidates []MemberID) Plan
-    Progress(observation Observation, round Round) Progress
+    Progress(observation Observation, reconfig Reconfig) Progress
 }
 ```
 
@@ -53,10 +53,11 @@ type Capabilities struct {
 // Member is one engine member (a rank, a worker...) as the driver sees it now.
 type Member struct {
     Pod         PodRef
-    PodIdentity string // copied from the Pod, so the ID changes when the Pod restarts
+    PodIdentity string // copied from the Pod, so the ID changes when the Pod is replaced or its engine restarts
     Name        string // the engine's name for it, unique within the Pod, e.g. "dp3"
     Serving     bool   // the router may send it traffic: the engine's native health
     Terminal    bool   // will never serve again
+    Unknown     bool   // the driver could not read it now. Serving, Terminal and Joinable are false.
     Joinable    bool   // for candidates only: can be admitted now
     Detail      string // for status and logs only
 }
@@ -67,14 +68,14 @@ type MemberID string
 // ID is the same for anyone who computes it: Name@PodIdentity.
 func (member *Member) ID() MemberID { return MemberID(member.Name + "@" + member.PodIdentity) }
 
-// Observation is everything the driver saw in one Observe call.
+// Observation is what the driver saw in one Observe call, plus the lost members the controller adds.
 type Observation struct {
     Members []Member
     Engine  any // driver-private: addresses and raw state, for the same engine's driver and policy
 }
 
-// Round is one recovery or resize action. The controller builds it from a Plan.
-type Round struct {
+// Reconfig is one recovery or resize action. The controller builds it from a Plan.
+type Reconfig struct {
     ID           string     // unique, assigned by the controller
     Participants []MemberID // admitted members that take part
     Remove       []MemberID // admitted members that leave
@@ -99,14 +100,14 @@ type Plan struct {
 
 type PlanKind string // Healthy | Wait | Change | Unrecoverable
 
-// Progress is the policy's answer to "how is the round going?".
+// Progress is the policy's answer to "how is the reconfig going?".
 type Progress struct {
     State  ProgressState
     Scope  FailureScope // set when State is Failed
     Reason string
 }
 
-type ProgressState string // Running | Succeeded | Failed
+type ProgressState string // NotStarted | Running | Succeeded | Failed
 type FailureScope string  // Joiners: only the joiners failed | Group: the group may be broken
 ```
 
@@ -116,7 +117,7 @@ type FailureScope string  // Joiners: only the joiners failed | Group: the group
 |---|---|---|
 | `Healthy` | nothing to do | goes to `serving`, or stays there |
 | `Wait` | something is wrong, but the engine needs time | waits, under its deadline |
-| `Change` | send this round | checks it, saves it, sends it |
+| `Change` | send this reconfig | checks it, saves it, sends it |
 | `Unrecoverable` | recovery in place cannot help | resets the group |
 
 Every `Change` is one of four shapes:
@@ -151,7 +152,7 @@ Reports the members running on the given Pods and their state.
 | | |
 |---|---|
 | **Input** | `pods []Pod` from [`Discover`](workload.md#discover) |
-| **Output** | [`Observation`](#objects). Never fails: a Pod the driver cannot reach gives no members. |
+| **Output** | [`Observation`](#objects). Never fails: a member the driver cannot read is reported `Unknown`, and a Pod whose members it cannot list gives none. |
 | **Side effects** | none |
 
 **Example**, right after `dp3` dies:
@@ -164,6 +165,13 @@ Members:
 - {Pod: lws-0-3/d1, PodIdentity: idD, Name: dp3, Serving: false, Terminal: true,  Detail: "dead"}
 Engine: <driver-private: API addresses, raw engine status>
 ```
+
+**Lost members.** When a Pod is gone, `Terminating`, or has a new identity, the driver no longer sees the
+admitted members that ran on it. Before it calls `Plan`, `Progress`, `Apply` or `Verify`, the controller adds
+each one to `Observation.Members` with its Pod, `PodIdentity` and `Name`, `Terminal: true` and
+`Detail: "pod lost"`. `Observation.Engine` holds nothing for them. The policy plans them like any Terminal
+member, so a shrink names them in `Remove`. If `lws-0-3` is deleted, `Observe` returns `dp0`-`dp2` and the
+controller adds `{Pod: lws-0-3/d1, PodIdentity: idD, Name: dp3, Terminal: true, Detail: "pod lost"}`.
 
 ### Probe
 
@@ -182,37 +190,38 @@ the next `Observe`, `dp3` is `Terminal` and the others are paused.
 
 ### Apply
 
-Sends a round to every participant and joiner.
+Sends a reconfig to every participant and joiner.
 
 | | |
 |---|---|
-| **Input** | the [`Observation`](#objects) the round was planned on, and the [`Round`](#objects) |
+| **Input** | the [`Observation`](#objects) the reconfig was planned on, and the [`Reconfig`](#objects) |
 | **Output** | one [`Acceptance`](#objects) per member it sent to. An error unless every one accepted. |
-| **Side effects** | the engine starts the round. Never repeated by the controller. |
+| **Side effects** | the engine starts the reconfig. Sent again only after a leader change, when no acceptances were saved and `Progress` says `NotStarted`. |
 
 **Example.**
 
 ```go
-Apply(ctx, obs, Round{
+Apply(ctx, obs, Reconfig{
     ID:           "iro-ft-7c1e",
     Participants: []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"},
     Remove:       []MemberID{"dp3@idD"},
 })
 // all accept:  [{dp0@idA true} {dp1@idB true} {dp2@idC true}], nil
 // one refuses: [{dp0@idA true} {dp1@idB false "expected 202, got 409"} {dp2@idC true}], error
+// lws-0-3 deleted: obs holds dp3@idD as the controller added it, Apply sends to dp0-dp2 and all accept
 ```
 
-A refusal means some members started the round and some did not. The controller resets the group.
+A refusal means some members started the reconfig and some did not. The controller resets the group.
 
 ### Verify
 
 Sends one real, bounded inference request through each named member. The controller calls it only
-after a round succeeds, for the members that took part or joined.
+after a reconfig succeeds, for the members that took part or joined.
 
 | | |
 |---|---|
 | **Input** | the latest [`Observation`](#objects), and the members to check |
-| **Output** | `nil` when every member produced tokens. An error naming the first that did not. |
+| **Output** | `nil` when every member produced tokens. An error naming every member that did not. |
 | **Side effects** | a few tokens of inference, marked so they are not counted as user traffic |
 
 **Example.**
@@ -220,7 +229,7 @@ after a round succeeds, for the members that took part or joined.
 ```go
 Verify(ctx, obs, []MemberID{"dp0@idA", "dp1@idB", "dp2@idC"})
 // nil
-// or: error "dp1@idB: no tokens generated". The controller retries for --ft-verify-timeout, then resets.
+// or: error "dp1@idB: no tokens generated". The controller retries every poll for --ft-verify-timeout, then resets.
 ```
 
 ### Plan
@@ -249,16 +258,17 @@ Plan(obs, admitted: [dp0@idA dp1@idB dp2@idC], candidates: [dp3@idD2])
 
 ### Progress
 
-Says how the round in flight is going. Pure: no I/O, no clock.
+Says how the reconfig in flight is going. Pure: no I/O, no clock.
 
 | | |
 |---|---|
-| **Input** | the latest [`Observation`](#objects), and the [`Round`](#objects) in flight |
+| **Input** | the latest [`Observation`](#objects), and the [`Reconfig`](#objects) in flight |
 | **Output** | [`Progress`](#objects) |
 
-**Examples**, for round `iro-ft-7c1e`:
+**Examples**, for reconfig `iro-ft-7c1e`:
 
 ```go
+// no participant got iro-ft-7c1e yet, and the engine can prove it: {State: NotStarted}
 // survivors still rebuilding:             {State: Running}
 // dp0-dp2 healthy, finished iro-ft-7c1e:  {State: Succeeded}
 // dp1 reports its FT operation failed:    {State: Failed, Scope: Group, Reason: "dp1@idB: FT failed: ..."}
@@ -271,15 +281,17 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 
 | Rule | Why |
 |---|---|
-| Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod restarts, so exclusions and rounds name exactly one process |
+| Every member names its Pod, the Pod's identity, and a `Name` unique within that Pod | `Member.ID()` changes when the Pod is replaced or its engine restarts, so exclusions and reconfigs name exactly one process |
 | No memory. Addresses and anything else the driver needs travel in `Observation.Engine`. | a new leader needs no warm-up. The driver may still cache internally, keyed by Pod identity. |
 | Pods that are not `Ready` give no members, or members that are not Joinable | a loading Pod is not a candidate yet |
-| Once Terminal, always Terminal for that member | the controller's check C4 depends on it |
+| A Pod gives all of its members or none | the controller admits, at the end of `starting`, exactly the members it saw |
+| Once Terminal, never Serving again: later reported Terminal or `Unknown` | the controller's check C4 depends on it |
+| A member the driver cannot read is `Unknown`, never Terminal by guess | only a process known to be gone may be removed (C1) |
 | `Serving` means what the router uses: the engine's native health | checks C1 and C5 reason about traffic |
 | Candidates do not report `Serving` | check C5 |
-| The engine reports which round each member is working on | `Progress` can tell its round from another one |
-| `Apply` refuses a round that names a member missing from the observation it is given | check C7 |
-| `Apply` need not be idempotent | the controller never sends a round twice |
+| The engine reports which reconfig each member is working on | `Progress` can tell its reconfig from another one |
+| `Apply` refuses, before sending anything, a reconfig that names a member missing from `Observation.Members`. A `Remove` member needs no driver-private data: a lost one has none. | check C7. A lost Pod, the most common fault, still shrinks in place. |
+| A member that already got a reconfig never starts it again, so `Apply` with the same ID is safe to repeat | a new leader may resend a reconfig whose send it cannot confirm, and the old leader's late send may still arrive |
 | Every call is bounded by a timeout | a hung engine must not stall the loop |
 
 ### Policy
@@ -289,11 +301,13 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 | No I/O, no clock, no globals | the same input gives the same answer on any leader |
 | Return `Wait` only for a fault the engine is still working out | the controller owns the deadlines |
 | Return `Healthy` while candidates cannot be admitted yet | a candidate waiting to join is not a fault |
+| Never return `Healthy` while an admitted member is `Unknown` or missing | the controller treats it as a fault anyway |
 | Return `Unrecoverable` when recovery in place cannot help | the controller resets |
 | Plan `Add` only if `Capabilities().Grow` | the controller resets a single Pod only when the engine can re-admit its members |
-| A plan may remove and add in one round (replace) if the engine supports it | fewer rounds during a fault |
+| A plan may remove and add in one reconfig (replace) if the engine supports it | fewer reconfigs during a fault |
 | `Change` plans must pass the controller's [checks C1 to C7](controller.md#checks-on-every-plan) | otherwise the controller resets |
-| `Progress` stays `Running` until the engine reports a result for this round | the apply deadline covers a round that never finishes |
+| `Progress` stays `Running` until the engine reports a result for this reconfig, or proves no member got it | the apply deadline covers a reconfig that never finishes |
+| Return `NotStarted` only when every participant and joiner is observed, could start the reconfig now and has not got it, and the engine would still show a reconfig a member got earlier | otherwise a reconfig that finished before a new fault looks unsent, and sending it again would run it twice |
 | `Failed` with scope `Joiners` only when admitted members are untouched | otherwise the group may be broken and must be reset |
 
 ## Considerations
@@ -306,3 +320,6 @@ Says how the round in flight is going. Pure: no I/O, no clock.
 - **Who connects Pods and members.** The driver only reports. The controller tracks which members are
   candidates, admitted, excluded or rejected, and which Pods to remove.
 - **Shrinking needs no capability.** A policy that cannot shrink never plans `Remove`.
+- **Container probes.** A probe that restarts an engine container makes its members lost (`Member.ID()`
+  changes). The engine doc says which probes cannot fail while a member is paused for recovery, or that none
+  may be used.
