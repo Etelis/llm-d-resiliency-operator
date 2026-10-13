@@ -1,7 +1,5 @@
 # Controller
 
-> **Not built yet.** `main` has the controller's interfaces and objects. The behavior below comes with [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11).
-
 ## What it does
 
 The controller keeps one engine group serving through faults. It runs one loop per group, on the elected

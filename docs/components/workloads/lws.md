@@ -3,8 +3,6 @@
 How LeaderWorkerSet implements the [workload](index.md) and [journal](../journal.md)
 contracts. Code: `internal/workload/lws` and `internal/journal/configmap`.
 
-> **Not built yet.** This workload and its journal come with [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11); they are not on `main`.
-
 ## Workload
 
 | Contract | LWS |

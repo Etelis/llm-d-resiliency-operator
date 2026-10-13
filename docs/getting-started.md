@@ -2,8 +2,8 @@
 
 This page will walk through installing IRO and turning it on for an engine group.
 
-> **Not built yet.** The manager flags below come with [#11](https://github.com/llm-d-incubation/llm-d-resiliency-operator/pull/11); on `main` the manager does not run engine fault
-> recovery.
+> **Not built yet.** No engine is registered on `main` yet, so `--engine` has nothing to choose and the manager
+> cannot run engine fault recovery.
 
 Until then, the short version: run the manager with leader election, and choose the engine and the workload.
 
