@@ -94,14 +94,21 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
 - `engine_recovery_timeout_sec` must leave room for detection plus IRO's diagnosis deadline.
 - `scale_down` needs EPLB with redundant experts and an all2all backend with timeouts
   (`nixl_ep` or `deepep_low_latency`).
+- Size the redundant experts for the ranks you want to lose in place: the survivors' slots must hold every
+  logical expert. With E experts, R redundant and N ranks, losing k ranks needs (N - k)(E + R)/N >= E.
+  Otherwise the round fails ("no redundant slot for missing expert") and the group is reset.
+- `nixl_ep` from NIXL 1.4 on uses GPU-initiated RDMA across Pods. Restrict `UCX_NET_DEVICES` to the RDMA
+  devices the Pod can use for GPU memory, and make sure the nodes support it; within one Pod it runs over NVLink.
 
 ## Known engine issues
 
-Found on 4 H200 ranks (DeepSeek-V2-Lite, DP/EP 4, `nixl_ep` from NIXL 1.3.2) with vllm#46370 at `384ba19`.
+Found with vllm#46370 (`384ba19`, then `fcfbd37`) on two setups: 4 H200 Pods of one rank each over InfiniBand
+(DeepSeek-V2-Lite, `nixl_ep` from NIXL 1.3.2), and one Pod of 4 H100 ranks over NVLink (Qwen3-30B-A3B,
+NIXL 1.3.2 and 1.5.0).
 
 | Issue | What IRO does |
 |---|---|
-| Removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep`: masking the highest rank shrinks the dispatched token slots, but the expert output keeps the full size. Trimming it to the dispatched slots before `combine` fixes it; with that change the highest rank, and ranks 1 and 3 together, are removed in place. | without the fix, `Progress` fails the round on the new fault and the group is reset |
-| A Pod that disappears (not just its processes) can leave survivors wedged: their workers fail on a Gloo connection reset in the per-step DP sync, the EngineCore blocks on the shared-memory broadcast, and the status stays `healthy` | the plan waits; the diagnosis deadline resets the group |
+| With NIXL before 1.4, removing the highest rank succeeds, then the next step fails `x.size(1) == active_rank_bound * num_max_dispatch_tokens_per_rank` in `nixl_ep`. NIXL 1.5.0, which vLLM pins, removes it in place. For NIXL 1.3, `Etelis/vllm` branch `ft-nixl-ep-highest-rank` trims the expert output to the dispatched slots. | `Progress` fails the round on the new fault and the group is reset |
+| A Pod that disappears (not just its processes) can wedge the survivors: their next step fails on a Gloo connection reset, but the `nixl_ep` fault of the step in flight is never raised, so the EngineCore never learns of it and blocks on the shared-memory broadcast with status `healthy`. Seen in 1 of 2 Pod deletions at `384ba19`, none of 11 at `fcfbd37`. | the plan waits; the diagnosis deadline resets the group |
 | The DP coordinator (rank 0) dying goes unnoticed under load; the first request after an idle period faults the group | the probe wakes the idle rank, then a retry; a second one within `FlapWindow` resets the group |
-| NIXL 1.5.0, which vLLM pins, fails `prepMemView` when ranks connect on these nodes; 1.3.2 works | none: the group does not start |
+| NIXL 1.4 and later fail across Pods on nodes without GPU-initiated RDMA: `invalid memh` on unusable devices, then `lane not found` | none: the group does not start |
