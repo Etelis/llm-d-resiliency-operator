@@ -196,7 +196,7 @@ flowchart TD
 |---|---|---|
 | saved, same identity, not `Terminating` | unchanged | nothing |
 | saved as `Removing`, now gone or `Terminating` | the `Reset` or `Release` is happening | forgets it once it is gone |
-| saved, not `Removing`, now gone, `Terminating` or with a new identity | its members are lost | treats them as Terminal, so the policy plans as usual |
+| saved, not `Removing`, now gone, `Terminating` or with a new identity | its members are lost | adds them to the observation as Terminal ([lost members](engine.md#observe)), so the policy plans as usual and a reconfig can remove them |
 | not saved, `Starting` | a replacement Pod is loading | saves it and waits |
 | not saved, `Ready` | a replacement Pod is up | its members, as `Observe` reports them, are candidates |
 
@@ -220,7 +220,7 @@ next group: a candidate that could not join, or an excluded member whose Pod is 
 | member reported on a saved Pod | matches it by ID |
 | member reported on a new, `Ready` Pod | records it as a candidate |
 | admitted member not reported (its Pod is unreachable) | treats it as unknown: not Serving, not Terminal |
-| admitted member on a Pod that is gone, `Terminating` or restarted | lost: treated as Terminal |
+| admitted member on a Pod that is gone, `Terminating` or restarted | lost: added to the observation as Terminal, `Detail: "pod lost"` |
 
 ### Reconfigs
 
@@ -292,7 +292,7 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 | C4 | Excluded members stay Terminal | otherwise an excluded member could take traffic again |
 | C5 | Members that are not admitted are not Serving, except those the reconfig in flight adds | a joiner must not take traffic before it is in the group |
 | C6 | A reconfig that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
-| C7 | One reconfig at a time. `Apply` refuses a reconfig that names a member missing from the current observation. | a stale reconfig cannot apply to a changed group |
+| C7 | One reconfig at a time. Every member a reconfig names is in the observation it is planned on, lost members included. `Apply` refuses any other reconfig. | a stale reconfig cannot apply to a changed group |
 | C8 | `Reset` and `Release` name only Pods whose every member is excluded, after the reconfig that removed them finished | the engine must no longer depend on a Pod before it goes |
 
 A plan that fails C1 to C3 resets the group. An observation that fails C1, C4 or C5 resets the group.

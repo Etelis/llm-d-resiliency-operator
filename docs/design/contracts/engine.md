@@ -67,7 +67,7 @@ type MemberID string
 // ID is the same for anyone who computes it: Name@PodIdentity.
 func (member *Member) ID() MemberID { return MemberID(member.Name + "@" + member.PodIdentity) }
 
-// Observation is everything the driver saw in one Observe call.
+// Observation is what the driver saw in one Observe call, plus the lost members the controller adds.
 type Observation struct {
     Members []Member
     Engine  any // driver-private: addresses and raw state, for the same engine's driver and policy
@@ -165,6 +165,13 @@ Members:
 Engine: <driver-private: API addresses, raw engine status>
 ```
 
+**Lost members.** When a Pod is gone, `Terminating`, or has a new identity, the driver no longer sees the
+admitted members that ran on it. Before it calls `Plan`, `Progress`, `Apply` or `Verify`, the controller adds
+each one to `Observation.Members` with its Pod, `PodIdentity` and `Name`, `Terminal: true` and
+`Detail: "pod lost"`. `Observation.Engine` holds nothing for them. The policy plans them like any Terminal
+member, so a shrink names them in `Remove`. If `lws-0-3` is deleted, `Observe` returns `dp0`-`dp2` and the
+controller adds `{Pod: lws-0-3/d1, PodIdentity: idD, Name: dp3, Terminal: true, Detail: "pod lost"}`.
+
 ### Probe
 
 Nudges the engine to notice a fault it has not seen yet. May do nothing.
@@ -200,6 +207,7 @@ Apply(ctx, obs, Reconfig{
 })
 // all accept:  [{dp0@idA true} {dp1@idB true} {dp2@idC true}], nil
 // one refuses: [{dp0@idA true} {dp1@idB false "expected 202, got 409"} {dp2@idC true}], error
+// lws-0-3 deleted: obs holds dp3@idD as the controller added it, Apply sends to dp0-dp2 and all accept
 ```
 
 A refusal means some members started the reconfig and some did not. The controller resets the group.
@@ -279,7 +287,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | `Serving` means what the router uses: the engine's native health | checks C1 and C5 reason about traffic |
 | Candidates do not report `Serving` | check C5 |
 | The engine reports which reconfig each member is working on | `Progress` can tell its reconfig from another one |
-| `Apply` refuses a reconfig that names a member missing from the observation it is given | check C7 |
+| `Apply` refuses, before sending anything, a reconfig that names a member missing from `Observation.Members`. A `Remove` member needs no driver-private data: a lost one has none. | check C7. A lost Pod, the most common fault, still shrinks in place. |
 | `Apply` need not be idempotent | the controller never sends a reconfig twice |
 | Every call is bounded by a timeout | a hung engine must not stall the loop |
 
