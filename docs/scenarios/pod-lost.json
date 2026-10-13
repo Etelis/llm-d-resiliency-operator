@@ -124,7 +124,7 @@
     },
     {
       "title": "The workload brings a replacement",
-      "note": "A workload that recreates the whole group instead (LWS by default) starts a new group.",
+      "note": "A workload that recreates the whole group instead starts a new group.",
       "phase": "serving",
       "pods": {
         "pod-3": {

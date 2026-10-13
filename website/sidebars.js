@@ -46,12 +46,6 @@ export default {
         'failures/journal-lost',
       ],
     },
-    {
-      type: 'category',
-      label: 'Examples',
-      link: {type: 'doc', id: 'examples/index'},
-      items: ['examples/first-start', 'examples/back-to-full'],
-    },
     {type: 'category', label: 'Reference', items: ['reference/upstream-versions']},
   ],
 };

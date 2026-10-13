@@ -77,8 +77,6 @@ What the controller asks the engine during one recovery, in order:
 4. Ask the policy for `Progress` every poll until the reconfig succeeds or fails.
 5. On success, `Verify` the members that took part.
 
-[example member-dies]: ../../scenarios/member-dies.json
-
 ## Reading members
 
 `Observe` reports the members running on the given Pods, and their state.
@@ -144,6 +142,8 @@ Every `Change` is one of four shapes:
 | shrink | terminal members | nobody |
 | grow | nobody | joinable candidates |
 | replace | terminal members | joinable candidates |
+
+[example engine-plans]: ../../scenarios/engine-plans.json
 
 ```go
 // m3 dead, m0-m2 paused:

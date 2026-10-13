@@ -20,7 +20,7 @@ const TARGETS = {
 };
 
 function frames(data) {
-  let pods = data.pods.map((pod) => ({...pod, members: {...pod.members}}));
+  let pods = (data.pods || []).map((pod) => ({...pod, members: {...pod.members}}));
   return data.steps.map((step) => {
     pods = pods.map((pod) => {
       const change = (step.pods || {})[pod.name];
@@ -125,18 +125,20 @@ export default function Scenario({data}) {
           <div className={styles.stepTitle}>{step.title}</div>
           {step.note && <div className={styles.note}>{step.note}</div>}
         </div>
-        <span className={`${styles.phase} ${styles[`phase_${step.phase}`]}`}>{step.phase}</span>
+        {step.phase && <span className={`${styles.phase} ${styles[`phase_${step.phase}`]}`}>{step.phase}</span>}
       </div>
 
-      <div className={styles.pods}>
-        {step.pods.map((pod) => (
-          <Pod key={pod.name} pod={pod} />
-        ))}
-      </div>
+      {step.pods.length > 0 && (
+        <div className={styles.pods}>
+          {step.pods.map((pod) => (
+            <Pod key={pod.name} pod={pod} />
+          ))}
+        </div>
+      )}
 
       {step.calls && step.calls.length > 0 && (
         <div className={styles.calls}>
-          <div className={styles.callsTitle}>What the controller calls</div>
+          <div className={styles.callsTitle}>{data.callsTitle || 'What the controller calls'}</div>
           {step.calls.map((call, i) => (
             <Call key={i} call={call} />
           ))}

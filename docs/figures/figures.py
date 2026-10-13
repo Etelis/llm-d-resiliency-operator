@@ -173,7 +173,7 @@ def architecture():
     s.text(48, 118, "IRO manager  (leader-elected)", 14, color=C["blue"], bold=True)
     s.box(60, 330, 210, 100, "Controller", ["one step per poll", "phases, deadlines, checks"], tone="blue")
     s.box(540, 140, 260, 66, "Journal", ["versioned record, Load / Save"], tone="grey")
-    s.box(540, 260, 260, 78, "Workload", ["LWS: one group of Pods", "Pod identity, Reset, Release"], tone="grey")
+    s.box(540, 260, 260, 78, "Workload", ["one group of Pods", "Pod identity, Reset, Release"], tone="grey")
     s.rect(540, 380, 260, 170, C["green"], C["green_bg"])
     s.text(554, 404, "Engine", 14, bold=True)
     s.text(554, 424, "one plugin per inference engine", 12.5, color=C["muted"])
@@ -184,8 +184,8 @@ def architecture():
     s.arrow([(270, 360), (470, 360), (470, 299), (540, 299)], C["blue"], ["Discover, Reset,", "ResetAll, Release"], (284, 336), anchor="start")
     s.arrow([(270, 400), (470, 400), (470, 465), (540, 465)], C["blue"], ["Observe, Probe, Apply,", "Verify · Plan, Progress"], (284, 422), anchor="start")
     s.arrow([(165, 430), (165, 650), (540, 650)], C["blue"], "what happened", (350, 642))
-    s.box(890, 260, 280, 78, "Kubernetes + LWS controller", ["recreates deleted Pods"], tone="grey", center=True)
-    s.box(890, 420, 280, 80, "Engine runtime", ["ranks, FT API, process observer"], tone="green", center=True)
+    s.box(890, 260, 280, 78, "Kubernetes + workload controller", ["recreates deleted Pods"], tone="grey", center=True)
+    s.box(890, 420, 280, 80, "Engine runtime", ["members and their recovery API"], tone="green", center=True)
     s.box(890, 530, 280, 56, "Traffic router (EPP)", [], tone="purple", center=True)
     s.box(890, 620, 280, 60, "Prometheus, Events, logs", [], tone="grey", center=True)
     s.arrow([(800, 299), (890, 299)], C["grey"], "Pods", (845, 291))
@@ -300,7 +300,7 @@ def recovery_timeline():
     s.line(28, y - 10, 1032, y - 10, C["rule"], 1.2)
     s.legend(y + 22, [("active", "green", "serving"), ("paused", "amber", "paused or joining"), ("failed", "red", "dead or excluded"),
                       ("starting", "grey", "new Pod, not yet a member")])
-    s.text(32, y + 52, "One cell is one engine member (for vLLM, one DP rank). Pod names and UIDs come from the workload, member IDs from the engine.",
+    s.text(32, y + 52, "One cell is one engine member. Pod names and UIDs come from the workload, member IDs from the engine.",
            12, color=C["muted"])
     s.h = y + 74
     s.save("recovery-timeline.svg")

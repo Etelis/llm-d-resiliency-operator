@@ -330,3 +330,13 @@
   color: var(--ifm-color-emphasis-700);
   font-size: 0.85rem;
 }
+
+.t_controller {
+  background: var(--blue);
+}
+.t_A {
+  background: var(--purple);
+}
+.t_B {
+  background: var(--amber);
+}

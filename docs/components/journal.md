@@ -23,8 +23,6 @@ The controller saves before it acts: before a reconfig, before a workload call, 
 never acts on state it could not save, so a failed `Save` stops the step, and its phase in memory stays at the
 last saved one.
 
-[example journal-lost]: ../scenarios/journal-lost.json
-
 ## Reading the record
 
 `Load` reads the saved record.
@@ -65,6 +63,8 @@ B.Save(ctx, recordB, "")   // ErrConflict: the record exists. "" only creates.
 
 After `ErrConflict` the controller drops its state and loads again, and continues from the saved record as after
 a leader change, deadlines included. If the record was deleted, it starts over as on IRO's first run.
+
+[example journal-writers]: ../scenarios/journal-writers.json
 
 | Rule | Why |
 |---|---|

@@ -211,5 +211,5 @@
 <text x="359.0" y="958.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">dead or excluded</text>
 <rect x="499.0" y="945.0" width="26.0" height="16.0" rx="3" fill="#f1f3f4" stroke="#5f6368" stroke-width="2" stroke-dasharray="4 3"/>
 <text x="533.0" y="958.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">new Pod, not yet a member</text>
-<text x="32.0" y="988.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">One cell is one engine member (for vLLM, one DP rank). Pod names and UIDs come from the workload, member IDs from the engine.</text>
+<text x="32.0" y="988.0" font-size="12" fill="#5f6368" text-anchor="start" xml:space="preserve">One cell is one engine member. Pod names and UIDs come from the workload, member IDs from the engine.</text>
 </svg>

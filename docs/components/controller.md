@@ -327,8 +327,8 @@ when to stop, is the workload's restart policy. When the workload stops recreati
 | Flag | Default | Meaning |
 |---|---|---|
 | `--enable-engine-ft` | `false` | turn the controller on (needs `--leader-elect`) |
-| `--engine` | | engine implementation, e.g. `vllm` |
-| `--workload` (target) | `lws` | workload implementation |
+| `--engine` | | engine implementation |
+| `--workload` | | workload implementation |
 | `--ft-diagnosis-timeout` | 75s | longest time in `recovering` with nothing sent |
 | `--ft-apply-timeout` | 90s | longest time a reconfig may stay in flight |
 | `--ft-verify-timeout` | 2m | how long a failed check after a reconfig is retried. 0 resets on the first failure. |

@@ -13,7 +13,7 @@
 <text x="554.0" y="184.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">versioned record, Load / Save</text>
 <rect x="540.0" y="260.0" width="260.0" height="78.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
 <text x="554.0" y="284.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Workload</text>
-<text x="554.0" y="304.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">LWS: one group of Pods</text>
+<text x="554.0" y="304.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">one group of Pods</text>
 <text x="554.0" y="322.0" font-size="12.5" fill="#5f6368" text-anchor="start" xml:space="preserve">Pod identity, Reset, Release</text>
 <rect x="540.0" y="380.0" width="260.0" height="170.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
 <text x="554.0" y="404.0" font-size="14" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Engine</text>
@@ -44,11 +44,11 @@
 <polygon points="540.0,650.0 530.8,653.9 530.8,646.1" fill="#1a73e8"/>
 <text x="350.0" y="642.0" font-size="12" fill="#1a73e8" text-anchor="middle" xml:space="preserve">what happened</text>
 <rect x="890.0" y="260.0" width="280.0" height="78.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
-<text x="1030.0" y="295.0" font-size="14" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">Kubernetes + LWS controller</text>
+<text x="1030.0" y="295.0" font-size="14" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">Kubernetes + workload controller</text>
 <text x="1030.0" y="315.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">recreates deleted Pods</text>
 <rect x="890.0" y="420.0" width="280.0" height="80.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
 <text x="1030.0" y="456.0" font-size="14" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">Engine runtime</text>
-<text x="1030.0" y="476.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">ranks, FT API, process observer</text>
+<text x="1030.0" y="476.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">members and their recovery API</text>
 <rect x="890.0" y="530.0" width="280.0" height="56.0" rx="6" fill="#f3e8fd" stroke="#8430ce" stroke-width="2"/>
 <text x="1030.0" y="563.0" font-size="14" fill="#8430ce" text-anchor="middle" font-weight="700" xml:space="preserve">Traffic router (EPP)</text>
 <rect x="890.0" y="620.0" width="280.0" height="60.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>

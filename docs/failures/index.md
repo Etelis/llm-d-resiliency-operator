@@ -52,3 +52,36 @@ A fault always comes first: capacity work waits until the group serves again.
 
 The workload can also give up recreating the group (`RecreateStopped`). IRO then waits and acts on
 nothing until the workload recreates the group; see [resetting the group](../components/controller.md#resetting-the-group).
+
+## Adding a failure
+
+
+A failure's stepper is a JSON file in `docs/scenarios`, shown on any page by one line:
+
+```markdown
+[example my-failure]: ../scenarios/my-failure.json
+```
+
+GitHub hides that line; the site replaces it with the stepper, and with it any figure right above it. The file
+lists the Pods once, then the steps; each step names only what changed.
+
+```json
+{
+  "title": "m0 dies",
+  "page": "failures/my-failure",
+  "pods": [{"name": "pod-0", "uid": "a1", "members": {"m0": "serving"}}],
+  "steps": [
+    {"title": "m0 dies", "phase": "recovering",
+     "pods": {"pod-0": {"m0": "dead"}},
+     "calls": [{"to": "policy", "call": "Plan(...)", "out": "Unrecoverable"}]}
+  ]
+}
+```
+
+| Field | Values |
+|---|---|
+| `phase` | `starting`, `serving`, `recovering` |
+| member state | `serving`, `paused`, `dead`, `excluded`, `starting`, `joining`, `unknown` |
+| Pod change | member states, a new `uid`, or `"gone": true` |
+| `calls[].to` | `workload`, `driver`, `policy`, `journal`, `telemetry` |
+| optional | `page` (where the title links), `note` and `journal` on a step, `in` and `out` on a call |

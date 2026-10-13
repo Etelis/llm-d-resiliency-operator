@@ -22,7 +22,7 @@ its containers run one: no ranks, ports or processes. Each workload type brings 
 | | `Reset` | when Pods hold only removed members | nothing; the next `Discover` shows the new Pods |
 | | `ResetAll` | when the whole group must be recreated | nothing; the next `Discover` shows the new group |
 | | `Release` | when failed Pods are given back | nothing; the next `Discover` shows them gone |
-| Workload → Kubernetes | the workload's own API, such as a LeaderWorkerSet | inside the calls above | |
+| Workload → Kubernetes | its own Kubernetes objects | inside the calls above | |
 
 It never talks to the engine. How often a group may be recreated, and when to stop, is the workload's own
 restart policy: IRO has no reset budget of its own.
@@ -61,7 +61,7 @@ the leader is deleted. Otherwise the controller may plan a reconfig for a group 
 The controller calls `Discover` every poll. It calls `Reset`, `ResetAll` or `Release` only when it decided Pods
 must go, saves that first, and repeats the call every poll until `Discover` shows the result.
 
-[example pod-lost]: ../../scenarios/pod-lost.json
+[example workload-calls]: ../../scenarios/workload-calls.json
 
 ## Reporting the group
 

@@ -28,7 +28,7 @@ Outside IRO, but the contracts depend on them:
 
 | External | What IRO relies on |
 |---|---|
-| Kubernetes + the workload's controller | recreates the group after a reset, and decides how often and whether to keep doing so (for LWS, `restartBackoff` and `maxGroupRestarts`). Later: removes and adds Pods without recreating it. |
+| Kubernetes + the workload's controller | recreates the group after a reset, and decides how often and whether to keep doing so. Later: removes and adds Pods without recreating it. |
 | Engine runtime | exposes engine state and accepts recovery reconfigs |
 | Traffic router (EPP) | routes on the engine's native health. IRO never steers traffic. |
 | Leader election | one controller acts on a group at a time |
@@ -36,8 +36,7 @@ Outside IRO, but the contracts depend on them:
 ## Example group
 
 The examples in these pages use one group: four Pods, `pod-0` to `pod-3` (UIDs `a1` to `d1`, identities `idA` to
-`idD`), with one member each, `m0` to `m3`. See them step by step in [Failures](../failures/index.md) and
-[Examples](../examples/index.md).
+`idD`), with one member each, `m0` to `m3`. See them step by step in [Failures](../failures/index.md).
 
 ## One reconciliation step
 
@@ -82,11 +81,10 @@ Every file the design needs, and the PR that brings it.
 | `internal/controller/enginefault/runner.go` | the leader-elected loop that calls `Step` | controller (#11) |
 | `internal/controller/enginefault/setup.go` | flags; picks the engine and workload | controller (#11) |
 | `cmd/main.go` | registers engines and workloads, starts the manager | controller (#11) |
-| `internal/workload/lws/workload.go` | LWS `Workload` | controller (#11), see [lws.md](workloads/lws.md) |
+| `internal/workload/<name>/` | one workload implementation | its own PR and page |
 | `internal/journal/configmap/journal.go` | ConfigMap `Journal`, owned by the workload object | controller (#11) |
 | `internal/telemetry/recorder.go` | `Recorder`: log lines (#11); metrics, Events, incident history later | controller (#11), telemetry |
-| `internal/engine/vllm/driver.go` | vLLM `Driver` | vLLM (#19) |
-| `internal/engine/vllm/policy.go` | vLLM `Policy` | vLLM (#19) |
+| `internal/engine/<name>/` | one engine implementation: its `Driver` and `Policy` | its own PR and page |
 
 ## Open decisions
 

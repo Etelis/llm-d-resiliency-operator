@@ -1,0 +1,92 @@
+{
+  "title": "Two writers, one record",
+  "callsTitle": "Calls",
+  "steps": [
+    {
+      "t": "load",
+      "title": "Two processes both think they lead",
+      "note": "A short overlap during a leader change. Both read the same version.",
+      "calls": [
+        {
+          "to": "A",
+          "call": "Load()",
+          "out": "record, version 41"
+        },
+        {
+          "to": "B",
+          "call": "Load()",
+          "out": "record, version 41"
+        }
+      ],
+      "journal": "version 41"
+    },
+    {
+      "t": "A saves",
+      "title": "A saves first and wins",
+      "calls": [
+        {
+          "to": "A",
+          "call": "Save(recordA, 41)",
+          "out": "version 42"
+        }
+      ],
+      "journal": "version 42 \u00b7 A's record"
+    },
+    {
+      "t": "B saves",
+      "title": "B's save conflicts",
+      "note": "The record is no longer at 41. B's state is not saved, so B does not act on it.",
+      "calls": [
+        {
+          "to": "B",
+          "call": "Save(recordB, 41)",
+          "out": "ErrConflict"
+        }
+      ],
+      "journal": "version 42 \u00b7 A's record"
+    },
+    {
+      "t": "B reloads",
+      "title": "B loads again and goes on",
+      "note": "It drops its own state and continues from A's record, as after a leader change.",
+      "calls": [
+        {
+          "to": "B",
+          "call": "Load()",
+          "out": "A's record, version 42"
+        }
+      ],
+      "journal": "version 42 \u00b7 A's record"
+    },
+    {
+      "t": "deleted",
+      "title": "Someone deletes the record",
+      "note": "Deleting it is how a person makes IRO forget the group.",
+      "calls": [
+        {
+          "to": "A",
+          "call": "Save(recordA, 42)",
+          "out": "ErrConflict: never recreates a deleted record"
+        }
+      ],
+      "journal": "no record"
+    },
+    {
+      "t": "start over",
+      "title": "A starts over",
+      "calls": [
+        {
+          "to": "A",
+          "call": "Load()",
+          "out": "nothing: a new group"
+        },
+        {
+          "to": "A",
+          "call": "Save(recordA, \"\")",
+          "out": "version 1: \"\" only creates"
+        }
+      ],
+      "journal": "version 1 \u00b7 starting"
+    }
+  ]
+}
