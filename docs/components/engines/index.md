@@ -93,7 +93,7 @@ What the controller asks the engine during one recovery, in order:
 
 | | |
 |---|---|
-| **Input** | the Pods from [`Discover`](../workloads/index.md#discover) |
+| **Input** | the Pods from [`Discover`](../workloads/index.md#reporting-the-group) |
 | **Output** | an [`Observation`](#objects). Never fails: a member the driver cannot read is `Unknown`, and a Pod whose members it cannot list gives none. |
 | **Side effects** | none |
 
