@@ -254,7 +254,7 @@ func TestFlowStoreHostIsRemoved(t *testing.T) {
 	run.fault(0)
 	run.until("shrunk", func(record enginefault.Record) bool { return served(&record) })
 	found := params(t, run.fleet.ranks[2].applied[0])
-	if found["dp_master_ip"] != "10.0.0.2" || found["dp_store_port"] != 29600.0 {
+	if found["dp_master_ip"] != "10.0.0.2" || found["dp_store_port"] != 29601.0 {
 		t.Fatalf("params %v", found)
 	}
 }

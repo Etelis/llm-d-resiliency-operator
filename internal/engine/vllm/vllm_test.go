@@ -404,7 +404,7 @@ func TestApply(t *testing.T) {
 		}
 		found := params(t, test.ranks[2].applied[0])
 		if fmt.Sprint(found["removed_dp_ranks"]) != "[0 3]" || found["dp_master_ip"] != "10.0.0.2" ||
-			found["dp_store_port"] != 29600.0 {
+			found["dp_store_port"] != 29601.0 {
 			t.Fatalf("params %v", found)
 		}
 	})
@@ -433,7 +433,7 @@ func TestApply(t *testing.T) {
 		if _, err := test.eng.Apply(t.Context(), obs, reconfig); err != nil {
 			t.Fatal(err)
 		}
-		if found := params(t, test.ranks[1].applied[0]); found["dp_master_ip"] != "10.0.0.2" || found["dp_store_port"] != 29600.0 {
+		if found := params(t, test.ranks[1].applied[0]); found["dp_master_ip"] != "10.0.0.2" || found["dp_store_port"] != 29601.0 {
 			t.Fatalf("params %v", found)
 		}
 	})
@@ -466,6 +466,22 @@ func TestApply(t *testing.T) {
 		}
 		if len(test.ranks[0].applied) != 0 {
 			t.Fatalf("rank 0 got %v", test.ranks[0].applied)
+		}
+	})
+	t.Run("a second store move in one Pod uses another port", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 1, 4)
+		first := engine.Reconfig{ID: "r12", Participants: ids("dp1@id0", "dp2@id0", "dp3@id0"), Remove: ids("dp0@id0")}
+		if _, err := test.eng.Apply(t.Context(), terminal(test.observe(t), "dp0@id0"), first); err != nil {
+			t.Fatal(err)
+		}
+		second := engine.Reconfig{ID: "r13", Participants: ids("dp2@id0", "dp3@id0"), Remove: ids("dp1@id0")}
+		if _, err := test.eng.Apply(t.Context(), terminal(test.observe(t), "dp0@id0", "dp1@id0"), second); err != nil {
+			t.Fatal(err)
+		}
+		before, after := params(t, test.ranks[1].applied[0]), params(t, test.ranks[2].applied[1])
+		if before["dp_store_port"] != 29601.0 || after["dp_store_port"] != 29602.0 || before["dp_master_ip"] != after["dp_master_ip"] {
+			t.Fatalf("first %v, second %v", before, after)
 		}
 	})
 	t.Run("retry", func(t *testing.T) {

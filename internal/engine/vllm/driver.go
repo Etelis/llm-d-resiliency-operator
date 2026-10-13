@@ -188,7 +188,7 @@ func (eng *Engine) scaleDown(found ranks, reconfig engine.Reconfig) (map[string]
 	if master == nil {
 		return nil, errors.New("no participant can host the FT store")
 	}
-	params["dp_master_ip"], params["dp_store_port"] = master.PodIP, eng.options.StorePort
+	params["dp_master_ip"], params["dp_store_port"] = master.PodIP, eng.options.StorePort+master.Rank
 	return params, nil
 }
 
