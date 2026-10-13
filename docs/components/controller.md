@@ -292,7 +292,8 @@ workload can never replace does not keep the others below full. Other workload e
 
 A reset (`ResetAll`) recreates every Pod of the group. The controller marks every saved Pod `Removing`, goes to
 `starting`, and repeats the call every poll until those Pods are gone. How often a group may be recreated, and
-when to stop, is the workload's restart policy.
+when to stop, is the workload's restart policy. When the workload stops recreating the group
+(`RecreateStopped`), the controller waits and acts on nothing until it does.
 
 | Reason | When | Step by step |
 |---|---|---|
@@ -337,39 +338,6 @@ when to stop, is the workload's restart policy.
 | no flag | 1s | `PollInterval` |
 
 Each engine and workload implementation registers its own flags.
-
-## Design notes
-
-- **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry reports
-  it so people can see it. Recovery resumes when the workload recreates the group.
-- **Why verify only after a reconfig.** Verify does not gate traffic: the router follows the engine's native
-  health. Its job is to catch a recovery the engine reports as done but that cannot generate. That risk
-  comes from what IRO changed, so that is when it checks. One slow completion is not a fault, so a failure
-  is retried before the reset.
-- **Why a failed check resets the whole group.** It happens only when the engine reports every checked
-  member `Serving` and one still cannot generate. The checked members are admitted and the engine depends on
-  them: after a shrink or a retry they are every member left, and in expert parallel every member takes part
-  in every step. No smaller action is safe. A reconfig removes only Terminal members (C1), and a Pod is reset
-  only once the engine no longer depends on it (C8). Resetting the failing member's Pod would be a new fault
-  for every member that shares a step with it. Keeping the member admitted is not safe either: the router
-  keeps sending it traffic that fails. `--ft-capacity-restore` does not apply here.
-- **Restarts in place.** Kubelet restarts a crashed or probe-failed container without replacing its Pod. A
-  workload that recreates the group for that reports `Recreating`, and the controller waits for the new group.
-  One that does not (for example LWS with `restartPolicy: None`) reports the same UID with a new identity, and
-  the controller handles it like a lost Pod: a reconfig removes the old members, and capacity comes back only
-  through the Pod's reset. The restarted container's members are never candidates: IRO did not ask for them,
-  and a container that restarted once may restart again, so the fresh Pod from `Reset` is the one try. A
-  restart during recovery costs more: a member paused for a reconfig that is restarted is lost too, so it is
-  removed with the dead one, or the reconfig in flight fails and the group is reset. Probes on engine
-  containers must not fail while a member is paused for recovery; each engine doc names the probes that are
-  safe, if any.
-- **Why the controller decides "same group".** It already remembers which Pods it asked to reset or release,
-  so it can tell those from a lost one. The workload stays a plain reporter.
-- **Why reset the failed Pods first.** It is the smallest action that brings capacity back: only the failed
-  Pods restart, and the other members keep serving. A reset of the whole group stops it while the model loads
-  again, and when this group is the only one serving the model, that is a full outage. So when a Pod cannot
-  come back, the default keeps serving with fewer members. `--ft-capacity-restore=reset-all` takes the outage
-  to get back to full.
 
 ## API reference
 
