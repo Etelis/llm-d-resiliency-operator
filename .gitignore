@@ -33,3 +33,8 @@ Thumbs.db
 .envrc
 .secrets.env
 vendor/
+
+# Per-user agent files
+.claude/worktrees/
+.claude/settings.local.json
+CLAUDE.local.md
