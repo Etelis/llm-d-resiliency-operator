@@ -174,6 +174,11 @@ no admitted member has been readable for `--ft-unseen-timeout`, the group is res
 timeout is long, so a short blip on IRO's side never resets a group that serves. A failed `Discover` never
 resets: IRO cannot see the Pods it would name.
 
+The timeout counts only time IRO could read the engine and got nothing. Time when `Discover` failed never looked
+at the engine, so once `Discover` works again the clock restarts, and the engine gets its own full
+`--ft-unseen-timeout` before the group is reset. This holds even if the engine was already unreadable before
+`Discover` failed: IRO then waits longer, never shorter.
+
 [example controller-blind]: ../scenarios/controller-blind.json
 
 ## Deciding
@@ -399,6 +404,7 @@ type Record struct {
     LastNoChangeReconfig time.Time // check C6
     VerifyFailedSince    time.Time
     UnseenSince          time.Time // Discover failed, or Observe read no admitted member. Deadlines do not count this time.
+    UnseenByDiscover     bool      // Discover failed since UnseenSince: the clock restarts once Discover works again
     RecreateStopped      bool      // from the last Discover, so people can see the workload gave up
 
     Incident *Incident // the open incident, nil when none. Closed ones go to telemetry.
