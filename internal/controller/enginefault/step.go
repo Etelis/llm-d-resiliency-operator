@@ -43,6 +43,8 @@ type view struct {
 	admitted   []engine.MemberID
 	candidates []engine.MemberID
 	members    map[engine.MemberID]*engine.Member
+	unknown    []engine.MemberID
+	read       int
 }
 
 func New(ctx context.Context, wl workload.Workload, eng engine.Engine, store journal.Journal,
@@ -143,7 +145,6 @@ func (fsm *controller) step(ctx context.Context, next *Record) error {
 	if err != nil {
 		return fsm.unseen(ctx, next, now, fmt.Errorf("discover: %w", err))
 	}
-	next.UnseenSince = time.Time{}
 	next.RecreateStopped = group.RecreateStopped
 	if waiting, err := fsm.waitForWorkload(ctx, next, &group, now); waiting || err != nil {
 		return err
@@ -160,6 +161,10 @@ func (fsm *controller) step(ctx context.Context, next *Record) error {
 	}
 	fsm.comparePods(ctx, next, &group)
 	current := fsm.connect(ctx, next, &group)
+	if len(current.unknown) > 0 && current.read == 0 {
+		return fsm.unseen(ctx, next, now, errors.New("observe: no admitted member could be read"))
+	}
+	resume(next, now)
 	if reason := violation(next, current); reason != "" {
 		return fsm.resetAll(ctx, next, ResetExclusionBroken, reason, now)
 	}
@@ -182,6 +187,24 @@ func (fsm *controller) unseen(ctx context.Context, next *Record, now time.Time, 
 	return err
 }
 
+// resume moves the deadlines past the time the controller could not see the group.
+func resume(next *Record, now time.Time) {
+	if next.UnseenSince.IsZero() {
+		return
+	}
+	gap := now.Sub(next.UnseenSince)
+	if next.Phase == Recovering {
+		next.Since = next.Since.Add(gap)
+	}
+	if next.Reconfig != nil {
+		next.ReconfigSince = next.ReconfigSince.Add(gap)
+	}
+	if !next.VerifyFailedSince.IsZero() {
+		next.VerifyFailedSince = next.VerifyFailedSince.Add(gap)
+	}
+	next.UnseenSince = time.Time{}
+}
+
 func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group *workload.Group, now time.Time) (bool, error) {
 	owed := len(next.Pods) > 0
 	present := false
@@ -191,6 +214,9 @@ func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group 
 	}
 	owed = owed && present
 	if !group.Recreating && !group.RecreateStopped && !owed {
+		if fsm.waited {
+			resume(next, now)
+		}
 		if fsm.waited && next.Phase == Recovering {
 			next.Since = now
 		}
@@ -201,6 +227,7 @@ func (fsm *controller) waitForWorkload(ctx context.Context, next *Record, group 
 		return false, nil
 	}
 	fsm.waited = true
+	next.UnseenSince = time.Time{}
 	if (group.Recreating || group.RecreateStopped) && next.Phase == Serving && next.Incident == nil {
 		cause := "workload is recreating the group"
 		if group.RecreateStopped {
@@ -233,6 +260,7 @@ func (fsm *controller) startOver(next *Record, reason string, now time.Time) {
 }
 
 func (fsm *controller) start(ctx context.Context, next *Record, group *workload.Group, now time.Time) error {
+	next.UnseenSince = time.Time{}
 	next.Pods = map[string]PodRecord{}
 	for index := range group.Pods {
 		if pod := &group.Pods[index]; pod.State != workload.PodTerminating {
@@ -246,6 +274,9 @@ func (fsm *controller) start(ctx context.Context, next *Record, group *workload.
 		if pod.State == workload.PodStarting || (pod.State == workload.PodReady && !hasMember) {
 			return nil
 		}
+	}
+	if slices.ContainsFunc(obs.Members, func(member engine.Member) bool { return member.Unknown }) {
+		return nil
 	}
 	var reported, live []engine.MemberID
 	for index := range obs.Members {
@@ -300,16 +331,21 @@ func (fsm *controller) connect(ctx context.Context, next *Record, group *workloa
 	if next.Members == nil {
 		next.Members = map[engine.MemberID]MemberState{}
 	}
+	reported := map[engine.MemberID]bool{}
 	for index := range current.obs.Members {
 		member := &current.obs.Members[index]
 		id := member.ID()
+		if member.Unknown {
+			member.Serving, member.Terminal, member.Joinable = false, false, false
+		}
 		state, tracked := next.Members[id]
 		lost := tracked && isLost(next, group, id)
+		reported[id] = !lost && !member.Unknown
 		switch {
 		case lost && state == Candidate:
 			next.Members[id] = Rejected
 		case lost:
-			member.Terminal, member.Serving = true, false
+			member.Terminal, member.Serving, member.Unknown = true, false, false
 		case tracked && state == Candidate && member.Terminal:
 			next.Members[id] = Rejected
 		case !tracked && joinable(next, group, member):
@@ -318,14 +354,17 @@ func (fsm *controller) connect(ctx context.Context, next *Record, group *workloa
 		current.members[id] = member
 	}
 	for _, id := range slices.Sorted(maps.Keys(next.Members)) {
-		if _, reported := current.members[id]; reported || !isLost(next, group, id) {
+		if _, found := current.members[id]; found {
 			continue
 		}
-		switch next.Members[id] {
-		case Admitted:
+		lost := isLost(next, group, id)
+		switch {
+		case lost && next.Members[id] == Admitted:
 			current.obs.Members = append(current.obs.Members, lostMember(next, id))
-		case Candidate:
+		case lost && next.Members[id] == Candidate:
 			next.Members[id] = Rejected
+		case !lost && next.Members[id] == Admitted:
+			current.obs.Members = append(current.obs.Members, unknownMember(next, id))
 		}
 	}
 	for index := range current.obs.Members {
@@ -336,6 +375,11 @@ func (fsm *controller) connect(ctx context.Context, next *Record, group *workloa
 		switch next.Members[id] {
 		case Admitted:
 			current.admitted = append(current.admitted, id)
+			if current.members[id].Unknown {
+				current.unknown = append(current.unknown, id)
+			} else if reported[id] {
+				current.read++
+			}
 		case Candidate:
 			current.candidates = append(current.candidates, id)
 		}
@@ -368,8 +412,19 @@ func lostMember(next *Record, id engine.MemberID) engine.Member {
 	}
 }
 
+func unknownMember(next *Record, id engine.MemberID) engine.Member {
+	uid, saved, _ := podOf(next, id)
+	return engine.Member{
+		Pod: workload.PodRef{Name: saved.Name, UID: uid}, PodIdentity: identityOf(id), Name: nameOf(id),
+		Unknown: true, Detail: "not reported",
+	}
+}
+
 func violation(next *Record, current *view) string {
 	for id, member := range current.members {
+		if member.Unknown {
+			continue
+		}
 		state := next.Members[id]
 		switch {
 		case state == Excluded && !member.Terminal:
@@ -386,6 +441,9 @@ func violation(next *Record, current *view) string {
 func (fsm *controller) serve(ctx context.Context, next *Record, current *view, now time.Time) error {
 	plan := fsm.eng.Plan(current.obs, current.admitted, current.candidates)
 	grow := plan.Kind == engine.Change && len(plan.Remove) == 0 && len(plan.Add) > 0
+	if len(current.unknown) > 0 && (plan.Kind == engine.Healthy || grow) {
+		plan, grow = engine.Plan{Kind: engine.Wait, Reason: "cannot read " + joined(current.unknown)}, false
+	}
 	switch {
 	case plan.Kind != engine.Healthy && !grow:
 		return fsm.enterRecovering(ctx, next, current, &plan, now)
@@ -415,6 +473,9 @@ func (fsm *controller) enterRecovering(ctx context.Context, next *Record, curren
 
 func (fsm *controller) recover(ctx context.Context, next *Record, current *view, now time.Time) error {
 	plan := fsm.eng.Plan(current.obs, current.admitted, current.candidates)
+	if plan.Kind == engine.Healthy && len(current.unknown) > 0 {
+		plan = engine.Plan{Kind: engine.Wait, Reason: "cannot read " + joined(current.unknown)}
+	}
 	switch {
 	case plan.Kind == engine.Healthy:
 		enter(next, Serving, plan.Reason, now)
@@ -461,6 +522,14 @@ func identityOf(id engine.MemberID) string {
 
 func nameOf(id engine.MemberID) string {
 	return strings.TrimSuffix(string(id), "@"+identityOf(id))
+}
+
+func joined(ids []engine.MemberID) string {
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, string(id))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func tracks(next *Record, identity string) bool {

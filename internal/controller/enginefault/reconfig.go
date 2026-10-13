@@ -52,6 +52,12 @@ func (fsm *controller) watch(ctx context.Context, next *Record, current *view, n
 }
 
 func (fsm *controller) send(ctx context.Context, next *Record, current *view, plan *engine.Plan, now time.Time) error {
+	for _, id := range slices.Concat(plan.Participants, plan.Add) {
+		if member := current.members[id]; member != nil && member.Unknown {
+			next.Reason = "waiting to read " + string(id) + ": " + plan.Reason
+			return nil
+		}
+	}
 	if reason := checkPlan(next, current, plan); reason != "" {
 		return fsm.resetAll(ctx, next, ResetUnrecoverable, reason, now)
 	}

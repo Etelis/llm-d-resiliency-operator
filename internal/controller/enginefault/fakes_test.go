@@ -239,6 +239,7 @@ type harness struct {
 	config Config
 	clock  time.Time
 	fsm    *controller
+	before []engine.Member
 }
 
 var names = []string{"lws-0", "lws-0-1", "lws-0-2", "lws-0-3"}
