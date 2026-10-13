@@ -51,4 +51,4 @@ A fault always comes first: capacity work waits until the group serves again.
 | [The journal is lost](journal-lost.md) | an empty journal | the same group, never reset |
 
 The workload can also give up recreating the group (`RecreateStopped`). IRO then waits and acts on
-nothing until the workload recreates the group; see [considerations](../components/controller.md#considerations).
+nothing until the workload recreates the group; see [considerations](../components/controller.md#design-notes).

@@ -300,7 +300,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | Return `Unrecoverable` when recovery in place cannot help | the controller resets |
 | Plan `Add` only if `Capabilities().Grow` | the controller resets a single Pod only when the engine can re-admit its members |
 | A plan may remove and add in one reconfig (replace) if the engine supports it | fewer reconfigs during a fault |
-| `Change` plans must pass the controller's [checks C1 to C7](../controller.md#checks-on-every-plan) | otherwise the controller resets |
+| `Change` plans must pass the controller's [checks C1 to C7](../controller.md#safety-checks) | otherwise the controller resets |
 | `Progress` stays `Running` until the engine reports a result for this reconfig, or proves no member got it | the apply deadline covers a reconfig that never finishes |
 | Return `NotStarted` only when every participant and joiner is observed, could start the reconfig now and has not got it, and the engine would still show a reconfig a member got earlier | otherwise a reconfig that finished before a new fault looks unsent, and sending it again would run it twice |
 | `Failed` with scope `Joiners` only when admitted members are untouched | otherwise the group may be broken and must be reset |

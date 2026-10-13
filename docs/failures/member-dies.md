@@ -5,7 +5,7 @@ One member's process exits. The rest keep serving, and the group is full again o
 - **IRO sees:** the engine reports the member terminal; the others pause
 - **IRO does:** removes it in one reconfig, verifies the survivors, then resets its Pod and admits the new member
 - **Ends with:** full again, without a restart
-- **Rules:** [C1](../components/controller.md#checks-on-every-plan), [C8](../components/controller.md#checks-on-every-plan), [restoring capacity](../components/controller.md#restoring-capacity)
+- **Rules:** [C1](../components/controller.md#safety-checks), [C8](../components/controller.md#safety-checks), [restoring capacity](../components/controller.md#getting-back-to-full)
 
 ![One member dies and the group goes 4, 3, 4 while serving](../figures/recovery-timeline.svg)
 
