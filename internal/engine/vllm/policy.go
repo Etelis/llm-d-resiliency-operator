@@ -66,9 +66,10 @@ func (*Engine) Progress(observation engine.Observation, reconfig engine.Reconfig
 			return failed(fmt.Sprintf("%s died during the reconfig: %s", id, member.Detail))
 		case member == nil || r == nil || !r.Reached:
 		case r.RequestID == "" && (r.Status == "unhealthy" || r.Status == "diagnosing"):
-			// The status keeps the reconfig's request ID until the engine reports a new state, so a fault
-			// without it came after the reconfig ended.
-			return failed(fmt.Sprintf("%s faulted again after the reconfig: %s", id, member.Detail))
+			// The status keeps the reconfig's request ID only until the engine reports a new state, so a
+			// fault without it came after the reconfig ended, or the reconfig never arrived.
+			return failed(fmt.Sprintf("%s is faulted without a reconfig ID: it faulted again after the reconfig, "+
+				"or never got it: %s", id, member.Detail))
 		case r.FTState == "failed" && r.RequestID == reconfig.ID:
 			return failed(fmt.Sprintf("%s failed the reconfig: %s", id, r.FTError))
 		case r.FTState == "recovering" && r.RequestID != reconfig.ID:

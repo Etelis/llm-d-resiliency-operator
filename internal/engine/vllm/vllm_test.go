@@ -181,6 +181,21 @@ func params(t *testing.T, payload map[string]any) map[string]any {
 
 var four = ids("dp0@id0", "dp1@id1", "dp2@id2", "dp3@id3")
 
+func terminal(obs engine.Observation, ids ...string) engine.Observation {
+	for index := range obs.Members {
+		if member := &obs.Members[index]; slices.Contains(ids, string(member.ID())) {
+			member.Terminal, member.Serving = true, false
+		}
+	}
+	return obs
+}
+
+func lost(pod *workload.Pod, name string) engine.Member {
+	return engine.Member{
+		Pod: workload.PodRef{Name: pod.Name, UID: pod.UID}, PodIdentity: pod.Identity, Name: name, Terminal: true, Detail: "pod lost",
+	}
+}
+
 func TestObserve(t *testing.T) {
 	t.Parallel()
 	test := newFleet(t, 4, 1)
@@ -197,6 +212,9 @@ func TestObserve(t *testing.T) {
 	for _, member := range obs.Members {
 		if got := [2]bool{member.Serving, member.Terminal}; got != want[member.ID()] {
 			t.Errorf("%s serving, terminal = %v, want %v (%s)", member.ID(), got, want[member.ID()], member.Detail)
+		}
+		if member.Unknown != (member.ID() == "dp3@id3") {
+			t.Errorf("%s unknown = %v", member.ID(), member.Unknown)
 		}
 	}
 }
@@ -342,6 +360,11 @@ func TestProgress(t *testing.T) {
 		"vote failed":   {setup: func(r []*fakeRank) { r[0].set("dead", nil) }, state: engine.Failed},
 		"unreachable":   {setup: func(r []*fakeRank) { r[3].down = true }, state: engine.Running},
 		"faulted again": {setup: func(r []*fakeRank) { r[0].unhealthy() }, state: engine.Failed},
+		"never sent": {setup: func(r []*fakeRank) {
+			for _, rank := range r {
+				rank.unhealthy()
+			}
+		}, state: engine.Failed},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -361,7 +384,7 @@ func TestApply(t *testing.T) {
 		t.Parallel()
 		test := newFleet(t, 4, 1)
 		reconfig := engine.Reconfig{ID: "r1", Participants: ids("dp0@id0", "dp2@id2", "dp3@id3"), Remove: ids("dp1@id1")}
-		acceptances, err := test.eng.Apply(t.Context(), test.observe(t), reconfig)
+		acceptances, err := test.eng.Apply(t.Context(), terminal(test.observe(t), "dp1@id1"), reconfig)
 		if err != nil || len(acceptances) != 3 || len(test.ranks[1].applied) != 0 {
 			t.Fatalf("acceptances %+v, err %v", acceptances, err)
 		}
@@ -376,13 +399,73 @@ func TestApply(t *testing.T) {
 		t.Parallel()
 		test := newFleet(t, 4, 1)
 		reconfig := engine.Reconfig{ID: "r2", Participants: ids("dp2@id2", "dp1@id1"), Remove: ids("dp3@id3", "dp0@id0")}
-		if _, err := test.eng.Apply(t.Context(), test.observe(t), reconfig); err != nil {
+		if _, err := test.eng.Apply(t.Context(), terminal(test.observe(t), "dp3@id3", "dp0@id0"), reconfig); err != nil {
 			t.Fatal(err)
 		}
 		found := params(t, test.ranks[2].applied[0])
 		if fmt.Sprint(found["removed_dp_ranks"]) != "[0 3]" || found["dp_master_ip"] != "10.0.0.2" ||
 			found["dp_store_port"] != 29600.0 {
 			t.Fatalf("params %v", found)
+		}
+	})
+	t.Run("lost member removed", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 4, 1)
+		obs := test.eng.Observe(t.Context(), test.pods[:3])
+		obs.Members = append(obs.Members, lost(&test.pods[3], "dp3"))
+		reconfig := engine.Reconfig{ID: "r6", Participants: ids("dp0@id0", "dp1@id1", "dp2@id2"), Remove: ids("dp3@id3")}
+		if _, err := test.eng.Apply(t.Context(), obs, reconfig); err != nil {
+			t.Fatal(err)
+		}
+		for _, rank := range test.ranks[:3] {
+			found := params(t, rank.applied[0])
+			if fmt.Sprint(found["removed_dp_ranks"]) != "[3]" || found["dp_master_ip"] != nil {
+				t.Fatalf("params %v", found)
+			}
+		}
+	})
+	t.Run("lost store host", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 4, 1)
+		obs := test.eng.Observe(t.Context(), test.pods[1:])
+		obs.Members = append(obs.Members, lost(&test.pods[0], "dp0"))
+		reconfig := engine.Reconfig{ID: "r7", Participants: ids("dp1@id1", "dp2@id2", "dp3@id3"), Remove: ids("dp0@id0")}
+		if _, err := test.eng.Apply(t.Context(), obs, reconfig); err != nil {
+			t.Fatal(err)
+		}
+		if found := params(t, test.ranks[1].applied[0]); found["dp_master_ip"] != "10.0.0.2" || found["dp_store_port"] != 29600.0 {
+			t.Fatalf("params %v", found)
+		}
+	})
+	for name, reconfig := range map[string]engine.Reconfig{
+		"unobserved participant":       {ID: "r8", Participants: ids("dp0@id0", "dp9@id9"), Remove: ids("dp1@id1")},
+		"unobserved removal":           {ID: "r9", Participants: ids("dp0@id0"), Remove: ids("dp9@id9")},
+		"removal that is not terminal": {ID: "r10", Participants: ids("dp0@id0"), Remove: ids("dp2@id2")},
+	} {
+		t.Run(name+" is refused before sending", func(t *testing.T) {
+			t.Parallel()
+			test := newFleet(t, 3, 1)
+			if _, err := test.eng.Apply(t.Context(), terminal(test.observe(t), "dp1@id1"), reconfig); err == nil {
+				t.Fatal("Apply sent a reconfig it should refuse")
+			}
+			for _, rank := range test.ranks {
+				if len(rank.applied) != 0 {
+					t.Fatalf("rank %d got %v", rank.rank, rank.applied)
+				}
+			}
+		})
+	}
+	t.Run("an unreachable participant is refused before sending", func(t *testing.T) {
+		t.Parallel()
+		test := newFleet(t, 2, 1)
+		test.ranks[1].down = true
+		obs := test.observe(t)
+		test.ranks[1].down = false
+		if _, err := test.eng.Apply(t.Context(), obs, engine.Reconfig{ID: "r11", Participants: ids("dp0@id0", "dp1@id1")}); err == nil {
+			t.Fatal("Apply sent to a rank it could not read")
+		}
+		if len(test.ranks[0].applied) != 0 {
+			t.Fatalf("rank 0 got %v", test.ranks[0].applied)
 		}
 	})
 	t.Run("retry", func(t *testing.T) {

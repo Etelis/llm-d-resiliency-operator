@@ -20,8 +20,8 @@ import (
 
 	"github.com/llm-d/llm-d-resiliency-operator/internal/controller/enginefault"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/engine"
-	"github.com/llm-d/llm-d-resiliency-operator/internal/telemetry"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/journal"
+	"github.com/llm-d/llm-d-resiliency-operator/internal/telemetry"
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
 )
 

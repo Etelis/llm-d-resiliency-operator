@@ -47,7 +47,7 @@ func (eng *Engine) Observe(ctx context.Context, pods []workload.Pod) engine.Obse
 	for index := range observation.Members {
 		member := &observation.Members[index]
 		r := found[member.ID()]
-		member.Serving, member.Terminal, member.Detail = r.serving(), r.dead(), r.detail()
+		member.Serving, member.Terminal, member.Unknown, member.Detail = r.serving(), r.dead(), !r.Reached, r.detail()
 	}
 	observation.Engine = found
 	return observation
@@ -117,11 +117,24 @@ func (eng *Engine) Probe(ctx context.Context, observation engine.Observation) er
 }
 
 //nolint:gocritic // The interface passes the reconfig by value.
-func (eng *Engine) Apply(ctx context.Context, observation engine.Observation, reconfig engine.Reconfig) ([]engine.Acceptance, error) {
+func (eng *Engine) Apply(
+	ctx context.Context, observation engine.Observation, reconfig engine.Reconfig,
+) ([]engine.Acceptance, error) {
 	if len(reconfig.Add) > 0 {
 		return nil, errors.New("vLLM cannot admit members")
 	}
 	found := ranksOf(observation)
+	for _, id := range reconfig.Participants {
+		if r := found[id]; r == nil || !r.Reached {
+			return nil, fmt.Errorf("%s cannot be reached", id)
+		}
+	}
+	members := membersOf(observation)
+	for _, id := range reconfig.Remove {
+		if member := members[id]; member == nil || !member.Terminal {
+			return nil, fmt.Errorf("%s is not a terminal member of the observation", id)
+		}
+	}
 	instruction, params := "retry", map[string]any{}
 	if len(reconfig.Remove) > 0 {
 		var err error
@@ -136,10 +149,6 @@ func (eng *Engine) Apply(ctx context.Context, observation engine.Observation, re
 	for index, id := range reconfig.Participants {
 		acceptances[index].Member = id
 		r := found[id]
-		if r == nil {
-			acceptances[index].Error = "not observed"
-			continue
-		}
 		wg.Go(func() {
 			callCtx, cancel := context.WithTimeout(ctx, eng.options.Timeout)
 			defer cancel()

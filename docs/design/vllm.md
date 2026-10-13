@@ -43,12 +43,13 @@ Rules that shape the driver:
 | `Observe` | status and `/health` of every rank of every Pod that has an IP and is not terminating |
 | `Serving` | status `healthy` and `/health` 200 |
 | `Terminal` | status `dead`, or `/health` 503 |
-| unknown | the API does not answer, or answers for another rank: neither serving nor terminal |
+| `Unknown` | the API does not answer, or answers for another rank. If IRO can read no rank at all, it waits with its deadlines paused; if it can read some, the unknown ranks are a fault. |
 | `Probe` | one short completion to each serving rank, so idle peers run a step and notice a dead rank |
-| `Apply` | `retry` when nothing is removed, else `scale_down` with `removed_dp_ranks`; `request_id` is the reconfig ID |
+| `Apply` | `retry` when nothing is removed, else `scale_down` with `removed_dp_ranks`; `request_id` is the reconfig ID. Refused before anything is sent when a participant cannot be reached or a removed rank is not terminal in the observation. A lost rank needs no address: its number comes from its name. |
 | Store host | when the reconfig removes the lowest alive rank: `dp_master_ip` of the lowest participant and `--vllm-store-port` |
-| `Verify` | an 8-token completion on each member |
+| `Verify` | an 8-token completion on each member; the error names every rank that failed |
 | `Grow` | no: the fault tolerance API cannot add ranks |
+| Same reconfig sent twice | a rank accepts an instruction only while `unhealthy`, so one that already started or finished it refuses |
 
 ## Policy
 
@@ -69,9 +70,10 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
 | a participant is terminal | `Failed`, scope `Group` |
 | `ft_state` is `failed` for this reconfig | `Failed`, scope `Group` |
 | a participant runs another `request_id` | `Failed`, scope `Group` |
-| a participant is `unhealthy` again with no `request_id`: it finished the reconfig and faulted after it | `Failed`, scope `Group` |
+| a participant is `unhealthy` with no `request_id`: it finished the reconfig and faulted after it, or never got it | `Failed`, scope `Group` |
 | every participant serving | `Succeeded` |
 | otherwise | `Running` |
+| `NotStarted` | never. The status drops `last_ft_request_id` at the next state report, so a reconfig never sent looks like one that finished before a new fault. A new leader that finds an unsent reconfig fails it, and the group is reset. |
 
 ## Flags
 
@@ -84,10 +86,17 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
 
 ## Deploying vLLM for IRO
 
-- Set `VLLM_KEEP_ALIVE_ON_ENGINE_DEATH=1`. Otherwise the API server exits with its engine, the container
-  restarts, and the workload recreates the whole group: IRO never gets to shrink it.
-- Do not add a liveness probe that restarts a rank whose engine died: a container restart makes the
-  workload recreate the group.
+- Set `VLLM_KEEP_ALIVE_ON_ENGINE_DEATH=1`. Otherwise the API server exits with its engine and its container
+  restarts: under `RecreateGroupOnPodRestart` the workload recreates the whole group and IRO never gets to
+  shrink it; under `None` IRO removes the rank only once the restart changes its Pod's identity, and the
+  restarted rank cannot rejoin.
+- No liveness probe on vLLM containers. A probe on the status or on a completion fails on every rank paused
+  for recovery, and the restart loses that rank: under `RecreateGroupOnPodRestart` the group is recreated;
+  under `None` the rank is removed with the dead one, or the reconfig in flight fails and the group is reset.
+  A restarted rank never rejoins and holds its GPU until the next group. Under `None`, `GET /health` is the
+  only safe target: it stays 200 while a rank is paused and turns 503 only when the engine process is gone.
+- With sidecars in the Pod, name the vLLM container in `--lws-engine-containers`, and point
+  `--vllm-api-port` at vLLM's own port, not a proxy's.
 - `/health` stays 200 for a rank that is `dead` while its engine process lives, so a `/health` readiness
   probe keeps sending traffic to it, and it answers 503. Readiness that routes well checks the status
   endpoint for `healthy`.
