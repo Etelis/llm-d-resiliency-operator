@@ -58,22 +58,22 @@ type PodRecord struct {
 
 // Record is the controller's whole state. It is what the journal stores.
 type Record struct {
-    Phase   Phase
-    Since   time.Time // when the phase started. The diagnosis deadline counts from here.
-    Reason  string
+    Phase  Phase
+    Since  time.Time // when the phase started. The diagnosis deadline counts from here.
+    Reason string
 
-    Pods    map[string]PodRecord     // by UID. Also what ResetAll names.
+    Pods    map[string]PodRecord // by UID. Also what ResetAll names.
     Members map[MemberID]MemberState
 
-    Reconfig       *Reconfig    // in flight, nil when none
-    ReconfigSince  time.Time // the apply deadline counts from here
-    Acceptances []Acceptance
-    Verifying   []MemberID // members of a reconfig that succeeded, not yet checked with Verify
+    Reconfig      *Reconfig  // in flight, nil when none
+    ReconfigSince time.Time  // the apply deadline counts from here
+    Acceptances   []Acceptance
+    Verifying     []MemberID // members of a reconfig that succeeded, not yet checked with Verify
 
-    LastNoChangeReconfig         time.Time // check C6
-    VerifyFailedSince         time.Time
-    DiscoveryUnavailableSince time.Time
-    RecreateStopped           bool // from the last Discover, so people can see the workload gave up
+    LastNoChangeReconfig time.Time // check C6
+    VerifyFailedSince    time.Time
+    UnseenSince          time.Time // Discover failed, or Observe read no admitted member. Deadlines do not count this time.
+    RecreateStopped      bool      // from the last Discover, so people can see the workload gave up
 
     Incident *Incident // the open incident, nil when none. Closed ones go to telemetry.
 }
@@ -116,14 +116,16 @@ Runs one reconciliation: read, decide, act.
 
 In order:
 
-1. **Discover.** If it fails, keep the phase and its deadline clock, note the time, and stop here.
+1. **Discover.** If it fails, the controller cannot see the group: keep the phase, pause its deadlines, note
+   the time, and stop here.
 2. **Read Discover** against the journal: same group, new group, or going away. While the old group is going,
    repeat any owed `ResetAll` and stop here. See [Reading Discover](#reading-discover).
 3. **If `starting`**, record the Pods, `Observe`, and ask for a `Plan` over the members that are not Terminal.
    Wait while a Pod is `Starting` or gives no members. On a `Healthy` plan, admit every member and go to
    `serving`. Stop here: no member is admitted yet, so there is nothing to check.
-4. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members).
-5. **Check the observation** (C1, C4, C5). A violation resets the group.
+4. **Observe** the Pods and [connect members to Pods](#connecting-pods-and-members). If it reads none of the
+   admitted members, stop here as in step 1. See [unknown members](#unknown-members).
+5. **Check the observation** (C1, C4, C5). A violation resets the group. Unknown members are not checked.
 6. **Act by phase.** Ask the policy for a `Plan`, or for `Progress` when a [reconfig](#reconfigs) is in flight.
    Check and send a new reconfig, verify the members of a reconfig that succeeded, or reset.
 7. **[Restore capacity](#restoring-capacity)** if the group is `serving`.
@@ -223,9 +225,24 @@ next group: a candidate that could not join, or an excluded member whose Pod is 
 |---|---|
 | member reported on a saved Pod | matches it by ID |
 | member reported on a new, `Ready` Pod | records it as a candidate |
-| admitted member not reported (its Pod is unreachable) | treats it as unknown: not Serving, not Terminal |
+| admitted member reported `Unknown`, or not reported while its Pod is unchanged | unknown: see [unknown members](#unknown-members) |
 | admitted member on a Pod that is gone, `Terminating` or has a new identity (replaced, or its engine restarted) | lost: added to the observation as Terminal, `Detail: "pod lost"` |
 | member reported under a restarted Pod's new identity | not tracked, never a candidate. C5 still applies: it must not serve. |
+
+### Unknown members
+
+An unknown member is one IRO cannot read now: it is never Serving, never Terminal, and never in `Remove`.
+What happens depends on how many admitted members IRO can read.
+
+| Admitted members unknown | Controller does |
+|---|---|
+| none | as usual |
+| some | the group is not healthy: a `Healthy` plan, or a grow in `serving`, counts as a fault. If they stay unknown, the diagnosis deadline resets the group, which is what stops them. |
+| all | it cannot see the group, as when `Discover` fails: no incident, no plan, and its deadlines are paused |
+
+An unknown member never becomes Terminal by timeout. IRO cannot tell a hung member from one only IRO cannot
+reach, and the router may still send it traffic: removing it would break C1. Only the engine (`Terminal`) or
+the workload (the Pod is gone, `Terminating` or restarted) proves a process is gone.
 
 ### Reconfigs
 
@@ -241,7 +258,9 @@ sent, and cleared when `Progress` reports `Succeeded` or `Failed`.
 
 The two deadlines catch different hangs: an engine that never reaches a state IRO can act on,
 and a reconfig that never finishes. While the workload reports `Recreating`, deadlines are not checked, and
-both restart when it ends, and when a new leader takes over. A new group drops the reconfig in flight: the workload is already replacing everything.
+both restart when it ends, and when a new leader takes over. While the controller cannot see the group,
+deadlines do not count either: when it sees the group again, `Since` (in `recovering`), `ReconfigSince` and
+`VerifyFailedSince` move forward by the time it could not see. A new group drops the reconfig in flight: the workload is already replacing everything.
 
 **A reconfig that never left.** The reconfig is saved before `Apply`, and its acceptances after. No saved
 acceptances means the send was never confirmed: the leader may have died before `Apply` reached the engine.
@@ -304,10 +323,10 @@ so a wrong policy can stall or reset a group but cannot exclude a member that st
 
 | # | Rule | Why |
 |---|---|---|
-| C1 | `Remove` holds only members that are Terminal, and they stay Terminal until the reconfig succeeds | the router follows native health. A removed member that still serves gets traffic outside the group. |
+| C1 | `Remove` holds only members that are Terminal, and they stay Terminal until the reconfig succeeds. An unknown one is not checked. | the router follows native health. A removed member that still serves gets traffic outside the group. |
 | C2 | `Add` holds only candidates that are Joinable, on Pods that are `Ready` and unchanged | a stale Pod must not join |
 | C3 | `Participants` and `Remove` are admitted members, `Add` holds candidates, the three are disjoint, and `Participants` is not empty | a reconfig must name a real, consistent membership change |
-| C4 | Excluded members stay Terminal | otherwise an excluded member could take traffic again |
+| C4 | Excluded members stay Terminal. An unknown one is not checked: it cannot serve. | otherwise an excluded member could take traffic again |
 | C5 | Members that are not admitted are not Serving, except those the reconfig in flight adds | a joiner must not take traffic before it is in the group |
 | C6 | A reconfig that changes no membership cannot repeat within `FlapWindow` | stops retry loops |
 | C7 | One reconfig at a time. Every member a reconfig names is in the observation it is planned on, lost members included. `Apply` refuses any other reconfig. | a stale reconfig cannot apply to a changed group |
@@ -328,7 +347,7 @@ never violated at runtime.
 | One reconfig at a time | a new plan is asked for only when no reconfig is in flight |
 | Faults come first | capacity is restored only while `serving` |
 | A failed save never advances the phase | the in-memory state keeps the last saved phase |
-| Never resets a group it cannot see | discovery failures wait |
+| Never resets a group it cannot see | a failed `Discover`, or an `Observe` that reads no admitted member, waits with deadlines paused |
 | Resets hit only what failed | `Reset` names the failed Pods by UID; `ResetAll` names the saved Pods by UID. Both are repeated, one call per poll, until those Pods are gone. |
 | Never gives up on its own | no reset budget and no terminal phase. The workload's restart policy paces resets and decides when to stop. |
 | No startup deadline | `starting`, and a reset Pod coming back, take as long as they need |
@@ -352,8 +371,11 @@ Each engine and workload implementation registers its own flags.
 
 ## Considerations
 
-- **Discovery fails.** A failed read does not prove the group changed, so the controller keeps the
-  phase and its deadline clock and never resets on it.
+- **IRO cannot see the group.** A failed `Discover`, or an `Observe` that reads no admitted member, proves
+  nothing about the group: IRO may be the one cut off. The controller keeps the phase, opens no incident,
+  asks for no plan, and pauses its deadlines. A group whose every member hangs looks the same, so that case
+  is left to the workload's probes. A real fault does not wait forever either: an engine that gives up
+  on recovery reports its members Terminal, and the group is reset once IRO sees it again.
 - **The workload gave up.** `RecreateStopped` makes the controller wait and act on nothing. Telemetry
   reports it so people can see it. Recovery resumes when the workload recreates the group.
 - **Why verify only after a reconfig.** Verify does not gate traffic: the router follows the engine's native

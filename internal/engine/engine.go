@@ -41,6 +41,7 @@ type Member struct {
 	Name        string
 	Serving     bool
 	Terminal    bool
+	Unknown     bool
 	Joinable    bool
 	Detail      string
 }

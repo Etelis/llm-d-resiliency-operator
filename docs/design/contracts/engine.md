@@ -57,6 +57,7 @@ type Member struct {
     Name        string // the engine's name for it, unique within the Pod, e.g. "dp3"
     Serving     bool   // the router may send it traffic: the engine's native health
     Terminal    bool   // will never serve again
+    Unknown     bool   // the driver could not read it now. Serving, Terminal and Joinable are false.
     Joinable    bool   // for candidates only: can be admitted now
     Detail      string // for status and logs only
 }
@@ -151,7 +152,7 @@ Reports the members running on the given Pods and their state.
 | | |
 |---|---|
 | **Input** | `pods []Pod` from [`Discover`](workload.md#discover) |
-| **Output** | [`Observation`](#objects). Never fails: a Pod the driver cannot reach gives no members. |
+| **Output** | [`Observation`](#objects). Never fails: a member the driver cannot read is reported `Unknown`, and a Pod whose members it cannot list gives none. |
 | **Side effects** | none |
 
 **Example**, right after `dp3` dies:
@@ -284,7 +285,8 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | No memory. Addresses and anything else the driver needs travel in `Observation.Engine`. | a new leader needs no warm-up. The driver may still cache internally, keyed by Pod identity. |
 | Pods that are not `Ready` give no members, or members that are not Joinable | a loading Pod is not a candidate yet |
 | A Pod gives all of its members or none | the controller admits, at the end of `starting`, exactly the members it saw |
-| Once Terminal, always Terminal for that member | the controller's check C4 depends on it |
+| Once Terminal, never Serving again: later reported Terminal or `Unknown` | the controller's check C4 depends on it |
+| A member the driver cannot read is `Unknown`, never Terminal by guess | only a process known to be gone may be removed (C1) |
 | `Serving` means what the router uses: the engine's native health | checks C1 and C5 reason about traffic |
 | Candidates do not report `Serving` | check C5 |
 | The engine reports which reconfig each member is working on | `Progress` can tell its reconfig from another one |
@@ -299,6 +301,7 @@ Says how the reconfig in flight is going. Pure: no I/O, no clock.
 | No I/O, no clock, no globals | the same input gives the same answer on any leader |
 | Return `Wait` only for a fault the engine is still working out | the controller owns the deadlines |
 | Return `Healthy` while candidates cannot be admitted yet | a candidate waiting to join is not a fault |
+| Never return `Healthy` while an admitted member is `Unknown` or missing | the controller treats it as a fault anyway |
 | Return `Unrecoverable` when recovery in place cannot help | the controller resets |
 | Plan `Add` only if `Capabilities().Grow` | the controller resets a single Pod only when the engine can re-admit its members |
 | A plan may remove and add in one reconfig (replace) if the engine supports it | fewer reconfigs during a fault |

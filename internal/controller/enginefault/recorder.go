@@ -33,13 +33,13 @@ type Incident struct {
 	Affected  []engine.MemberID `json:"affected,omitempty"`
 	Pods      []workload.PodRef `json:"pods,omitempty"`
 	Nodes     []string          `json:"nodes,omitempty"`
-	Reconfigs    []ReconfigResult     `json:"reconfigs,omitempty"`
+	Reconfigs []ReconfigResult  `json:"reconfigs,omitempty"`
 	Outcome   Outcome           `json:"outcome,omitempty"`
 	Durations Durations         `json:"durations"`
 }
 
 type ReconfigResult struct {
-	Reconfig    engine.Reconfig    `json:"reconfig"`
+	Reconfig engine.Reconfig `json:"reconfig"`
 	Progress engine.Progress `json:"progress"`
 }
 
@@ -63,7 +63,7 @@ type ResetReason string
 
 const (
 	ResetUnrecoverable     ResetReason = "unrecoverable"
-	ResetReconfigFailed       ResetReason = "reconfig_failed"
+	ResetReconfigFailed    ResetReason = "reconfig_failed"
 	ResetDiagnosisDeadline ResetReason = "diagnosis_deadline"
 	ResetApplyDeadline     ResetReason = "apply_deadline"
 	ResetFlap              ResetReason = "flap"
