@@ -53,8 +53,6 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 	return nil
 }
 
-// remove names every Pod in one call. If the workload cannot handle them together, it asks for each alone,
-// so a Pod it can never replace does not keep the others below full.
 func (fsm *controller) remove(ctx context.Context, next *Record, pods []workload.PodRef, record bool) {
 	var err error
 	if fsm.config.CapacityRestore == RestoreRelease {

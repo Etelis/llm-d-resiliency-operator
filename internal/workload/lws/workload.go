@@ -246,7 +246,6 @@ func annotated(pod *corev1.Pod, key string) bool {
 	return ok
 }
 
-// identity covers the engine containers only, so a sidecar restart does not look like a restarted engine.
 func identity(pod *corev1.Pod, engines []string) (string, error) {
 	hash := sha256.New()
 	hash.Write([]byte(pod.UID))

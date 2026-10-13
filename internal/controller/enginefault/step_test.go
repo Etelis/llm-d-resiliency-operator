@@ -40,7 +40,6 @@ func (test *harness) shrunk() {
 	test.rec.calls = nil
 }
 
-// unconfirmed sends the reconfig, then loses its acceptances, as when the leader dies before saving them.
 func (test *harness) unconfirmed() {
 	test.t.Helper()
 	var data []byte
@@ -528,7 +527,8 @@ func TestVerifyAfterReconfig(t *testing.T) {
 		test.clock = test.clock.Add(test.config.VerifyTimeout / 2)
 		test.poll()
 		record := test.record()
-		if len(record.Verifying) != 0 || !record.VerifyFailedSince.IsZero() || record.Reason != "verified" || len(test.wl.resetAlls) != 0 {
+		if len(record.Verifying) != 0 || !record.VerifyFailedSince.IsZero() || record.Reason != "verified" ||
+			len(test.wl.resetAlls) != 0 {
 			t.Fatalf("record %+v", record)
 		}
 		test.poll()

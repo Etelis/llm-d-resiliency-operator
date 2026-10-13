@@ -37,6 +37,7 @@ func New(reader client.Reader, writer client.Client, owner *unstructured.Unstruc
 	}
 }
 
+//nolint:gocritic // The contract returns the record, its version and an error.
 func (store *Journal) Load(ctx context.Context) ([]byte, string, error) {
 	var current corev1.ConfigMap
 	err := store.reader.Get(ctx, store.name, &current)
@@ -50,7 +51,7 @@ func (store *Journal) Load(ctx context.Context) ([]byte, string, error) {
 	if value := current.Data[key]; value != "" {
 		data = []byte(value)
 	}
-	return data, version(&current), nil
+	return data, versionOf(&current), nil
 }
 
 func (store *Journal) Save(ctx context.Context, data []byte, previous string) (string, error) {
@@ -76,7 +77,7 @@ func (store *Journal) Save(ctx context.Context, data []byte, previous string) (s
 	if err := store.writer.Update(ctx, &current); err != nil {
 		return "", conflict(err)
 	}
-	return version(&current), nil
+	return versionOf(&current), nil
 }
 
 func (store *Journal) create(ctx context.Context, data []byte) (string, error) {
@@ -96,7 +97,7 @@ func (store *Journal) create(ctx context.Context, data []byte) (string, error) {
 	if err := store.writer.Create(ctx, next); err != nil {
 		return "", conflict(err)
 	}
-	return version(next), nil
+	return versionOf(next), nil
 }
 
 func conflict(err error) error {
@@ -106,7 +107,7 @@ func conflict(err error) error {
 	return err
 }
 
-func version(state *corev1.ConfigMap) string {
+func versionOf(state *corev1.ConfigMap) string {
 	return state.ResourceVersion + "/" + hash(state.Data[key])
 }
 

@@ -216,7 +216,8 @@ func TestSomeUnknown(t *testing.T) {
 		test.poll()
 		test.poll()
 		test.poll()
-		if len(test.eng.applied) != 0 || len(test.wl.resetAlls) != 0 || !strings.Contains(test.record().Reason, "waiting to read dp1@idB") {
+		if len(test.eng.applied) != 0 || len(test.wl.resetAlls) != 0 ||
+			!strings.Contains(test.record().Reason, "waiting to read dp1@idB") {
 			t.Fatalf("applied %v, record %+v", test.eng.applied, test.record())
 		}
 	})

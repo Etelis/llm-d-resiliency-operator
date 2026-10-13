@@ -206,7 +206,7 @@ func TestPodLostWhileServing(t *testing.T) {
 				t.Fatalf("applied %d, admitted %v", len(harness.eng.applied), harness.eng.admitted)
 			}
 			lost := slices.IndexFunc(harness.eng.appliedOn[0].Members, func(member engine.Member) bool { return member.ID() == "dp3@idD" })
-			if lost < 0 || !harness.eng.appliedOn[0].Members[lost].Terminal || harness.eng.appliedOn[0].Members[lost].Detail != "pod lost" {
+			if member := harness.eng.appliedOn[0].Members; lost < 0 || !member[lost].Terminal || member[lost].Detail != "pod lost" {
 				t.Fatalf("Apply did not see the lost member: %+v", harness.eng.appliedOn[0].Members)
 			}
 			harness.eng.progress = engine.Progress{State: engine.Succeeded}
@@ -271,7 +271,8 @@ func TestResendCheckedAgain(t *testing.T) {
 	test.eng.plan = engine.Plan{Kind: engine.Healthy}
 	test.poll()
 	record := test.record()
-	if len(test.eng.applied) != sent || record.Reconfig != nil || len(test.wl.resetAlls) != 0 || !strings.Contains(record.Reason, "dropped") {
+	if len(test.eng.applied) != sent || record.Reconfig != nil || len(test.wl.resetAlls) != 0 ||
+		!strings.Contains(record.Reason, "dropped") {
 		t.Fatalf("applied %d, record %+v", len(test.eng.applied), record)
 	}
 }

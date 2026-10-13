@@ -86,7 +86,6 @@ func (fsm *controller) send(ctx context.Context, next *Record, current *view, pl
 	return fsm.apply(ctx, next, current, &reconfig, plan, now)
 }
 
-// resend sends a reconfig again whose send was never confirmed, once the engine proves no member got it.
 func (fsm *controller) resend(ctx context.Context, next *Record, current *view, progress *engine.Progress, now time.Time) error {
 	reconfig := *next.Reconfig
 	plan := engine.Plan{

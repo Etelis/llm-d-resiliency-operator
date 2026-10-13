@@ -105,8 +105,9 @@ func (fake *fakeEngine) Apply(_ context.Context, obs engine.Observation, reconfi
 	}
 	fake.applied = append(fake.applied, reconfig)
 	fake.appliedOn = append(fake.appliedOn, obs)
-	var acceptances []engine.Acceptance
-	for _, id := range append(slices.Clone(reconfig.Participants), reconfig.Add...) {
+	members := slices.Concat(reconfig.Participants, reconfig.Add)
+	acceptances := make([]engine.Acceptance, 0, len(members))
+	for _, id := range members {
 		acceptances = append(acceptances, engine.Acceptance{Member: id, Accepted: fake.applyErr == nil})
 	}
 	return acceptances, fake.applyErr
@@ -149,6 +150,7 @@ func (fake *fakeJournal) current() string {
 	return strconv.Itoa(fake.version)
 }
 
+//nolint:gocritic // The contract returns the record, its version and an error.
 func (fake *fakeJournal) Load(context.Context) ([]byte, string, error) {
 	fake.loads++
 	if len(fake.loadErrs) > 0 {

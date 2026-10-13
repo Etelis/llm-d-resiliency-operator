@@ -43,13 +43,14 @@ func newClient(t *testing.T, withOwner bool, objects ...client.Object) client.Cl
 	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 }
 
+//nolint:gocritic // The record and its version.
 func load(t *testing.T, store *configmap.Journal) (string, string) {
 	t.Helper()
-	data, version, err := store.Load(t.Context())
+	bytes, version, err := store.Load(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(data), version
+	return string(bytes), version
 }
 
 func save(t *testing.T, store *configmap.Journal, data, version string) string {

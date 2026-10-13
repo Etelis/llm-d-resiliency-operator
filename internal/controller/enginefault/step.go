@@ -187,7 +187,6 @@ func (fsm *controller) unseen(ctx context.Context, next *Record, now time.Time, 
 	return err
 }
 
-// resume moves the deadlines past the time the controller could not see the group.
 func resume(next *Record, now time.Time) {
 	if next.UnseenSince.IsZero() {
 		return

@@ -240,7 +240,10 @@ func withSidecars(pod *corev1.Pod) *corev1.Pod {
 	})
 	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
 		{Name: "setup", ContainerID: pod.Name + "-setup", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}}},
-		{Name: "routing-proxy", ContainerID: pod.Name + "-routing", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+		{
+			Name: "routing-proxy", ContainerID: pod.Name + "-routing",
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		},
 	}
 	return pod
 }
@@ -284,13 +287,15 @@ func TestIdentityCoversEngineContainers(t *testing.T) {
 		mutate  func(*corev1.Pod)
 		changed bool
 	}{
-		"native sidecar restart":          {mutate: restartInit("routing-proxy")},
-		"init container status":           {mutate: restartInit("setup")},
-		"regular sidecar restart":         {mutate: restartRegular("proxy"), changed: true},
-		"engine restart":                  {mutate: restartRegular("engine"), changed: true},
-		"named: regular sidecar restart":  {engines: []string{"engine"}, mutate: restartRegular("proxy")},
-		"named: engine restart":           {engines: []string{"engine"}, mutate: restartRegular("engine"), changed: true},
-		"named: native sidecar as engine": {engines: []string{"engine", "routing-proxy"}, mutate: restartInit("routing-proxy"), changed: true},
+		"native sidecar restart":         {mutate: restartInit("routing-proxy")},
+		"init container status":          {mutate: restartInit("setup")},
+		"regular sidecar restart":        {mutate: restartRegular("proxy"), changed: true},
+		"engine restart":                 {mutate: restartRegular("engine"), changed: true},
+		"named: regular sidecar restart": {engines: []string{"engine"}, mutate: restartRegular("proxy")},
+		"named: engine restart":          {engines: []string{"engine"}, mutate: restartRegular("engine"), changed: true},
+		"named: native sidecar as engine": {
+			engines: []string{"engine", "routing-proxy"}, mutate: restartInit("routing-proxy"), changed: true,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -450,7 +455,7 @@ func TestReset(t *testing.T) {
 			world := newCluster(t, leaderWorkerSet(test.policy), readyPod(0), readyPod(1), readyPod(2))
 			instance := newWorkload(t, world)
 			err := instance.Reset(t.Context(), test.pods)
-			if test.err == errNoUID {
+			if errors.Is(test.err, errNoUID) {
 				if err == nil || errors.Is(err, workload.ErrUnsupported) {
 					t.Fatalf("error %v, want a missing UID", err)
 				}
