@@ -231,6 +231,8 @@ An unknown member never becomes Terminal by timeout. IRO cannot tell a hung memb
 reach, and the router may still send it traffic: removing it would break C1. Only the engine (`Terminal`) or
 the workload (the Pod is gone, `Terminating` or restarted) proves a process is gone.
 
+[example controller-blind]: ../../examples/controller-blind.mdx
+
 ### Reconfigs
 
 A reconfig is the one engine action IRO can have in flight. It is saved in the journal before it is
@@ -269,6 +271,10 @@ the group, the retry window is paused like the deadlines. A new leader finds `Ve
 what it changed, nothing else. A fresh group, or one that recovered without a reconfig, goes to `serving`
 on a `Healthy` plan.
 
+[example leader-change]: ../../examples/leader-change.mdx
+
+[example reconfig-fails]: ../../examples/reconfig-fails.mdx
+
 ### Restoring capacity
 
 Capacity never comes from new Pods. It comes back by resetting the failed Pod, or the whole group.
@@ -296,6 +302,8 @@ This runs only while the group is `serving`; a fault comes first.
 7. Full capacity comes back with the next group: any `ResetAll`, or a recreation by the workload.
 8. There is no extra state: the `Removing` Pods, the member states and the reconfig in flight say where things are.
 
+[example two-members-die]: ../../examples/two-members-die.mdx
+
 ## Rules
 
 ### Checks on every plan
@@ -318,6 +326,8 @@ A plan that fails C1 to C3 resets the group. An observation that fails C1, C4 or
 The observation is checked in `serving` and `recovering`. In `starting` no member is admitted yet: the
 `Healthy` plan that ends `starting` admits them all. C8 limits what the controller itself sends, so it is
 never violated at runtime.
+
+[example transient-fault]: ../../examples/transient-fault.mdx
 
 ### Guarantees
 

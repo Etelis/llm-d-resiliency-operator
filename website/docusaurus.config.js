@@ -1,5 +1,6 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import repoLinks from './src/remark/repo-links.js';
+import examples from './src/remark/examples.js';
 
 const repo = 'https://github.com/llm-d-incubation/llm-d-resiliency-operator';
 
@@ -20,6 +21,7 @@ export default {
           routeBasePath: 'docs',
           sidebarPath: './sidebars.js',
           remarkPlugins: [repoLinks],
+          beforeDefaultRemarkPlugins: [examples],
         },
         blog: false,
         theme: {customCss: './src/css/custom.css'},

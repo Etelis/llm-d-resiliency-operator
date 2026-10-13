@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Examples
 
-Each example walks one fault from start to end. Step through it with the buttons or the arrow keys: every step
+Each example walks one fault from start to end. Step through it with the buttons, or click it and use the arrow keys: every step
 shows the group's Pods and members, the controller's phase, and each call IRO makes with its input and output.
 
 All examples use the same group: four Pods, `pod-0` to `pod-3`, one engine member each, `m0` to `m3`.

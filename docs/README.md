@@ -16,6 +16,8 @@ recovery where the old one stopped.
 
 ![One member dies and the group goes 4, 3, 4 while serving](design/figures/recovery-timeline.svg)
 
+[example member-dies]: examples/member-dies.mdx
+
 Step through it, with every call IRO makes, and other faults in [Examples](examples/index.md).
 
 The controller is always in one of three phases. A fault moves it from `serving` to `recovering`; a reconfig that

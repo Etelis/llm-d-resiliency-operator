@@ -20,6 +20,11 @@
   padding: 1rem 1.25rem 1.1rem;
   margin: 1.25rem 0 2rem;
   background: var(--surface);
+  outline: none;
+}
+
+.scenario:focus-visible {
+  border-color: var(--ifm-color-primary);
 }
 
 [data-theme='dark'] .scenario {

@@ -1,4 +1,5 @@
 {
+  "title": "IRO cannot see the group",
   "pods": [
     {"name": "pod-0", "uid": "a1", "members": {"m0": "serving"}},
     {"name": "pod-1", "uid": "b1", "members": {"m1": "serving"}},

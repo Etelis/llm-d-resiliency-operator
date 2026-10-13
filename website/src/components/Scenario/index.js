@@ -100,18 +100,13 @@ export default function Scenario({data}) {
     if (match) go(Number(match[1]) - 1);
   }, []);
 
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.target.closest && event.target.closest('input, textarea')) return;
-      if (event.key === 'ArrowRight') go(index + 1);
-      if (event.key === 'ArrowLeft') go(index - 1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+  const onKey = (event) => {
+    if (event.key === 'ArrowRight') go(index + 1);
+    if (event.key === 'ArrowLeft') go(index - 1);
+  };
 
   return (
-    <div className={styles.scenario}>
+    <div className={styles.scenario} tabIndex={0} onKeyDown={onKey}>
       <div className={styles.timeline}>
         {steps.map((s, i) => (
           <button

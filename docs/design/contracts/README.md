@@ -55,6 +55,8 @@ Two kinds of action, with opposite delivery rules:
 
 ![The same recovery as calls between the controller and its plugins](../figures/recovery-sequence.svg)
 
+[example member-dies]: ../../examples/member-dies.mdx
+
 1. **Remove the dead member.** The driver reports `m3` Terminal. The policy proposes `Remove`, the reconfig
    runs, and `Progress` reports `Succeeded`. Only then does the controller record `m3@idD` as excluded and
    verify the survivors.
