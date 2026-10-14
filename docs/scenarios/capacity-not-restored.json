@@ -1,0 +1,102 @@
+{
+  "title": "The failed Pod cannot come back",
+  "page": "failures/capacity-not-restored",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "m3 was removed",
+      "phase": "serving",
+      "pods": {
+        "pod-3": {
+          "m3": "excluded"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ]
+    },
+    {
+      "title": "IRO resets pod-3, once",
+      "phase": "serving",
+      "pods": {
+        "pod-3": {
+          "uid": "d2",
+          "m3": "starting"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Reset([pod-3 d1])",
+          "out": "pod-3 recreated with UID d2"
+        }
+      ]
+    },
+    {
+      "title": "The new member cannot join",
+      "note": "For example the engine cannot grow, or the join reconfig fails.",
+      "phase": "serving",
+      "pods": {
+        "pod-3": {
+          "m3": "joining"
+        }
+      },
+      "calls": [
+        {
+          "to": "driver",
+          "call": "Apply(add m3@idD2)",
+          "out": "accepted"
+        },
+        {
+          "to": "policy",
+          "call": "Progress(...)",
+          "out": "Failed, scope Joiners: m3@idD2 could not join"
+        }
+      ]
+    },
+    {
+      "title": "The group keeps serving with 3",
+      "note": "One try, no budget. m3@idD2 is rejected, so pod-3 is not tried again until the next group. With --ft-capacity-restore=reset-all IRO would reset the group instead.",
+      "phase": "serving",
+      "pods": {
+        "pod-3": {
+          "m3": "excluded"
+        }
+      },
+      "journal": "serving \u00b7 admitted m0 m1 m2 \u00b7 rejected m3@idD2"
+    }
+  ]
+}

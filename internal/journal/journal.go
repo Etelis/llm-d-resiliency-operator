@@ -1,7 +1,7 @@
 // Copyright 2026 The llm-d Authors.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package journal stores the controller's record. See docs/design/contracts/journal.md.
+// Package journal stores the controller's record. See docs/components/journal.md.
 package journal
 
 import (

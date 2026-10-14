@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="470" viewBox="0 0 1040 470" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" rx="8" fill="#ffffff"/>
+<text x="32.0" y="42.0" font-size="20" fill="#202124" text-anchor="start" font-weight="700" xml:space="preserve">Same group or a new one?</text>
+<text x="32.0" y="66.0" font-size="13" fill="#5f6368" text-anchor="start" xml:space="preserve">checked on every Discover, before anything else</text>
+<rect x="60.0" y="100.0" width="220.0" height="56.0" rx="6" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+<text x="170.0" y="133.0" font-size="14" fill="#1a73e8" text-anchor="middle" font-weight="700" xml:space="preserve">Discover</text>
+<rect x="360.0" y="92.0" width="300.0" height="72.0" rx="6" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
+<text x="510.0" y="124.0" font-size="13.5" fill="#f29900" text-anchor="middle" font-weight="700" xml:space="preserve">Recreating, stopped, or an owed</text>
+<text x="510.0" y="144.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">ResetAll with old Pods left?</text>
+<rect x="740.0" y="92.0" width="260.0" height="72.0" rx="6" fill="#f1f3f4" stroke="#5f6368" stroke-width="2"/>
+<text x="870.0" y="124.0" font-size="14" fill="#5f6368" text-anchor="middle" font-weight="700" xml:space="preserve">Wait, act on nothing</text>
+<text x="870.0" y="144.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">repeat the owed ResetAll</text>
+<rect x="360.0" y="250.0" width="300.0" height="72.0" rx="6" fill="#fef7e0" stroke="#f29900" stroke-width="2"/>
+<text x="510.0" y="282.0" font-size="13.5" fill="#f29900" text-anchor="middle" font-weight="700" xml:space="preserve">Any saved Pod still there</text>
+<text x="510.0" y="302.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">with the same identity?</text>
+<rect x="740.0" y="210.0" width="260.0" height="72.0" rx="6" fill="#e6f4ea" stroke="#1e8e3e" stroke-width="2"/>
+<text x="870.0" y="242.0" font-size="14" fill="#1e8e3e" text-anchor="middle" font-weight="700" xml:space="preserve">Same group</text>
+<text x="870.0" y="262.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">compare Pod by Pod</text>
+<rect x="740.0" y="330.0" width="260.0" height="72.0" rx="6" fill="#fce8e6" stroke="#d93025" stroke-width="2"/>
+<text x="870.0" y="362.0" font-size="14" fill="#d93025" text-anchor="middle" font-weight="700" xml:space="preserve">New group</text>
+<text x="870.0" y="382.0" font-size="12.5" fill="#5f6368" text-anchor="middle" xml:space="preserve">clear the journal, go to starting</text>
+<path d="M 280.0 128.0 L 360.0 128.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="360.0,128.0 350.8,131.9 350.8,124.1" fill="#1a73e8"/>
+<path d="M 660.0 128.0 L 740.0 128.0" fill="none" stroke="#5f6368" stroke-width="1.8"/>
+<polygon points="740.0,128.0 730.8,131.9 730.8,124.1" fill="#5f6368"/>
+<text x="700.0" y="120.0" font-size="12" fill="#5f6368" text-anchor="middle" xml:space="preserve">yes</text>
+<path d="M 510.0 164.0 L 510.0 250.0" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+<polygon points="510.0,250.0 506.1,240.8 513.9,240.8" fill="#1a73e8"/>
+<text x="520.0" y="212.0" font-size="12" fill="#1a73e8" text-anchor="start" xml:space="preserve">no</text>
+<path d="M 660.0 272.0 L 700.0 272.0 L 700.0 246.0 L 740.0 246.0" fill="none" stroke="#1e8e3e" stroke-width="1.8"/>
+<polygon points="740.0,246.0 730.8,249.9 730.8,242.1" fill="#1e8e3e"/>
+<text x="680.0" y="262.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">yes</text>
+<path d="M 660.0 300.0 L 700.0 300.0 L 700.0 366.0 L 740.0 366.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
+<polygon points="740.0,366.0 730.8,369.9 730.8,362.1" fill="#d93025"/>
+<text x="680.0" y="320.0" font-size="12" fill="#d93025" text-anchor="middle" xml:space="preserve">no</text>
+</svg>

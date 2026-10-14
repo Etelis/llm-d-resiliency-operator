@@ -1,0 +1,163 @@
+{
+  "title": "The four calls",
+  "callsTitle": "What the controller calls",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "t": "Discover",
+      "title": "Discover: the Pods as they are now",
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "4 Pods, all Ready, sorted by Index"
+        }
+      ]
+    },
+    {
+      "t": "Reset",
+      "title": "Reset: pod-3 is replaced in the same place",
+      "note": "Same name and Index, new UID. The rest of the group keeps running.",
+      "pods": {
+        "pod-3": {
+          "uid": "d2",
+          "m3": "starting"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Reset([pod-3 d1])",
+          "out": "nil"
+        },
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "pod-3 with UID d2, Starting"
+        }
+      ]
+    },
+    {
+      "t": "again",
+      "title": "The same Reset again changes nothing",
+      "note": "No Pod with UID d1 exists any more, so the controller can repeat a call until Discover shows the result.",
+      "pods": {
+        "pod-3": {
+          "m3": "serving"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Reset([pod-3 d1])",
+          "out": "nil, nothing changed"
+        }
+      ]
+    },
+    {
+      "t": "Release",
+      "title": "Release: pod-3 goes and is not replaced",
+      "note": "Its GPUs are freed. The group gets smaller; nothing is added back.",
+      "pods": {
+        "pod-3": {
+          "gone": true
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Release([pod-3 d2])",
+          "out": "nil"
+        }
+      ]
+    },
+    {
+      "t": "ResetAll",
+      "title": "ResetAll: the whole group is recreated",
+      "pods": {
+        "pod-0": {
+          "uid": "a2",
+          "m0": "starting"
+        },
+        "pod-1": {
+          "uid": "b2",
+          "m1": "starting"
+        },
+        "pod-2": {
+          "uid": "c2",
+          "m2": "starting"
+        },
+        "pod-3": {
+          "uid": "d3",
+          "gone": false,
+          "m3": "starting"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "ResetAll([pod-0 a1, pod-1 b1, pod-2 c1])",
+          "out": "nil"
+        },
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "4 new Pods: a new group"
+        }
+      ]
+    },
+    {
+      "t": "again",
+      "title": "The same ResetAll again cannot touch the new group",
+      "note": "It names the old UIDs, and none of them exist.",
+      "calls": [
+        {
+          "to": "workload",
+          "call": "ResetAll([pod-0 a1, pod-1 b1, pod-2 c1])",
+          "out": "nil, nothing changed"
+        }
+      ]
+    },
+    {
+      "t": "unsupported",
+      "title": "A call the workload cannot do",
+      "note": "For example, replacing the leader alone. Nothing changes, and the controller asks for each Pod alone.",
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Reset([pod-0 a2, pod-3 d3])",
+          "out": "ErrUnsupported, nothing changed"
+        }
+      ]
+    }
+  ]
+}

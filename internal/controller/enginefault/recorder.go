@@ -10,7 +10,7 @@ import (
 	"github.com/llm-d/llm-d-resiliency-operator/internal/workload"
 )
 
-// Recorder is telemetry. See docs/design/contracts/telemetry.md.
+// Recorder is telemetry. See docs/components/telemetry.md.
 type Recorder interface {
 	Stepped(record *Record, err error)
 	PhaseChanged(from, to Phase, reason string)

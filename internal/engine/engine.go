@@ -1,7 +1,7 @@
 // Copyright 2026 The llm-d Authors.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package engine is the inference engine plugin. See docs/design/contracts/engine.md.
+// Package engine is the inference engine plugin. See docs/components/engines/index.md.
 package engine
 
 import (

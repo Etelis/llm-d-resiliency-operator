@@ -1,0 +1,133 @@
+{
+  "title": "The engine cannot recover in place",
+  "page": "failures/unrecoverable",
+  "pods": [
+    {
+      "name": "pod-0",
+      "uid": "a1",
+      "members": {
+        "m0": "serving"
+      }
+    },
+    {
+      "name": "pod-1",
+      "uid": "b1",
+      "members": {
+        "m1": "serving"
+      }
+    },
+    {
+      "name": "pod-2",
+      "uid": "c1",
+      "members": {
+        "m2": "serving"
+      }
+    },
+    {
+      "name": "pod-3",
+      "uid": "d1",
+      "members": {
+        "m3": "serving"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "The group serves",
+      "phase": "serving",
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ]
+    },
+    {
+      "title": "Too many members die",
+      "note": "For example, the survivors cannot hold every expert.",
+      "phase": "recovering",
+      "pods": {
+        "pod-0": {
+          "m0": "paused"
+        },
+        "pod-1": {
+          "m1": "dead"
+        },
+        "pod-2": {
+          "m2": "dead"
+        },
+        "pod-3": {
+          "m3": "dead"
+        }
+      },
+      "calls": [
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Unrecoverable: no redundant slot for a missing expert"
+        }
+      ]
+    },
+    {
+      "title": "IRO resets the whole group",
+      "phase": "starting",
+      "pods": {
+        "pod-0": {
+          "gone": true
+        },
+        "pod-1": {
+          "gone": true
+        },
+        "pod-2": {
+          "gone": true
+        },
+        "pod-3": {
+          "gone": true
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "ResetAll([pod-0 ... pod-3])",
+          "in": "reason: unrecoverable",
+          "out": "the whole group is recreated"
+        }
+      ]
+    },
+    {
+      "title": "A new group serves",
+      "phase": "serving",
+      "pods": {
+        "pod-0": {
+          "uid": "a2",
+          "m0": "serving"
+        },
+        "pod-1": {
+          "uid": "b2",
+          "m1": "serving"
+        },
+        "pod-2": {
+          "uid": "c2",
+          "m2": "serving"
+        },
+        "pod-3": {
+          "uid": "d2",
+          "m3": "serving"
+        }
+      },
+      "calls": [
+        {
+          "to": "workload",
+          "call": "Discover()",
+          "out": "4 new UIDs, none saved: a new group"
+        },
+        {
+          "to": "policy",
+          "call": "Plan(...)",
+          "out": "Healthy"
+        }
+      ]
+    }
+  ]
+}
