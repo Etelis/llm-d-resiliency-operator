@@ -1,7 +1,7 @@
 // Copyright 2026 The llm-d Authors.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package vllm is the vLLM engine. See docs/design/vllm.md.
+// Package vllm is the vLLM engine. See docs/components/engines/vllm.md.
 package vllm
 
 import (
