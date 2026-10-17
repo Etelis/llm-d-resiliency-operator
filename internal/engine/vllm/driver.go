@@ -220,7 +220,7 @@ func (eng *Engine) Verify(ctx context.Context, observation engine.Observation, m
 		return errors.New("nothing to verify")
 	}
 	found := ranksOf(observation)
-	payload := map[string]any{"prompt": "One plus one equals", "max_tokens": 8, "temperature": 0}
+	payload := map[string]any{"prompt": "One plus one equals", "max_tokens": 8, "temperature": 0, "ignore_eos": true}
 	errs := make([]error, len(members))
 	var wg sync.WaitGroup
 	for index, id := range members {
