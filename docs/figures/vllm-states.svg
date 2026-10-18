@@ -21,10 +21,10 @@
 <text x="530.0" y="76.0" font-size="12" fill="#1e8e3e" text-anchor="middle" xml:space="preserve">retry or scale_down succeeded</text>
 <path d="M 170.0 176.0 L 170.0 328.0 L 420.0 328.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
 <polygon points="420.0,328.0 410.8,331.9 410.8,324.1" fill="#d93025"/>
-<text x="180.0" y="318.0" font-size="12" fill="#d93025" text-anchor="start" xml:space="preserve">own worker died</text>
+<text x="180.0" y="318.0" font-size="12" fill="#d93025" text-anchor="start" xml:space="preserve">the rank&#x27;s worker crashed</text>
 <path d="M 530.0 176.0 L 530.0 300.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
 <polygon points="530.0,300.0 526.1,290.8 533.9,290.8" fill="#d93025"/>
-<text x="540.0" y="248.0" font-size="12" fill="#d93025" text-anchor="start" xml:space="preserve">own worker died</text>
+<text x="540.0" y="248.0" font-size="12" fill="#d93025" text-anchor="start" xml:space="preserve">the rank&#x27;s worker crashed</text>
 <path d="M 890.0 176.0 L 890.0 328.0 L 640.0 328.0" fill="none" stroke="#d93025" stroke-width="1.8"/>
 <polygon points="640.0,328.0 649.2,324.1 649.2,331.9" fill="#d93025"/>
 <text x="880.0" y="222.0" font-size="12" fill="#d93025" text-anchor="end" xml:space="preserve">scale_down failed, or no instruction</text>

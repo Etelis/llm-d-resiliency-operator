@@ -42,6 +42,10 @@ Rules that shape the driver:
 | `Grow` | no: the fault tolerance API cannot add ranks |
 | Same reconfig sent twice | never: `Progress` never says `NotStarted`, so IRO never resends. A second send would not be ignored: a healthy rank records it as failed under the same `request_id`, and a rank that faulted again runs it again. |
 
+Probe and Verify use ordinary completion requests and count toward vLLM request and token metrics.
+The API provides no option to exclude them; dashboards and traffic accounting must allow for this traffic.
+Verify sets `ignore_eos` and requires 8 completion tokens, including tokens hidden from the response text.
+
 ## Policy
 
 | Admitted ranks | Plan |
@@ -70,6 +74,9 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
 
 | Flag | Default |
 |---|---|
+| `--vllm-api-key-file` | unset; file containing the API key, read at startup |
+| `--vllm-https` | false; enable TLS with certificate verification |
+| `--vllm-ca-file` | unset; PEM CA bundle added to system roots, requires HTTPS |
 | `--vllm-api-port` | 8000 |
 | `--vllm-ranks-per-pod` | 1 |
 | `--vllm-store-port` | 29600 |
@@ -77,6 +84,13 @@ The plan stays `Wait` and the diagnosis deadline resets the group.
 
 ## Deploying vLLM for IRO
 
+For vLLM with `--api-key`, mount the key as a Secret file and pass its path with
+`--vllm-api-key-file`. IRO sends a Bearer header on every request. Restart IRO after changing the key.
+For TLS, set `--vllm-https` and optionally `--vllm-ca-file` for a private CA.
+The server certificate must cover the Pod IP used by IRO.
+
+- After `scale_down`, a removed rank stays dead. Its Pod remains while it hosts surviving ranks;
+  the removed rank cannot rejoin and keeps its GPU until the group is recreated.
 - Set `VLLM_KEEP_ALIVE_ON_ENGINE_DEATH=1`. Otherwise the API server exits with its engine and its container
   restarts: under `RecreateGroupOnPodRestart` the workload recreates the whole group and IRO never gets to
   shrink it; under `None` IRO removes the rank only once the restart changes its Pod's identity, and the

@@ -17,8 +17,8 @@ def vllm_states():
     s.arrow([(280, 140), (420, 140)], C["amber"], "fault in the busy loop", (350, 130))
     s.arrow([(640, 140), (780, 140)], C["amber"], "peers' mask known", (710, 130))
     s.arrow([(890, 120), (890, 84), (170, 84), (170, 120)], C["green"], "retry or scale_down succeeded", (530, 76))
-    s.arrow([(170, 176), (170, 328), (420, 328)], C["red"], "own worker died", (180, 318), anchor="start")
-    s.arrow([(530, 176), (530, 300)], C["red"], "own worker died", (540, 248), anchor="start")
+    s.arrow([(170, 176), (170, 328), (420, 328)], C["red"], "the rank's worker crashed", (180, 318), anchor="start")
+    s.arrow([(530, 176), (530, 300)], C["red"], "the rank's worker crashed", (540, 248), anchor="start")
     s.arrow(
         [(890, 176), (890, 328), (640, 328)],
         C["red"],

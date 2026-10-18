@@ -7,11 +7,14 @@ package vllm
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -28,6 +31,7 @@ type fakeRank struct {
 	status  map[string]any
 	health  int
 	text    string
+	tokens  int
 	applied []map[string]any
 	prompts int
 	down    bool
@@ -92,7 +96,7 @@ func (fake *fakeRank) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		fake.prompts++
 		reply(writer, map[string]any{
 			"choices": []any{map[string]any{"text": fake.text}},
-			"usage":   map[string]any{"completion_tokens": len(fake.text)},
+			"usage":   map[string]any{"completion_tokens": fake.tokens},
 		})
 	default:
 		writer.WriteHeader(http.StatusNotFound)
@@ -133,7 +137,7 @@ func newFleet(t *testing.T, pods, perPod int) *fleet {
 			Identity: fmt.Sprintf("id%d", index), State: workload.PodReady,
 		})
 		for local := range perPod {
-			fake := &fakeRank{rank: index*perPod + local, health: http.StatusOK, text: " two"}
+			fake := &fakeRank{rank: index*perPod + local, health: http.StatusOK, text: " two", tokens: 8}
 			fake.set("healthy", nil)
 			server := httptest.NewServer(fake)
 			t.Cleanup(server.Close)
@@ -523,6 +527,10 @@ func TestVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 	test.ranks[1].text = ""
+	if err := test.eng.Verify(t.Context(), obs, ids("dp0@id0", "dp1@id1")); err != nil {
+		t.Fatal(err)
+	}
+	test.ranks[1].tokens = 0
 	if err := test.eng.Verify(t.Context(), obs, ids("dp0@id0", "dp1@id1")); err == nil || !strings.Contains(err.Error(), "dp1") {
 		t.Fatalf("err %v", err)
 	}
@@ -548,5 +556,91 @@ func TestOptions(t *testing.T) {
 	eng, err := (&Options{APIPort: 8000, RanksPerPod: 1, StorePort: 29600, Timeout: time.Second}).New()
 	if err != nil || eng.Capabilities().Grow {
 		t.Fatalf("engine %v, err %v", eng, err)
+	}
+}
+
+func TestAuthenticatedHTTPS(t *testing.T) {
+	t.Parallel()
+	fake := &fakeRank{rank: 0, health: http.StatusOK, tokens: 8}
+	fake.set("healthy", nil)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/v1/completions" {
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+			if payload["max_tokens"] == float64(8) && payload["ignore_eos"] != true {
+				t.Error("verification must ignore EOS")
+			}
+		}
+		fake.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	keyFile := filepath.Join(t.TempDir(), "key")
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(keyFile, []byte("test-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	if err := os.WriteFile(caFile, cert, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host, port, err := net.SplitHostPort(server.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var apiPort int
+	if _, err := fmt.Sscan(port, &apiPort); err != nil {
+		t.Fatal(err)
+	}
+	options := Options{
+		APIPort: apiPort, RanksPerPod: 1, StorePort: 29600, Timeout: time.Second,
+		APIKeyFile: keyFile, HTTPS: true, CAFile: caFile,
+	}
+	driver, err := options.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := driver.Observe(t.Context(), []workload.Pod{{Name: "rank", IP: host, Identity: "id0"}})
+	if len(observation.Members) != 1 || !observation.Members[0].Serving {
+		t.Fatalf("observation %+v", observation)
+	}
+	if err := driver.Probe(t.Context(), observation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := driver.Apply(t.Context(), observation, engine.Reconfig{ID: "secure", Participants: ids("dp0@id0")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := driver.Verify(t.Context(), observation, ids("dp0@id0")); err != nil {
+		t.Fatal(err)
+	}
+	options.CAFile = ""
+	untrusted, err := options.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obs := untrusted.Observe(t.Context(), []workload.Pod{{IP: host}}); !obs.Members[0].Unknown {
+		t.Fatal("untrusted certificate accepted")
+	}
+}
+
+func TestInvalidCredentials(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"", "first\nsecond"} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			file := filepath.Join(t.TempDir(), "key")
+			if err := os.WriteFile(file, []byte(value), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			options := Options{APIPort: 8000, RanksPerPod: 1, StorePort: 29600, Timeout: time.Second, APIKeyFile: file}
+			if _, err := options.New(); err == nil {
+				t.Fatal("invalid key accepted")
+			}
+		})
 	}
 }

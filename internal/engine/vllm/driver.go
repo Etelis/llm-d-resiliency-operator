@@ -231,9 +231,6 @@ func (eng *Engine) Verify(ctx context.Context, observation engine.Observation, m
 		}
 		wg.Go(func() {
 			var response struct {
-				Choices []struct {
-					Text string `json:"text"`
-				} `json:"choices"`
 				Usage struct {
 					CompletionTokens int `json:"completion_tokens"`
 				} `json:"usage"`
@@ -242,8 +239,8 @@ func (eng *Engine) Verify(ctx context.Context, observation engine.Observation, m
 			if err == nil {
 				err = json.Unmarshal(body, &response)
 			}
-			if err == nil && (len(response.Choices) == 0 || response.Choices[0].Text == "" || response.Usage.CompletionTokens == 0) {
-				err = errors.New("no tokens generated")
+			if err == nil && response.Usage.CompletionTokens != 8 {
+				err = fmt.Errorf("generated %d tokens, want 8", response.Usage.CompletionTokens)
 			}
 			if err != nil {
 				errs[index] = fmt.Errorf("%s: %w", id, err)
@@ -264,9 +261,16 @@ func (eng *Engine) call(ctx context.Context, method, address, path string, paylo
 		}
 		body = bytes.NewReader(data)
 	}
-	request, err := http.NewRequestWithContext(ctx, method, "http://"+address+path, body)
+	scheme := "http"
+	if eng.options.HTTPS {
+		scheme = "https"
+	}
+	request, err := http.NewRequestWithContext(ctx, method, scheme+"://"+address+path, body)
 	if err != nil {
 		return nil, 0, err
+	}
+	if eng.apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+eng.apiKey)
 	}
 	if payload != nil {
 		request.Header.Set("Content-Type", "application/json")

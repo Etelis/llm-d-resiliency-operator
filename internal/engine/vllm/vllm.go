@@ -5,10 +5,13 @@
 package vllm
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +20,9 @@ import (
 )
 
 type Options struct {
+	APIKeyFile  string
+	HTTPS       bool
+	CAFile      string
 	APIPort     int
 	RanksPerPod int
 	StorePort   int
@@ -24,6 +30,9 @@ type Options struct {
 }
 
 func (options *Options) BindFlags(flags *flag.FlagSet) {
+	flags.StringVar(&options.APIKeyFile, "vllm-api-key-file", "", "file containing the vLLM API key")
+	flags.BoolVar(&options.HTTPS, "vllm-https", false, "use HTTPS for vLLM API requests")
+	flags.StringVar(&options.CAFile, "vllm-ca-file", "", "PEM CA bundle to trust in addition to system roots; requires --vllm-https")
 	flags.IntVar(&options.APIPort, "vllm-api-port", 8000, "API port of a Pod's first rank; rank i listens on this port plus i")
 	flags.IntVar(&options.RanksPerPod, "vllm-ranks-per-pod", 1, "data parallel ranks in each Pod")
 	flags.IntVar(&options.StorePort, "vllm-store-port", 29600,
@@ -35,12 +44,48 @@ func (options *Options) New() (engine.Engine, error) {
 	if options.RanksPerPod < 1 || options.Timeout <= 0 || !validPort(options.APIPort) || !validPort(options.StorePort) {
 		return nil, errors.New("invalid --vllm-* flags")
 	}
-	return &Engine{options: *options, client: &http.Client{}}, nil
+	var apiKey string
+	if options.APIKeyFile != "" {
+		data, err := os.ReadFile(options.APIKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("read vLLM API key: %w", err)
+		}
+		apiKey = strings.TrimSpace(string(data))
+		if apiKey == "" || strings.ContainsAny(apiKey, "\r\n") {
+			return nil, errors.New("vLLM API key must be a nonempty single line")
+		}
+	}
+	defaults, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("default HTTP transport has an unexpected type")
+	}
+	transport := defaults.Clone()
+	// Keep idle connections for every rank, including groups larger than 100 ranks.
+	transport.MaxIdleConns = 0
+	if options.CAFile != "" {
+		if !options.HTTPS {
+			return nil, errors.New("--vllm-ca-file requires --vllm-https")
+		}
+		data, err := os.ReadFile(options.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read vLLM CA bundle: %w", err)
+		}
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("load system CA roots: %w", err)
+		}
+		if !roots.AppendCertsFromPEM(data) {
+			return nil, errors.New("vLLM CA bundle contains no certificates")
+		}
+		transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+	}
+	return &Engine{options: *options, apiKey: apiKey, client: &http.Client{Transport: transport}}, nil
 }
 
 func validPort(port int) bool { return port > 0 && port < 65536 }
 
 type Engine struct {
+	apiKey  string
 	options Options
 	client  *http.Client
 }
