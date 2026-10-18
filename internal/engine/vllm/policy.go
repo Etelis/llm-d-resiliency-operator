@@ -56,9 +56,6 @@ func (*Engine) Plan(observation engine.Observation, admitted, _ []engine.MemberI
 
 //nolint:gocritic // The interface passes the reconfig by value.
 func (*Engine) Progress(observation engine.Observation, reconfig engine.Reconfig) engine.Progress {
-	if len(reconfig.Add) > 0 {
-		return failed("vLLM member admission is unsupported; cannot establish this join's outcome")
-	}
 	members := membersOf(observation)
 	found := ranksOf(observation)
 	done := 0
