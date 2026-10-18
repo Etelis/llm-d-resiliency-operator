@@ -241,7 +241,7 @@ that no member got a reconfig never says `NotStarted`: the reconfig then fails, 
 |---|---|
 | `Running` | waits, under the apply deadline |
 | `Succeeded` | marks removed members excluded and added members admitted, then [checks the result](#checking-the-result) |
-| `Failed`, scope `Joiners` | only the joiners failed: marks them rejected; the group is untouched |
+| `Failed`, scope `Joiners` | for a pure add, marks joiners rejected; admitted members are unchanged |
 | `Failed`, scope `Group` | the group may be broken: [resets it](#resetting-the-group) |
 | `NotStarted` | resends, as above, if no acceptance was saved |
 
@@ -269,7 +269,7 @@ else.
 
 ## Getting back to full
 
-Capacity never comes from new Pods. It comes back by resetting the failed Pod, or the whole group. This runs
+Capacity returns through replacement admission, resetting failed Pods, or resetting the group. This runs
 only while the group is `serving`; a fault comes first.
 
 ![Restoring capacity with reset-pod, reset-all or release](../figures/capacity.svg)
@@ -292,6 +292,28 @@ A call that names several Pods and returns `ErrUnsupported` is repeated for each
 workload can never replace does not keep the others below full. Other workload errors are retried next poll.
 
 [example two-members-die]: ../scenarios/two-members-die.json
+
+### Replacement admission
+
+An engine may report a [replacement candidate](engines/index.md#replacing-a-process-in-a-shared-pod) inside an
+unchanged Pod. The controller admits it with `Add` after the previous incarnation is excluded, recovery has
+passed verification, and every survivor serves and participates. The candidate uses the same logical name and
+Pod UID, with a distinct nonempty incarnation. One plan can name at most one replacement per excluded member.
+A replacement descriptor alone performs no action.
+
+Before `Apply`, the controller saves `Replacements[previous] = candidate` alongside the reconfig. The same
+operation and candidate can resume after a leader change. Another candidate for that previous incarnation is
+ineligible, including after a failed attempt. The attempt record lives until the group is replaced. A later
+failure of an admitted replacement is a new excluded incarnation and can have its own attempt.
+
+A pure add that reports a confirmed joiner-only failure rejects the candidate and records `ReconfigFinished`
+with the reason. Survivors keep serving at reduced capacity. Uncertain membership, a group-scoped failure, an
+apply deadline, or failed post-commit verification follows the existing group-reset rules. A rejected process
+that serves still breaks C5 and resets the group. The driver is responsible for cleanup or fencing before
+reporting joiner-only failure.
+
+See [a member dies inside a shared Pod](../failures/member-dies-in-shared-pod.md) and
+[a replacement cannot join](../failures/member-rejoin-fails.md).
 
 ## Resetting the group
 
@@ -334,13 +356,13 @@ when to stop, is the workload's restart policy. When the workload stops recreati
 | `--enable-engine-ft` | `false` | turn the controller on (needs `--leader-elect`) |
 | `--engine` | | engine implementation |
 | `--workload` | | workload implementation |
+| `--ft-poll-interval` | 1s | how often the leader reads the group and acts |
 | `--ft-diagnosis-timeout` | 75s | longest time in `recovering` with nothing sent |
 | `--ft-apply-timeout` | 90s | longest time a reconfig may stay in flight |
 | `--ft-verify-timeout` | 2m | how long a failed check after a reconfig is retried. 0 resets on the first failure. |
 | `--ft-unseen-timeout` | 10m | how long no admitted member may be readable before the group is reset. 0 waits forever. |
 | `--ft-capacity-restore` (target) | `reset-pod` | see [getting back to full](#getting-back-to-full) |
 | no flag | 2m | `FlapWindow`, for C6 |
-| no flag | 1s | `PollInterval` |
 
 Each engine and workload implementation registers its own flags.
 
@@ -395,6 +417,7 @@ type Record struct {
 
     Pods    map[string]PodRecord // by UID. Also what ResetAll names.
     Members map[MemberID]MemberState
+    Replacements map[MemberID]MemberID // excluded incarnation to its single replacement attempt
 
     Reconfig      *Reconfig  // in flight, nil when none
     ReconfigSince time.Time  // the apply deadline counts from here
