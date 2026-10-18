@@ -55,7 +55,6 @@ nothing until the workload recreates the group; see [resetting the group](../com
 
 ## Adding a failure
 
-
 A failure's stepper is a JSON file in `docs/scenarios`, shown on any page by one line:
 
 ```markdown
