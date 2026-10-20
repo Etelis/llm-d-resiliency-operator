@@ -1,6 +1,10 @@
 # Typos configuration
 # https://github.com/crate-ci/typos
 
+[default]
+# Short git commit hashes in backticks, like `384ba19`
+extend-ignore-re = ["`[0-9a-f]{7,40}`"]
+
 [default.extend-words]
 # Azure Kubernetes Service abbreviation
 AKS = "AKS"

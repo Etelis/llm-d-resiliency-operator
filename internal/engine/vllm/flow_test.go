@@ -146,8 +146,8 @@ func (store *memoryJournal) record(t *testing.T) enginefault.Record {
 }
 
 type lwsToday struct {
-	pods      []workload.Pod
-	resetAlls int
+	pods     []workload.Pod
+	resetAll int
 }
 
 func (wl *lwsToday) Discover(context.Context) (workload.Group, error) {
@@ -157,7 +157,7 @@ func (wl *lwsToday) Discover(context.Context) (workload.Group, error) {
 func (*lwsToday) Reset(context.Context, []workload.PodRef) error { return workload.ErrUnsupported }
 
 func (wl *lwsToday) ResetAll(context.Context, []workload.PodRef) error {
-	wl.resetAlls++
+	wl.resetAll++
 	return nil
 }
 
@@ -235,8 +235,8 @@ func TestFlowDeadRankIsRemoved(t *testing.T) {
 	run := newFlow(t)
 	run.fault(1)
 	record := run.until("shrunk and kept below full", kept("dp1@id1"))
-	if len(run.sim.applies) != 3 || run.wl.resetAlls != 0 {
-		t.Fatalf("members %v, applies %v, group resets %d", record.Members, run.sim.applies, run.wl.resetAlls)
+	if len(run.sim.applies) != 3 || run.wl.resetAll != 0 {
+		t.Fatalf("members %v, applies %v, group resets %d", record.Members, run.sim.applies, run.wl.resetAll)
 	}
 	for _, apply := range run.sim.applies {
 		if !strings.Contains(apply, ":scale_down:") {
@@ -282,8 +282,8 @@ func TestFlowSecondFaultRemovesAnotherRank(t *testing.T) {
 		}
 	}
 	record := run.until("shrunk twice", kept("dp1@id1"))
-	if run.wl.resetAlls != 0 || len(run.sim.applies) != 5 {
-		t.Fatalf("members %v, applies %v, group resets %d", record.Members, run.sim.applies, run.wl.resetAlls)
+	if run.wl.resetAll != 0 || len(run.sim.applies) != 5 {
+		t.Fatalf("members %v, applies %v, group resets %d", record.Members, run.sim.applies, run.wl.resetAll)
 	}
 }
 
@@ -293,8 +293,8 @@ func TestFlowWedgedRankResetsTheGroup(t *testing.T) {
 	run.fault(1)
 	run.fleet.ranks[3].set("healthy", nil)
 	run.until("reset", func(record enginefault.Record) bool { return record.Phase == enginefault.Starting })
-	if run.wl.resetAlls == 0 || len(run.sim.applies) != 0 {
-		t.Fatalf("group resets %d, applies %v", run.wl.resetAlls, run.sim.applies)
+	if run.wl.resetAll == 0 || len(run.sim.applies) != 0 {
+		t.Fatalf("group resets %d, applies %v", run.wl.resetAll, run.sim.applies)
 	}
 }
 
@@ -314,7 +314,7 @@ func TestFlowFaultAfterTheReconfigResetsAtOnce(t *testing.T) {
 	run.fault(3)
 	started := time.Now()
 	run.until("reset", func(record enginefault.Record) bool { return record.Phase == enginefault.Starting })
-	if run.wl.resetAlls == 0 || time.Since(started) > 5*time.Second {
-		t.Fatalf("group resets %d after %v", run.wl.resetAlls, time.Since(started))
+	if run.wl.resetAll == 0 || time.Since(started) > 5*time.Second {
+		t.Fatalf("group resets %d after %v", run.wl.resetAll, time.Since(started))
 	}
 }
