@@ -4,56 +4,116 @@
   "engines": {
     "vllm": {
       "pods": [
-        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
-        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
-        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
-        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}}
       ],
       "steps": [
         {
           "title": "The group serves",
           "phase": "serving",
-          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Healthy"}]
-        },
-        {
-          "title": "dp2's API stops answering",
-          "note": "Its engine may still run and serve. IRO cannot tell, so dp2 is unknown: never serving, never terminal.",
-          "phase": "recovering",
-          "pods": {"pod-2": {"dp2": "unknown"}},
           "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
             {
               "to": "driver",
               "call": "Observe(pods)",
-              "out": "dp0, dp1, dp3 serving · dp2 unknown",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
               "requests": [
-                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "dp0, dp1, dp3 healthy · dp2: timeout"},
-                {"call": "GET /health", "in": "on dp0 to dp3", "out": "dp2: timeout · rest 200"}
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"}
               ]
             },
-            {"to": "policy", "call": "Plan(...)", "out": "Healthy, but with dp2 unknown this counts as a fault"}
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
+          ]
+        },
+        {
+          "title": "dp2's API stops answering",
+          "note": "Its engine may still serve. The driver reports Unknown, with Serving and Terminal false. The status request times out, so the driver skips /health for dp2.",
+          "phase": "recovering",
+          "pods": {"pod-2": {"dp2": {"state": "unknown", "membership": "admitted", "status": "unread"}}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Unknown; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"},
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp2 on pod-2 (UID c1), port 8000", "out": "timeout; no response. /health is skipped for this rank."}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Wait: waiting for dp2 (unreachable)"},
+            {"to": "journal", "call": "Save(record)", "in": "phase recovering; incident opened"},
+            {
+              "to": "driver",
+              "call": "Probe(observation)",
+              "out": "completion requests sent to serving ranks; any errors are recorded in the recovery reason",
+              "requests": [
+                {"call": "POST /v1/completions", "in": "to dp0, dp1, dp3; {\"prompt\":\"ping\",\"max_tokens\":1}", "out": "200"}
+              ]
+            }
           ]
         },
         {
           "title": "IRO will not remove what it cannot see",
-          "note": "Removing dp2 could break C1: the router may still send it traffic. A plan that names dp2 is not sent.",
+          "note": "dp2 stays Unknown. The policy waits; the controller cannot remove it without terminal evidence.",
           "phase": "recovering",
-          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Wait"}]
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Unknown; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"},
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp2 on pod-2 (UID c1), port 8000", "out": "timeout; no response. /health is skipped for this rank."}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Wait"}
+          ]
         },
         {
           "title": "dp2 stays unknown past --ft-diagnosis-timeout",
           "phase": "starting",
-          "pods": {"pod-0": {"gone": true}, "pod-1": {"gone": true}, "pod-2": {"gone": true}, "pod-3": {"gone": true}},
+          "pods": {"pod-0": {"dp0": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-1": {"dp1": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-2": {"dp2": {"state": "unknown", "membership": "untracked", "status": "unread"}}, "pod-3": {"dp3": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}},
           "calls": [
-            {"to": "workload", "call": "ResetAll([pod-0 ... pod-3])", "in": "reason: diagnosis_deadline", "out": "the whole group is recreated"}
-          ]
+            {"to": "workload", "call": "Discover()", "out": "saved Pod UIDs are still present before the reset request"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Unknown; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"},
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp2 on pod-2 (UID c1), port 8000", "out": "timeout; no response. /health is skipped for this rank."}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Wait"},
+            {"to": "journal", "call": "Save(record)", "in": "phase starting; saved Pods marked Removing; membership cleared"},
+            {"to": "workload", "call": "ResetAll(pods)", "in": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1; reason: diagnosis_deadline", "out": "reset requested for the saved UIDs; the workload recreates the group asynchronously"}
+          ],
+          "journal": "starting; membership cleared; saved Pods marked Removing",
+          "decision": "IRO saves the reset intent, then asks the workload to recreate the saved Pod UIDs."
         },
         {
           "title": "A new group serves",
           "phase": "serving",
-          "pods": {"pod-0": {"uid": "a2", "dp0": "serving"}, "pod-1": {"uid": "b2", "dp1": "serving"}, "pod-2": {"uid": "c2", "dp2": "serving"}, "pod-3": {"uid": "d2", "dp3": "serving"}},
+          "pods": {"pod-0": {"uid": "a2", "dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-1": {"uid": "b2", "dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-2": {"uid": "c2", "dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-3": {"uid": "d2", "dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
           "calls": [
             {"to": "workload", "call": "Discover()", "out": "4 new UIDs, none saved: a new group"},
-            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
           ]
         }
       ]

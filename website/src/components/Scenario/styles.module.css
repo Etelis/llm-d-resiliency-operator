@@ -69,15 +69,6 @@
   cursor: not-allowed;
 }
 
-.soon {
-  margin-left: 0.35rem;
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ifm-color-emphasis-600);
-}
-
 .timeline {
   display: flex;
   gap: 0.4rem;
@@ -292,21 +283,6 @@
   padding: 0.4rem 0.7rem;
 }
 
-.callExpandable {
-  cursor: pointer;
-}
-
-.chevron {
-  font-size: 0.65rem;
-  color: var(--ifm-color-emphasis-600);
-  transition: transform 0.15s;
-  display: inline-block;
-}
-
-.chevronOpen {
-  transform: rotate(90deg);
-}
-
 .requests {
   margin: 0.2rem 0 0.45rem 0.75rem;
   border-left: 3px solid var(--teal);
@@ -421,4 +397,82 @@
 }
 .t_B {
   background: var(--amber);
+}
+
+.memberDetail {
+  width: 100%;
+  min-width: 0;
+}
+
+.facts {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.facts dt {
+  font-size: 0.68rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-top: 0.35rem;
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.requestsTitle {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.requestNote {
+  font-size: 0.78rem;
+  color: var(--ifm-color-emphasis-700);
+  margin: 0.4rem 0;
+}
+
+.request {
+  margin-top: 0.55rem;
+}
+
+.io > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .header { flex-direction: column; gap: 0.5rem; }
+}
+
+.callHeadButton {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.callHeadButton:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 0.65rem;
+  transition: transform 0.15s;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.requests[hidden] {
+  display: none;
 }

@@ -1,5 +1,6 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useId, useMemo, useState} from 'react';
 import styles from './styles.module.css';
+import {frames} from './frames.mjs';
 
 const LABELS = {
   serving: 'serving',
@@ -14,37 +15,23 @@ const LABELS = {
 const TARGETS = {
   workload: 'Workload',
   driver: 'Engine driver',
-  policy: 'Engine policy',
+  policy: 'Engine policy (pure)',
   journal: 'Journal',
   telemetry: 'Telemetry',
 };
 
 const ENGINES = [
   {id: 'vllm', label: 'vLLM'},
-  {id: 'sglang', label: 'SGLang', soon: 'No SGLang engine yet'},
+  {id: 'sglang', label: 'SGLang', disabledReason: 'No SGLang engine yet'},
 ];
 
-function frames(data) {
-  let pods = (data.pods || []).map((pod) => ({...pod, members: {...pod.members}}));
-  return data.steps.map((step) => {
-    pods = pods.map((pod) => {
-      const change = (step.pods || {})[pod.name];
-      if (!change) return pod;
-      const {uid, gone, ...members} = change;
-      return {
-        ...pod,
-        uid: uid || pod.uid,
-        gone: gone === undefined ? pod.gone && !uid : gone,
-        members: {...pod.members, ...members},
-      };
-    });
-    return {...step, pods};
-  });
+function memberState(member) {
+  return typeof member === 'string' ? member : member.state;
 }
 
 function podState(pod) {
   if (pod.gone) return 'gone';
-  const states = Object.values(pod.members);
+  const states = Object.values(pod.members).map(memberState);
   for (const s of ['dead', 'excluded', 'unknown', 'starting', 'joining', 'paused']) {
     if (states.includes(s)) return s;
   }
@@ -58,15 +45,29 @@ function Pod({pod}) {
       <div className={styles.podName}>{pod.name}</div>
       <div className={styles.podUid}>{pod.gone ? 'deleted' : `UID ${pod.uid}`}</div>
       <div className={styles.members}>
-        {Object.entries(pod.members).map(([name, s]) => (
-          <span key={name} className={`${styles.member} ${styles[`m_${pod.gone ? 'gone' : s}`]}`} title={LABELS[s]}>
-            {name}
-          </span>
-        ))}
+        {Object.entries(pod.members).map(([name, member]) => {
+          const s = memberState(member);
+          if (typeof member === 'string') {
+            return <span key={name} className={`${styles.member} ${styles[`m_${pod.gone ? 'gone' : s}`]}`} title={LABELS[s]}>{name}</span>;
+          }
+          return (
+            <div key={name} className={styles.memberDetail}>
+              <span className={`${styles.member} ${styles[`m_${pod.gone ? 'gone' : s}`]}`}>{name}</span>
+              <dl className={styles.facts}>
+                <dt>Engine status</dt><dd>{pod.gone ? 'no Pod' : member.status || 'not read'}</dd>
+                <dt>/health</dt><dd>{member.health ?? 'not called'}</dd>
+                {member.ft_state && <><dt>ft_state</dt><dd>{member.ft_state}</dd></>}
+                {member.last_ft_request_id && <><dt>Request ID</dt><dd>{member.last_ft_request_id}</dd></>}
+                <dt>IRO observation</dt><dd>{({serving: 'Serving', dead: 'Terminal', paused: 'Not serving, nonterminal', unknown: 'Unknown', starting: 'Not observed'})[s] || LABELS[s]}</dd>
+                <dt>Membership</dt><dd>{member.membership}</dd>
+              </dl>
+            </div>
+          );
+        })}
       </div>
-      <div className={`${styles.badge} ${styles[`b_${state}`]}`}>
-        {pod.gone ? 'deleted' : LABELS[state]}
-      </div>
+      {Object.values(pod.members).every((member) => typeof member === 'string') && (
+        <div className={`${styles.badge} ${styles[`b_${state}`]}`}>{pod.gone ? 'deleted' : LABELS[state]}</div>
+      )}
     </div>
   );
 }
@@ -91,18 +92,30 @@ function Request({request}) {
   );
 }
 
-function Call({call, open, onToggle}) {
+function Call({call}) {
   const expandable = call.requests && call.requests.length > 0;
+  const [expanded, setExpanded] = useState(false);
+  const requestsId = useId();
+  const heading = (
+    <>
+      <span className={`${styles.target} ${styles[`t_${call.to}`]}`}>{TARGETS[call.to] || call.to}</span>
+      <code className={styles.callName}>{call.call}</code>
+    </>
+  );
   return (
     <div>
-      <div
-        className={`${styles.call} ${expandable ? styles.callExpandable : ''}`}
-        onClick={expandable ? onToggle : undefined}>
-        <div className={styles.callHead}>
-          {expandable && <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}>&#9654;</span>}
-          <span className={`${styles.target} ${styles[`t_${call.to}`]}`}>{TARGETS[call.to] || call.to}</span>
-          <code className={styles.callName}>{call.call}</code>
-        </div>
+      <div className={styles.call}>
+        {expandable ? (
+          <button
+            type="button"
+            className={`${styles.callHead} ${styles.callHeadButton}`}
+            aria-expanded={expanded}
+            aria-controls={requestsId}
+            onClick={() => setExpanded((value) => !value)}>
+            <span className={`${styles.chevron} ${expanded ? styles.chevronOpen : ''}`} aria-hidden="true">&#9654;</span>
+            {heading}
+          </button>
+        ) : <div className={styles.callHead}>{heading}</div>}
         {call.in && (
           <div className={styles.io}>
             <span className={styles.ioTag}>in</span>
@@ -116,11 +129,11 @@ function Call({call, open, onToggle}) {
           </div>
         )}
       </div>
-      {expandable && open && (
-        <div className={styles.requests}>
-          {call.requests.map((request, i) => (
-            <Request key={i} request={request} />
-          ))}
+      {expandable && (
+        <div id={requestsId} className={styles.requests} hidden={!expanded}>
+          <div className={styles.requestsTitle}>Driver HTTP requests</div>
+          {call.call.startsWith('Observe') && <div className={styles.requestNote}>Ranks are read concurrently. Each rank's status is read before its health; a failed status read skips health. Each row sends one request to each listed target. Relevant response fields are shown.</div>}
+          {call.requests.map((request, i) => <Request key={i} request={request} />)}
         </div>
       )}
     </div>
@@ -134,20 +147,11 @@ export default function Scenario({data}) {
   const body = tabbed ? data.engines[engine] : data;
   const steps = useMemo(() => frames(body), [body]);
   const [index, setIndex] = useState(0);
-  const [expanded, setExpanded] = useState(() => new Set());
   const step = steps[index];
   const go = (i) => setIndex(Math.max(0, Math.min(steps.length - 1, i)));
-  const toggle = (key) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
   const select = (id) => {
     setEngine(id);
     setIndex(0);
-    setExpanded(new Set());
   };
 
   useEffect(() => {
@@ -170,10 +174,9 @@ export default function Scenario({data}) {
               type="button"
               className={`${styles.engineTab} ${engine === e.id ? styles.engineTabActive : ''}`}
               onClick={() => select(e.id)}
-              disabled={Boolean(e.soon)}
-              title={e.soon || e.label}>
+              disabled={Boolean(e.disabledReason)}
+              title={e.disabledReason || e.label}>
               {e.label}
-              {e.soon && <span className={styles.soon}>soon</span>}
             </button>
           ))}
         </div>
@@ -197,7 +200,7 @@ export default function Scenario({data}) {
           <div className={styles.stepTitle}>{step.title}</div>
           {step.note && <div className={styles.note}>{step.note}</div>}
         </div>
-        {step.phase && <span className={`${styles.phase} ${styles[`phase_${step.phase}`]}`}>{step.phase}</span>}
+        {step.phase && <span className={`${styles.phase} ${styles[`phase_${step.phase}`]}`}>Controller: {step.phase}</span>}
       </div>
 
       {step.pods.length > 0 && (
@@ -217,23 +220,25 @@ export default function Scenario({data}) {
 
       {step.calls && step.calls.length > 0 && (
         <div className={styles.calls}>
-          <div className={styles.callsTitle}>{body.callsTitle || data.callsTitle || 'What the controller calls'}</div>
+          <div className={styles.callsTitle}>{body.callsTitle || data.callsTitle || 'Selected controller calls, in order'}</div>
           {step.calls.map((call, i) => (
-            <Call key={i} call={call} open={expanded.has(`${index}-${i}`)} onToggle={() => toggle(`${index}-${i}`)} />
+            <Call key={`${engine}-${index}-${i}`} call={call} />
           ))}
         </div>
       )}
 
+      {step.decision && <div className={styles.internal}><span className={`${styles.target} ${styles.t_controller}`}>Controller decision</span><span>{step.decision}</span></div>}
+
       {step.journal && (
         <div className={styles.journal}>
-          <span className={`${styles.target} ${styles.t_journal}`}>Journal</span>
+          <span className={`${styles.target} ${styles.t_journal}`}>Saved journal</span>
           <code>{step.journal}</code>
         </div>
       )}
 
       <div className={styles.nav}>
         <button type="button" className="button button--secondary button--sm" onClick={() => go(index - 1)} disabled={index === 0}>
-          ◀ prev
+          prev
         </button>
         <span className={styles.counter}>
           step {index + 1} of {steps.length}
@@ -243,7 +248,7 @@ export default function Scenario({data}) {
           className="button button--primary button--sm"
           onClick={() => go(index + 1)}
           disabled={index === steps.length - 1}>
-          next ▶
+          next
         </button>
       </div>
     </div>

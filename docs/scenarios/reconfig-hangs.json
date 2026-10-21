@@ -4,62 +4,106 @@
   "engines": {
     "vllm": {
       "pods": [
-        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
-        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
-        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
-        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}}
       ],
       "steps": [
         {
-          "title": "dp3 dies; IRO sends the reconfig",
+          "title": "After diagnosis, IRO sends the reconfig",
           "phase": "recovering",
-          "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"dp3": "dead"}},
+          "pods": {"pod-0": {"dp0": {"state": "paused", "membership": "admitted", "status": "unhealthy", "health": 200}}, "pod-1": {"dp1": {"state": "paused", "membership": "admitted", "status": "unhealthy", "health": 200}}, "pod-2": {"dp2": {"state": "paused", "membership": "admitted", "status": "unhealthy", "health": 200}}, "pod-3": {"dp3": {"state": "dead", "membership": "admitted", "status": "healthy", "health": 503}}},
           "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving=false, Terminal=false, Unknown=false; dp1: Serving=false, Terminal=false, Unknown=false; dp2: Serving=false, Terminal=false, Unknown=false; dp3: Terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"unhealthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200"},
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "503"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Change: remove dp3"},
+            {"to": "journal", "call": "Save(record)", "in": "reconfig iro-ft-1; participants and removed identities; phase recovering"},
             {
               "to": "driver",
               "call": "Apply(observation, reconfig)",
               "in": "iro-ft-1: remove dp3",
               "out": "dp0, dp1, dp2 accept",
               "requests": [
-                {"call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+                {"call": "POST /v1/fault_tolerance/apply", "in": "to dp0, dp1, dp2; {\"instruction\":\"scale_down\",\"request_id\":\"iro-ft-1\",\"params\":{\"removed_dp_ranks\":[3]}}", "out": "202 from each participant; instruction queued"}
               ]
-            }
+            },
+            {"to": "journal", "call": "Save(record)", "in": "acceptances of iro-ft-1"}
           ],
-          "journal": "recovering · reconfig iro-ft-1 since 10:00:05"
+          "journal": "recovering; reconfig iro-ft-1 since 10:00:05"
         },
         {
           "title": "It keeps running",
           "phase": "recovering",
-          "internal": "The status keeps ft_state recovering with the reconfig's request_id until the ranks are healthy again.",
+          "internal": "The survivors report status unhealthy, ft_state recovering and last_ft_request_id iro-ft-1. The policy reports Running.",
           "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
             {
               "to": "driver",
               "call": "Observe(pods)",
-              "out": "survivors rebuilding",
+              "out": "dp0: Serving=false, Terminal=false, Unknown=false; dp1: Serving=false, Terminal=false, Unknown=false; dp2: Serving=false, Terminal=false, Unknown=false; dp3: Terminal",
               "requests": [
-                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp2", "out": "dp0, dp1, dp2 ft_state recovering, request iro-ft-1"},
-                {"call": "GET /health", "in": "on dp0 to dp2", "out": "200"}
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"unhealthy\",\"ft_state\":\"recovering\",\"last_ft_request_id\":\"iro-ft-1\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200"},
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "503"}
               ]
             },
-            {"to": "policy", "call": "Progress(...)", "out": "Running"}
-          ]
+            {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Running"}
+          ],
+          "pods": {"pod-0": {"dp0": {"state": "paused", "membership": "admitted", "status": "unhealthy", "health": 200, "ft_state": "recovering", "last_ft_request_id": "iro-ft-1"}}, "pod-1": {"dp1": {"state": "paused", "membership": "admitted", "status": "unhealthy", "health": 200, "ft_state": "recovering", "last_ft_request_id": "iro-ft-1"}}, "pod-2": {"dp2": {"state": "paused", "membership": "admitted", "status": "unhealthy", "health": 200, "ft_state": "recovering", "last_ft_request_id": "iro-ft-1"}}}
         },
         {
           "title": "--ft-apply-timeout passes",
           "phase": "starting",
-          "pods": {"pod-0": {"gone": true}, "pod-1": {"gone": true}, "pod-2": {"gone": true}, "pod-3": {"gone": true}},
+          "pods": {"pod-0": {"dp0": {"state": "paused", "membership": "untracked", "status": "unhealthy", "health": 200, "ft_state": "recovering", "last_ft_request_id": "iro-ft-1"}}, "pod-1": {"dp1": {"state": "paused", "membership": "untracked", "status": "unhealthy", "health": 200, "ft_state": "recovering", "last_ft_request_id": "iro-ft-1"}}, "pod-2": {"dp2": {"state": "paused", "membership": "untracked", "status": "unhealthy", "health": 200, "ft_state": "recovering", "last_ft_request_id": "iro-ft-1"}}, "pod-3": {"dp3": {"state": "dead", "membership": "untracked", "status": "healthy", "health": 503}}},
           "calls": [
-            {"to": "workload", "call": "ResetAll([pod-0 ... pod-3])", "in": "reason: apply_deadline", "out": "the whole group is recreated"}
+            {"to": "workload", "call": "Discover()", "out": "saved Pod UIDs are still present before the reset request"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving=false, Terminal=false, Unknown=false; dp1: Serving=false, Terminal=false, Unknown=false; dp2: Serving=false, Terminal=false, Unknown=false; dp3: Terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"unhealthy\",\"ft_state\":\"recovering\",\"last_ft_request_id\":\"iro-ft-1\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200"},
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "503"}
+              ]
+            },
+            {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Running"},
+            {"to": "journal", "call": "Save(record)", "in": "phase starting; saved Pods marked Removing; membership cleared"},
+            {"to": "workload", "call": "ResetAll(pods)", "in": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1; reason: apply_deadline", "out": "reset requested for the saved UIDs; the workload recreates the group asynchronously"}
           ],
-          "note": "90s by default, from when the reconfig was sent."
+          "note": "90s by default, from when the reconfig was sent.",
+          "journal": "starting; membership cleared; saved Pods marked Removing",
+          "decision": "IRO saves the reset intent, then asks the workload to recreate the saved Pod UIDs."
         },
         {
           "title": "A new group serves",
           "phase": "serving",
-          "pods": {"pod-0": {"uid": "a2", "dp0": "serving"}, "pod-1": {"uid": "b2", "dp1": "serving"}, "pod-2": {"uid": "c2", "dp2": "serving"}, "pod-3": {"uid": "d2", "dp3": "serving"}},
+          "pods": {"pod-0": {"uid": "a2", "dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-1": {"uid": "b2", "dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-2": {"uid": "c2", "dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-3": {"uid": "d2", "dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
           "calls": [
             {"to": "workload", "call": "Discover()", "out": "4 new UIDs, none saved: a new group"},
-            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
           ]
         }
       ]
