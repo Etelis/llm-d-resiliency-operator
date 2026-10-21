@@ -22,7 +22,15 @@
           "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"gone": true, "dp3": "dead"}},
           "calls": [
             {"to": "workload", "call": "Discover()", "out": "pod-3 is gone"},
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "dp0, dp1, dp2 unhealthy · nothing from pod-3: no IP"}
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0, dp1, dp2 paused · nothing from pod-3",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp2", "out": "all unhealthy"},
+                {"call": "GET /health", "in": "on dp0 to dp2", "out": "200"}
+              ]
+            }
           ],
           "journal": "dp3@idD added to the observation as terminal: pod lost"
         },
@@ -31,7 +39,15 @@
           "phase": "recovering",
           "calls": [
             {"to": "policy", "call": "Plan(...)", "out": "Change: remove dp3@idD"},
-            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+            {
+              "to": "driver",
+              "call": "Apply(observation, reconfig)",
+              "in": "iro-ft-1 to dp0, dp1, dp2",
+              "out": "dp0, dp1, dp2 accept",
+              "requests": [
+                {"call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+              ]
+            }
           ]
         },
         {
@@ -39,8 +55,15 @@
           "phase": "serving",
           "pods": {"pod-0": {"dp0": "serving"}, "pod-1": {"dp1": "serving"}, "pod-2": {"dp2": "serving"}, "pod-3": {"dp3": "excluded"}},
           "calls": [
-            {"to": "policy", "call": "Progress(...)", "out": "Succeeded · 3 ranks healthy"},
-            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0, dp1, dp2 · \"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+            {"to": "policy", "call": "Progress(...)", "out": "Succeeded"},
+            {
+              "to": "driver",
+              "call": "Verify(observation, [dp0, dp1, dp2])",
+              "out": "inference works",
+              "requests": [
+                {"call": "POST /v1/completions", "in": "\"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+              ]
+            }
           ]
         },
         {
@@ -57,8 +80,16 @@
           "note": "vLLM never reports a candidate joinable: it cannot admit ranks. The group serves with 3 until the next group.",
           "phase": "serving",
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp3 (d2)", "out": "healthy, a candidate"},
-            {"to": "policy", "call": "Plan(...)", "in": "candidate dp3@idD2", "out": "Healthy: no candidate is ever joinable"}
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp3 on d2 (dp3@idD2): healthy, never joinable",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp3 (d2)", "out": "healthy"},
+                {"call": "GET /health", "in": "on dp3 (d2)", "out": "200"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(...)", "in": "candidate dp3@idD2", "out": "Healthy: vLLM never admits candidates"}
           ],
           "journal": "serving · admitted dp0@idA dp1@idB dp2@idC"
         }

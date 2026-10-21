@@ -21,7 +21,15 @@
           "phase": "recovering",
           "pods": {"pod-2": {"dp2": "unknown"}},
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "dp0, dp1, dp3 healthy · dp2 unreachable: timeout"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0, dp1, dp3 serving · dp2 unknown",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "dp0, dp1, dp3 healthy · dp2: timeout"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "dp2: timeout · rest 200"}
+              ]
+            },
             {"to": "policy", "call": "Plan(...)", "out": "Healthy, but with dp2 unknown this counts as a fault"}
           ]
         },

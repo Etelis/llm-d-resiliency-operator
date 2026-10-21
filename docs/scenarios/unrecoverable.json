@@ -21,7 +21,15 @@
           "phase": "recovering",
           "pods": {"pod-0": {"dp0": "dead"}, "pod-1": {"dp1": "dead"}, "pod-2": {"dp2": "dead"}, "pod-3": {"dp3": "dead"}},
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "all dead, /health 503"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "all terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "all dead"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "all 503"}
+              ]
+            },
             {"to": "policy", "call": "Plan(...)", "out": "Unrecoverable: no rank survives"}
           ]
         },

@@ -17,11 +17,19 @@
         },
         {
           "title": "A step fails, nobody dies",
-          "note": "For example, one collective times out. Every rank pauses.",
+          "note": "For example, one collective times out. Every member pauses.",
           "phase": "recovering",
           "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"dp3": "paused"}},
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "all unhealthy, none dead"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0 to dp3 paused, none terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "all unhealthy, none dead"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "200"}
+              ]
+            },
             {"to": "policy", "call": "Plan(...)", "out": "Change: remove nobody, add nobody (a retry)"}
           ]
         },
@@ -31,7 +39,15 @@
           "internal": "vLLM accepts an instruction only while a rank is unhealthy.",
           "calls": [
             {"to": "journal", "call": "Save(record)", "in": "reconfig iro-ft-1: retry"},
-            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0 to dp3 · retry · request_id iro-ft-1", "out": "202 · queued"}
+            {
+              "to": "driver",
+              "call": "Apply(observation, reconfig)",
+              "in": "iro-ft-1 to dp0 to dp3",
+              "out": "all accept",
+              "requests": [
+                {"call": "POST /v1/fault_tolerance/apply", "in": "on dp0 to dp3 · retry · request_id iro-ft-1", "out": "202 · queued"}
+              ]
+            }
           ]
         },
         {
@@ -40,8 +56,15 @@
           "phase": "serving",
           "pods": {"pod-0": {"dp0": "serving"}, "pod-1": {"dp1": "serving"}, "pod-2": {"dp2": "serving"}, "pod-3": {"dp3": "serving"}},
           "calls": [
-            {"to": "policy", "call": "Progress(...)", "out": "Succeeded · 4 ranks healthy"},
-            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0 to dp3 · \"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+            {"to": "policy", "call": "Progress(...)", "out": "Succeeded"},
+            {
+              "to": "driver",
+              "call": "Verify(observation, [dp0, dp1, dp2, dp3])",
+              "out": "inference works",
+              "requests": [
+                {"call": "POST /v1/completions", "in": "\"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+              ]
+            }
           ]
         }
       ]

@@ -20,7 +20,15 @@
           "title": "IRO sends the reconfig",
           "phase": "recovering",
           "calls": [
-            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+            {
+              "to": "driver",
+              "call": "Apply(observation, reconfig)",
+              "in": "iro-ft-1: remove dp3",
+              "out": "dp0, dp1, dp2 accept",
+              "requests": [
+                {"call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+              ]
+            }
           ]
         },
         {
@@ -29,7 +37,15 @@
           "phase": "recovering",
           "pods": {"pod-1": {"dp1": "dead"}},
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "dp1 dead, /health 503 · dp0, dp2 still recovering under iro-ft-1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp1 terminal · dp0, dp2 still recovering",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp2", "out": "dp1 dead · dp0, dp2 ft_state recovering, request iro-ft-1"},
+                {"call": "GET /health", "in": "on dp0 to dp2", "out": "dp1: 503 · rest 200"}
+              ]
+            },
             {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Failed, scope Group: dp1 died during the reconfig"}
           ]
         },

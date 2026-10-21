@@ -82,6 +82,7 @@ lists the Pods once, then the steps; each step names only what changed.
 | `phase` | `starting`, `serving`, `recovering` |
 | member state | `serving`, `paused`, `dead`, `excluded`, `starting`, `joining`, `unknown` |
 | Pod change | member states, a new `uid`, or `"gone": true` |
-| `calls[].to` | `workload`, `driver`, `policy`, `journal`, `telemetry`, `engine` (a request into the engine) |
+| `calls[].to` | `workload`, `driver`, `policy`, `journal`, `telemetry` |
 | optional | `page` (where the title links), `note`, `journal` and `internal` (engine state) on a step, `in` and `out` on a call |
 | `engines` | wraps `pods` and `steps` per engine; the stepper shows one tab per engine |
+| `requests` | on a driver call: the engine commands inside it, shown on click |

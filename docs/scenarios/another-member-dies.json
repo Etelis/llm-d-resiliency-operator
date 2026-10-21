@@ -23,7 +23,15 @@
           "phase": "recovering",
           "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "dead"}, "pod-2": {"dp2": "paused"}},
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "dp1 dead, /health 503 · dp0, dp2 unhealthy"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp1 terminal · dp0, dp2 paused · dp3 still excluded",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp2", "out": "dp1 dead · dp0, dp2 unhealthy"},
+                {"call": "GET /health", "in": "on dp0 to dp2", "out": "dp1: 503 · rest 200"}
+              ]
+            },
             {"to": "policy", "call": "Plan(...)", "in": "admitted dp0, dp1, dp2", "out": "Change: remove dp1@idB"}
           ]
         },
@@ -31,7 +39,15 @@
           "title": "A second reconfig removes dp1",
           "phase": "recovering",
           "calls": [
-            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp2 · scale_down · removed_dp_ranks [1] · request_id iro-ft-2", "out": "202 · queued"}
+            {
+              "to": "driver",
+              "call": "Apply(observation, reconfig)",
+              "in": "iro-ft-2 to dp0, dp2",
+              "out": "dp0, dp2 accept",
+              "requests": [
+                {"call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp2 · scale_down · removed_dp_ranks [1] · request_id iro-ft-2", "out": "202 · queued"}
+              ]
+            }
           ]
         },
         {
@@ -39,8 +55,15 @@
           "phase": "serving",
           "pods": {"pod-0": {"dp0": "serving"}, "pod-1": {"dp1": "excluded"}, "pod-2": {"dp2": "serving"}},
           "calls": [
-            {"to": "policy", "call": "Progress(...)", "out": "Succeeded · 2 ranks healthy"},
-            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0, dp2 · \"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+            {"to": "policy", "call": "Progress(...)", "out": "Succeeded"},
+            {
+              "to": "driver",
+              "call": "Verify(observation, [dp0, dp2])",
+              "out": "inference works",
+              "requests": [
+                {"call": "POST /v1/completions", "in": "\"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+              ]
+            }
           ]
         },
         {

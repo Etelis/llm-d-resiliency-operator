@@ -24,7 +24,14 @@
           "note": "One failed request is not a fault: IRO checks again every poll.",
           "phase": "serving",
           "calls": [
-            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0, dp1, dp2 · \"One plus one equals\" · max_tokens 8", "out": "dp1: generated 5 tokens, want 8"}
+            {
+              "to": "driver",
+              "call": "Verify(observation, [dp0, dp1, dp2])",
+              "out": "dp1: completion failed",
+              "requests": [
+                {"call": "POST /v1/completions", "in": "\"One plus one equals\" · max_tokens 8", "out": "dp1: generated 5 tokens, want 8"}
+              ]
+            }
           ]
         },
         {

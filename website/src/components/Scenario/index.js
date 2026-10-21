@@ -71,24 +71,56 @@ function Pod({pod}) {
   );
 }
 
-function Call({call, engineLabel}) {
-  const toEngine = call.to === 'engine';
+function Request({request}) {
   return (
-    <div className={`${styles.call} ${toEngine ? styles.callEngine : ''}`}>
-      <div className={styles.callHead}>
-        <span className={`${styles.target} ${styles[`t_${call.to}`]}`}>{toEngine ? engineLabel : TARGETS[call.to] || call.to}</span>
-        <code className={styles.callName}>{call.call}</code>
-      </div>
-      {call.in && (
+    <div className={styles.request}>
+      <code className={styles.callName}>{request.call}</code>
+      {request.in && (
         <div className={styles.io}>
           <span className={styles.ioTag}>in</span>
-          <span>{call.in}</span>
+          <span>{request.in}</span>
         </div>
       )}
-      {call.out && (
+      {request.out && (
         <div className={styles.io}>
           <span className={`${styles.ioTag} ${styles.out}`}>out</span>
-          <span>{call.out}</span>
+          <span>{request.out}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Call({call, open, onToggle}) {
+  const expandable = call.requests && call.requests.length > 0;
+  return (
+    <div>
+      <div
+        className={`${styles.call} ${expandable ? styles.callExpandable : ''}`}
+        onClick={expandable ? onToggle : undefined}>
+        <div className={styles.callHead}>
+          {expandable && <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}>&#9654;</span>}
+          <span className={`${styles.target} ${styles[`t_${call.to}`]}`}>{TARGETS[call.to] || call.to}</span>
+          <code className={styles.callName}>{call.call}</code>
+        </div>
+        {call.in && (
+          <div className={styles.io}>
+            <span className={styles.ioTag}>in</span>
+            <span>{call.in}</span>
+          </div>
+        )}
+        {call.out && (
+          <div className={styles.io}>
+            <span className={`${styles.ioTag} ${styles.out}`}>out</span>
+            <span>{call.out}</span>
+          </div>
+        )}
+      </div>
+      {expandable && open && (
+        <div className={styles.requests}>
+          {call.requests.map((request, i) => (
+            <Request key={i} request={request} />
+          ))}
         </div>
       )}
     </div>
@@ -102,11 +134,20 @@ export default function Scenario({data}) {
   const body = tabbed ? data.engines[engine] : data;
   const steps = useMemo(() => frames(body), [body]);
   const [index, setIndex] = useState(0);
+  const [expanded, setExpanded] = useState(() => new Set());
   const step = steps[index];
   const go = (i) => setIndex(Math.max(0, Math.min(steps.length - 1, i)));
+  const toggle = (key) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const select = (id) => {
     setEngine(id);
     setIndex(0);
+    setExpanded(new Set());
   };
 
   useEffect(() => {
@@ -178,7 +219,7 @@ export default function Scenario({data}) {
         <div className={styles.calls}>
           <div className={styles.callsTitle}>{body.callsTitle || data.callsTitle || 'What the controller calls'}</div>
           {step.calls.map((call, i) => (
-            <Call key={i} call={call} engineLabel={engineLabel} />
+            <Call key={i} call={call} open={expanded.has(`${index}-${i}`)} onToggle={() => toggle(`${index}-${i}`)} />
           ))}
         </div>
       )}

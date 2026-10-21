@@ -292,9 +292,34 @@
   padding: 0.4rem 0.7rem;
 }
 
-.callEngine {
-  border-left-color: var(--teal);
+.callExpandable {
+  cursor: pointer;
+}
+
+.chevron {
+  font-size: 0.65rem;
+  color: var(--ifm-color-emphasis-600);
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.requests {
+  margin: 0.2rem 0 0.45rem 0.75rem;
+  border-left: 3px solid var(--teal);
   background: var(--teal-bg);
+  border-radius: 0 6px 6px 0;
+  padding: 0.35rem 0.7rem 0.4rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.request {
+  display: grid;
+  gap: 0.1rem;
 }
 
 .internal {

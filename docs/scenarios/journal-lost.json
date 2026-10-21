@@ -30,7 +30,15 @@
           "note": "Nothing is reset: the group never stopped serving.",
           "phase": "serving",
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "4 ranks healthy"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0 to dp3 serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "all healthy"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "200"}
+              ]
+            },
             {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
           ],
           "journal": "serving · admitted dp0@idA dp1@idB dp2@idC dp3@idD"

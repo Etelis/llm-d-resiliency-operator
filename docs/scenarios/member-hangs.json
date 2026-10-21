@@ -21,8 +21,16 @@
           "phase": "recovering",
           "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"dp3": "paused"}},
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "all unhealthy, none dead"},
-            {"to": "engine", "call": "POST /v1/completions", "in": "Probe: ping · max_tokens 1, on serving ranks", "out": "no serving rank to ask"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "all paused, none terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "all unhealthy, none dead"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "200"}
+              ]
+            },
+            {"to": "driver", "call": "Probe(observation)", "out": "no serving rank to ask"},
             {"to": "policy", "call": "Plan(...)", "out": "Wait: the engine is still diagnosing"}
           ],
           "journal": "recovering since 10:00:00"

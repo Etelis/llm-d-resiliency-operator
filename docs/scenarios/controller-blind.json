@@ -14,7 +14,15 @@
           "title": "The group serves",
           "phase": "serving",
           "calls": [
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "4 ranks healthy"}
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0 to dp3 serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "all healthy"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "200"}
+              ]
+            }
           ]
         },
         {
@@ -24,7 +32,15 @@
           "pods": {"pod-0": {"dp0": "unknown"}, "pod-1": {"dp1": "unknown"}, "pod-2": {"dp2": "unknown"}, "pod-3": {"dp3": "unknown"}},
           "calls": [
             {"to": "workload", "call": "Discover()", "out": "4 Pods, all Ready"},
-            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "no rank reachable: timeouts"}
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "no admitted member could be read",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "on dp0 to dp3", "out": "timeout"},
+                {"call": "GET /health", "in": "on dp0 to dp3", "out": "timeout"}
+              ]
+            }
           ],
           "journal": "serving · unseen since 10:12:33"
         },
