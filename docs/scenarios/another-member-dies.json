@@ -1,142 +1,59 @@
 {
   "title": "Another member dies after a shrink",
   "page": "failures/another-member-dies",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "m3 died and was removed",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "excluded"
-        }
-      },
-      "calls": [
-        {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "excluded"}}
       ],
-      "journal": "serving \u00b7 admitted m0 m1 m2 \u00b7 excluded m3@idD"
-    },
-    {
-      "title": "m1 dies too",
-      "phase": "recovering",
-      "pods": {
-        "pod-0": {
-          "m0": "paused"
-        },
-        "pod-1": {
-          "m1": "dead"
-        },
-        "pod-2": {
-          "m2": "paused"
-        }
-      },
-      "calls": [
+      "steps": [
         {
-          "to": "driver",
-          "call": "Observe(pods)",
-          "out": "m1 terminal \u00b7 m0, m2 paused \u00b7 m3 still excluded"
+          "title": "dp3 died and was removed",
+          "phase": "serving",
+          "calls": [
+            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+          ],
+          "journal": "serving · admitted dp0 dp1 dp2 · excluded dp3@idD"
         },
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "in": "admitted m0, m1, m2",
-          "out": "Change: remove m1@idB"
-        }
-      ]
-    },
-    {
-      "title": "A second reconfig removes m1",
-      "phase": "recovering",
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Apply(observation, reconfig)",
-          "in": "iro-ft-2 to m0, m2",
-          "out": "m0, m2 accept"
-        }
-      ]
-    },
-    {
-      "title": "The group serves with 2 members",
-      "phase": "serving",
-      "pods": {
-        "pod-0": {
-          "m0": "serving"
-        },
-        "pod-1": {
-          "m1": "excluded"
-        },
-        "pod-2": {
-          "m2": "serving"
-        }
-      },
-      "calls": [
-        {
-          "to": "policy",
-          "call": "Progress(...)",
-          "out": "Succeeded"
+          "title": "dp1 dies too",
+          "phase": "recovering",
+          "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "dead"}, "pod-2": {"dp2": "paused"}},
+          "calls": [
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "dp1 dead, /health 503 · dp0, dp2 unhealthy"},
+            {"to": "policy", "call": "Plan(...)", "in": "admitted dp0, dp1, dp2", "out": "Change: remove dp1@idB"}
+          ]
         },
         {
-          "to": "driver",
-          "call": "Verify(observation, [m0, m2])",
-          "out": "inference works"
-        }
-      ]
-    },
-    {
-      "title": "Both failed Pods are reset",
-      "note": "From here it is the same as a member dying once.",
-      "phase": "serving",
-      "pods": {
-        "pod-1": {
-          "uid": "b2",
-          "m1": "starting"
+          "title": "A second reconfig removes dp1",
+          "phase": "recovering",
+          "calls": [
+            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp2 · scale_down · removed_dp_ranks [1] · request_id iro-ft-2", "out": "202 · queued"}
+          ]
         },
-        "pod-3": {
-          "uid": "d2",
-          "m3": "starting"
-        }
-      },
-      "calls": [
         {
-          "to": "workload",
-          "call": "Reset([pod-1 b1, pod-3 d1])",
-          "out": "both recreated with new UIDs"
+          "title": "The group serves with 2 ranks",
+          "phase": "serving",
+          "pods": {"pod-0": {"dp0": "serving"}, "pod-1": {"dp1": "excluded"}, "pod-2": {"dp2": "serving"}},
+          "calls": [
+            {"to": "policy", "call": "Progress(...)", "out": "Succeeded · 2 ranks healthy"},
+            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0, dp2 · \"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+          ]
+        },
+        {
+          "title": "Capacity stays short",
+          "note": "vLLM cannot add ranks: both failed Pods stay as they are, their GPUs held until the next group. With --ft-capacity-restore=reset-all IRO resets the group instead.",
+          "phase": "serving",
+          "calls": [
+            {"to": "driver", "call": "Capabilities()", "out": "Grow: no"},
+            {"to": "controller", "call": "restore capacity", "in": "pod-1 and pod-3 hold only excluded members", "out": "no reset · dp1@idB, dp3@idD rejected"}
+          ],
+          "journal": "serving · admitted dp0@idA dp2@idC · rejected dp1@idB dp3@idD"
         }
       ]
     }
-  ]
+  }
 }

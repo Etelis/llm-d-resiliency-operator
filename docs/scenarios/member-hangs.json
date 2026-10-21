@@ -1,157 +1,57 @@
 {
   "title": "A member hangs",
   "page": "failures/member-hangs",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "The group serves",
-      "phase": "serving",
-      "calls": [
-        {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
-      ]
-    },
-    {
-      "title": "m2 stops making progress",
-      "note": "The others notice the step never finishes and pause. Nobody is terminal, so nothing can be removed (C1).",
-      "phase": "recovering",
-      "pods": {
-        "pod-0": {
-          "m0": "paused"
-        },
-        "pod-1": {
-          "m1": "paused"
-        },
-        "pod-2": {
-          "m2": "paused"
-        },
-        "pod-3": {
-          "m3": "paused"
-        }
-      },
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Observe(pods)",
-          "out": "all paused, none terminal"
-        },
-        {
-          "to": "driver",
-          "call": "Probe(observation)",
-          "out": "fails: no member answers a request"
-        },
-        {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Wait: the engine is still diagnosing"
-        }
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
       ],
-      "journal": "recovering since 10:00:00"
-    },
-    {
-      "title": "Still waiting",
-      "note": "The engine may still find the fault and report m2 terminal; then it is a member dying.",
-      "phase": "recovering",
-      "calls": [
+      "steps": [
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Wait"
-        }
-      ]
-    },
-    {
-      "title": "--ft-diagnosis-timeout passes",
-      "phase": "starting",
-      "pods": {
-        "pod-0": {
-          "gone": true
-        },
-        "pod-1": {
-          "gone": true
-        },
-        "pod-2": {
-          "gone": true
-        },
-        "pod-3": {
-          "gone": true
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "ResetAll([pod-0 ... pod-3])",
-          "in": "reason: diagnosis_deadline",
-          "out": "the whole group is recreated"
-        }
-      ],
-      "note": "75s by default, from the fault. Nothing the engine reported could be acted on."
-    },
-    {
-      "title": "A new group serves",
-      "phase": "serving",
-      "pods": {
-        "pod-0": {
-          "uid": "a2",
-          "m0": "serving"
-        },
-        "pod-1": {
-          "uid": "b2",
-          "m1": "serving"
-        },
-        "pod-2": {
-          "uid": "c2",
-          "m2": "serving"
-        },
-        "pod-3": {
-          "uid": "d2",
-          "m3": "serving"
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "Discover()",
-          "out": "4 new UIDs, none saved: a new group"
+          "title": "The group serves",
+          "phase": "serving",
+          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Healthy"}]
         },
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
+          "title": "dp2 stops making progress",
+          "note": "A collective step never finishes. Every rank reports the fault and stops serving; nobody is dead, so nothing can be removed (C1).",
+          "phase": "recovering",
+          "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"dp3": "paused"}},
+          "calls": [
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "all unhealthy, none dead"},
+            {"to": "engine", "call": "POST /v1/completions", "in": "Probe: ping · max_tokens 1, on serving ranks", "out": "no serving rank to ask"},
+            {"to": "policy", "call": "Plan(...)", "out": "Wait: the engine is still diagnosing"}
+          ],
+          "journal": "recovering since 10:00:00"
+        },
+        {
+          "title": "Still waiting",
+          "note": "The engine may still find the fault and report dp2 dead; then it is a member dying.",
+          "phase": "recovering",
+          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Wait"}]
+        },
+        {
+          "title": "--ft-diagnosis-timeout passes",
+          "phase": "starting",
+          "pods": {"pod-0": {"gone": true}, "pod-1": {"gone": true}, "pod-2": {"gone": true}, "pod-3": {"gone": true}},
+          "calls": [
+            {"to": "workload", "call": "ResetAll([pod-0 ... pod-3])", "in": "reason: diagnosis_deadline", "out": "the whole group is recreated"}
+          ],
+          "note": "75s by default, from the fault. Nothing the engine reported could be acted on."
+        },
+        {
+          "title": "A new group serves",
+          "phase": "serving",
+          "pods": {"pod-0": {"uid": "a2", "dp0": "serving"}, "pod-1": {"uid": "b2", "dp1": "serving"}, "pod-2": {"uid": "c2", "dp2": "serving"}, "pod-3": {"uid": "d2", "dp3": "serving"}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "4 new UIDs, none saved: a new group"},
+            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+          ]
         }
       ]
     }
-  ]
+  }
 }

@@ -1,102 +1,51 @@
 {
   "title": "The failed Pod cannot come back",
   "page": "failures/capacity-not-restored",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "m3 was removed",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "excluded"
-        }
-      },
-      "calls": [
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "excluded"}}
+      ],
+      "steps": [
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
-      ]
-    },
-    {
-      "title": "IRO resets pod-3, once",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "uid": "d2",
-          "m3": "starting"
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "Reset([pod-3 d1])",
-          "out": "pod-3 recreated with UID d2"
-        }
-      ]
-    },
-    {
-      "title": "The new member cannot join",
-      "note": "For example the engine cannot grow, or the join reconfig fails.",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "joining"
-        }
-      },
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Apply(add m3@idD2)",
-          "out": "accepted"
+          "title": "dp3 was removed",
+          "phase": "serving",
+          "calls": [
+            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+          ]
         },
         {
-          "to": "policy",
-          "call": "Progress(...)",
-          "out": "Failed, scope Joiners: m3@idD2 could not join"
+          "title": "The default keeps the Pod",
+          "note": "reset-pod is the default. vLLM cannot add a rank to a running group, so IRO resets nothing: dp3@idD is rejected and the group serves below full until the next group.",
+          "phase": "serving",
+          "calls": [
+            {"to": "driver", "call": "Capabilities()", "out": "Grow: no"},
+            {"to": "controller", "call": "restore capacity", "in": "pod-3 holds only excluded members", "out": "no reset · dp3@idD rejected"}
+          ],
+          "journal": "serving · admitted dp0@idA dp1@idB dp2@idC · rejected dp3@idD"
+        },
+        {
+          "title": "With --ft-capacity-restore=reset-all",
+          "note": "IRO resets the whole group instead, and never stays below full.",
+          "phase": "starting",
+          "pods": {"pod-0": {"gone": true}, "pod-1": {"gone": true}, "pod-2": {"gone": true}, "pod-3": {"gone": true}},
+          "calls": [
+            {"to": "workload", "call": "ResetAll([pod-0 ... pod-3])", "in": "reason: capacity", "out": "the whole group is recreated"}
+          ]
+        },
+        {
+          "title": "A new group serves",
+          "phase": "serving",
+          "pods": {"pod-0": {"uid": "a2", "dp0": "serving"}, "pod-1": {"uid": "b2", "dp1": "serving"}, "pod-2": {"uid": "c2", "dp2": "serving"}, "pod-3": {"uid": "d2", "dp3": "serving"}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "4 new UIDs, none saved: a new group"},
+            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+          ]
         }
       ]
-    },
-    {
-      "title": "The group keeps serving with 3",
-      "note": "One try, no budget. m3@idD2 is rejected, so pod-3 is not tried again until the next group. With --ft-capacity-restore=reset-all IRO would reset the group instead.",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "excluded"
-        }
-      },
-      "journal": "serving \u00b7 admitted m0 m1 m2 \u00b7 rejected m3@idD2"
     }
-  ]
+  }
 }

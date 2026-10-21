@@ -1,48 +1,52 @@
 {
   "title": "The leader dies mid-reconfig",
   "page": "failures/leader-dies",
-  "pods": [
-    {"name": "pod-0", "uid": "a1", "members": {"m0": "serving"}},
-    {"name": "pod-1", "uid": "b1", "members": {"m1": "serving"}},
-    {"name": "pod-2", "uid": "c1", "members": {"m2": "serving"}},
-    {"name": "pod-3", "uid": "d1", "members": {"m3": "serving"}}
-  ],
-  "steps": [
-    {
-      "title": "m3 dies",
-      "phase": "recovering",
-      "pods": {"pod-0": {"m0": "paused"}, "pod-1": {"m1": "paused"}, "pod-2": {"m2": "paused"}, "pod-3": {"m3": "dead"}},
-      "calls": [{"to": "policy", "call": "Plan(...)", "out": "Change: remove m3@idD"}]
-    },
-    {
-      "title": "The leader sends the reconfig, then dies",
-      "phase": "recovering",
-      "calls": [
-        {"to": "journal", "call": "Save(record)", "in": "reconfig iro-ft-1: remove m3@idD"},
-        {"to": "driver", "call": "Apply(observation, reconfig)", "out": "m0, m1, m2 accept"},
-        {"to": "journal", "call": "Save(record)", "in": "acceptances of iro-ft-1"}
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
       ],
-      "journal": "recovering · reconfig iro-ft-1 accepted by m0 m1 m2"
-    },
-    {
-      "title": "A new leader takes over",
-      "note": "It learns everything from the journal and the engine. Acceptances are saved, so the send is confirmed and it does not send again. Without them, it sends the same ID again only if Progress says NotStarted.",
-      "phase": "recovering",
-      "calls": [
-        {"to": "journal", "call": "Load()", "out": "recovering, reconfig iro-ft-1, accepted by m0 m1 m2"},
-        {"to": "driver", "call": "Observe(pods)", "out": "m0, m1, m2 running iro-ft-1"},
-        {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Running"}
+      "steps": [
+        {
+          "title": "dp3 dies",
+          "phase": "recovering",
+          "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"dp3": "dead"}},
+          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Change: remove dp3@idD"}]
+        },
+        {
+          "title": "The leader sends the reconfig, then dies",
+          "phase": "recovering",
+          "calls": [
+            {"to": "journal", "call": "Save(record)", "in": "reconfig iro-ft-1: remove dp3@idD"},
+            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"},
+            {"to": "journal", "call": "Save(record)", "in": "acceptances of iro-ft-1"}
+          ],
+          "journal": "recovering · reconfig iro-ft-1 accepted by dp0 dp1 dp2"
+        },
+        {
+          "title": "A new leader takes over",
+          "note": "It learns everything from the journal and the engine. Acceptances are saved, so the send is confirmed and it does not send again.",
+          "phase": "recovering",
+          "calls": [
+            {"to": "journal", "call": "Load()", "out": "recovering, reconfig iro-ft-1, accepted by dp0 dp1 dp2"},
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "ft_state recovering, request iro-ft-1"},
+            {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Running"}
+          ]
+        },
+        {
+          "title": "The reconfig finishes under the new leader",
+          "phase": "serving",
+          "pods": {"pod-0": {"dp0": "serving"}, "pod-1": {"dp1": "serving"}, "pod-2": {"dp2": "serving"}, "pod-3": {"dp3": "excluded"}},
+          "calls": [
+            {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Succeeded · 3 ranks healthy"},
+            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0, dp1, dp2 · \"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+          ],
+          "journal": "serving · admitted dp0 dp1 dp2 · excluded dp3@idD"
+        }
       ]
-    },
-    {
-      "title": "The reconfig finishes under the new leader",
-      "phase": "serving",
-      "pods": {"pod-0": {"m0": "serving"}, "pod-1": {"m1": "serving"}, "pod-2": {"m2": "serving"}, "pod-3": {"m3": "excluded"}},
-      "calls": [
-        {"to": "policy", "call": "Progress(observation, reconfig)", "out": "Succeeded"},
-        {"to": "driver", "call": "Verify(observation, [m0, m1, m2])", "out": "inference works"}
-      ],
-      "journal": "serving · admitted m0 m1 m2 · excluded m3@idD"
     }
-  ]
+  }
 }

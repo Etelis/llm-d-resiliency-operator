@@ -1,83 +1,41 @@
 {
   "title": "The journal is lost",
   "page": "failures/journal-lost",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "The group serves",
-      "phase": "serving",
-      "calls": [
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
+      ],
+      "steps": [
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
+          "title": "The group serves",
+          "phase": "serving",
+          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Healthy"}]
+        },
+        {
+          "title": "The journal is deleted",
+          "note": "Someone deletes the ConfigMap, and the leader restarts.",
+          "phase": "starting",
+          "calls": [
+            {"to": "journal", "call": "Load()", "out": "empty: a new group"},
+            {"to": "workload", "call": "Discover()", "out": "4 Pods, all Ready"}
+          ],
+          "journal": "starting"
+        },
+        {
+          "title": "The serving members are admitted again",
+          "note": "Nothing is reset: the group never stopped serving.",
+          "phase": "serving",
+          "calls": [
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp3", "out": "4 ranks healthy"},
+            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+          ],
+          "journal": "serving · admitted dp0@idA dp1@idB dp2@idC dp3@idD"
         }
       ]
-    },
-    {
-      "title": "The journal is deleted",
-      "note": "Someone deletes the ConfigMap, and the leader restarts.",
-      "phase": "starting",
-      "calls": [
-        {
-          "to": "journal",
-          "call": "Load()",
-          "out": "empty: a new group"
-        },
-        {
-          "to": "workload",
-          "call": "Discover()",
-          "out": "4 Pods, all Ready"
-        }
-      ],
-      "journal": "starting"
-    },
-    {
-      "title": "The serving members are admitted again",
-      "note": "Nothing is reset: the group never stopped serving.",
-      "phase": "serving",
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Observe(pods)",
-          "out": "m0 to m3 serving"
-        },
-        {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
-      ],
-      "journal": "serving \u00b7 admitted m0@idA m1@idB m2@idC m3@idD"
     }
-  ]
+  }
 }

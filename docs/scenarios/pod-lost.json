@@ -1,166 +1,68 @@
 {
   "title": "A Pod is lost",
   "page": "failures/pod-lost",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "The group serves",
-      "phase": "serving",
-      "calls": [
-        {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
-      ]
-    },
-    {
-      "title": "pod-3 is deleted",
-      "note": "Its node failed, or someone deleted it. The engine may not notice yet.",
-      "phase": "recovering",
-      "pods": {
-        "pod-0": {
-          "m0": "paused"
-        },
-        "pod-1": {
-          "m1": "paused"
-        },
-        "pod-2": {
-          "m2": "paused"
-        },
-        "pod-3": {
-          "gone": true,
-          "m3": "dead"
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "Discover()",
-          "out": "pod-3 is gone"
-        },
-        {
-          "to": "driver",
-          "call": "Observe(pods)",
-          "out": "m0, m1, m2 paused \u00b7 nothing from pod-3"
-        }
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
       ],
-      "journal": "m3@idD added to the observation as terminal: pod lost"
-    },
-    {
-      "title": "A reconfig removes m3",
-      "phase": "recovering",
-      "calls": [
+      "steps": [
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Change: remove m3@idD"
+          "title": "The group serves",
+          "phase": "serving",
+          "calls": [{"to": "policy", "call": "Plan(...)", "out": "Healthy"}]
         },
         {
-          "to": "driver",
-          "call": "Apply(observation, reconfig)",
-          "out": "m0, m1, m2 accept"
-        }
-      ]
-    },
-    {
-      "title": "The group serves with 3 members",
-      "phase": "serving",
-      "pods": {
-        "pod-0": {
-          "m0": "serving"
-        },
-        "pod-1": {
-          "m1": "serving"
-        },
-        "pod-2": {
-          "m2": "serving"
-        },
-        "pod-3": {
-          "m3": "excluded"
-        }
-      },
-      "calls": [
-        {
-          "to": "policy",
-          "call": "Progress(...)",
-          "out": "Succeeded"
+          "title": "pod-3 is deleted",
+          "note": "Its node failed, or someone deleted it. The engine may not notice yet.",
+          "phase": "recovering",
+          "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"gone": true, "dp3": "dead"}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-3 is gone"},
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "dp0, dp1, dp2 unhealthy · nothing from pod-3: no IP"}
+          ],
+          "journal": "dp3@idD added to the observation as terminal: pod lost"
         },
         {
-          "to": "driver",
-          "call": "Verify(observation, [m0, m1, m2])",
-          "out": "inference works"
-        }
-      ]
-    },
-    {
-      "title": "The workload brings a replacement",
-      "note": "A workload that recreates the whole group instead starts a new group.",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "uid": "d2",
-          "gone": false,
-          "m3": "joining"
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "Discover()",
-          "out": "pod-3 back with UID d2, Ready"
+          "title": "A reconfig removes dp3",
+          "phase": "recovering",
+          "calls": [
+            {"to": "policy", "call": "Plan(...)", "out": "Change: remove dp3@idD"},
+            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+          ]
         },
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Change: add m3@idD2"
-        }
-      ]
-    },
-    {
-      "title": "Full again",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "serving"
-        }
-      },
-      "calls": [
+          "title": "The group serves with 3 ranks",
+          "phase": "serving",
+          "pods": {"pod-0": {"dp0": "serving"}, "pod-1": {"dp1": "serving"}, "pod-2": {"dp2": "serving"}, "pod-3": {"dp3": "excluded"}},
+          "calls": [
+            {"to": "policy", "call": "Progress(...)", "out": "Succeeded · 3 ranks healthy"},
+            {"to": "engine", "call": "POST /v1/completions", "in": "on dp0, dp1, dp2 · \"One plus one equals\" · max_tokens 8", "out": "8 tokens each"}
+          ]
+        },
         {
-          "to": "policy",
-          "call": "Progress(...)",
-          "out": "Succeeded"
+          "title": "The workload brings a replacement",
+          "note": "A workload that recreates the whole group instead starts a new group.",
+          "phase": "serving",
+          "pods": {"pod-3": {"uid": "d2", "gone": false, "dp3": "starting"}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-3 back with UID d2, Ready"}
+          ]
+        },
+        {
+          "title": "The new rank cannot join",
+          "note": "vLLM never reports a candidate joinable: it cannot admit ranks. The group serves with 3 until the next group.",
+          "phase": "serving",
+          "calls": [
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp3 (d2)", "out": "healthy, a candidate"},
+            {"to": "policy", "call": "Plan(...)", "in": "candidate dp3@idD2", "out": "Healthy: no candidate is ever joinable"}
+          ],
+          "journal": "serving · admitted dp0@idA dp1@idB dp2@idC"
         }
       ]
     }
-  ]
+  }
 }

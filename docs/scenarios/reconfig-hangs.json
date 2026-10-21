@@ -1,135 +1,52 @@
 {
   "title": "A reconfig never finishes",
   "page": "failures/reconfig-hangs",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "m3 dies; IRO sends the reconfig",
-      "phase": "recovering",
-      "pods": {
-        "pod-0": {
-          "m0": "paused"
-        },
-        "pod-1": {
-          "m1": "paused"
-        },
-        "pod-2": {
-          "m2": "paused"
-        },
-        "pod-3": {
-          "m3": "dead"
-        }
-      },
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Apply(observation, reconfig)",
-          "in": "iro-ft-1: remove m3",
-          "out": "m0, m1, m2 accept"
-        }
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": "serving"}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": "serving"}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": "serving"}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": "serving"}}
       ],
-      "journal": "recovering \u00b7 reconfig iro-ft-1 since 10:00:05"
-    },
-    {
-      "title": "It keeps running",
-      "phase": "recovering",
-      "calls": [
+      "steps": [
         {
-          "to": "policy",
-          "call": "Progress(...)",
-          "out": "Running"
-        }
-      ]
-    },
-    {
-      "title": "--ft-apply-timeout passes",
-      "phase": "starting",
-      "pods": {
-        "pod-0": {
-          "gone": true
-        },
-        "pod-1": {
-          "gone": true
-        },
-        "pod-2": {
-          "gone": true
-        },
-        "pod-3": {
-          "gone": true
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "ResetAll([pod-0 ... pod-3])",
-          "in": "reason: apply_deadline",
-          "out": "the whole group is recreated"
-        }
-      ],
-      "note": "90s by default, from when the reconfig was sent."
-    },
-    {
-      "title": "A new group serves",
-      "phase": "serving",
-      "pods": {
-        "pod-0": {
-          "uid": "a2",
-          "m0": "serving"
-        },
-        "pod-1": {
-          "uid": "b2",
-          "m1": "serving"
-        },
-        "pod-2": {
-          "uid": "c2",
-          "m2": "serving"
-        },
-        "pod-3": {
-          "uid": "d2",
-          "m3": "serving"
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "Discover()",
-          "out": "4 new UIDs, none saved: a new group"
+          "title": "dp3 dies; IRO sends the reconfig",
+          "phase": "recovering",
+          "pods": {"pod-0": {"dp0": "paused"}, "pod-1": {"dp1": "paused"}, "pod-2": {"dp2": "paused"}, "pod-3": {"dp3": "dead"}},
+          "calls": [
+            {"to": "engine", "call": "POST /v1/fault_tolerance/apply", "in": "on dp0, dp1, dp2 · scale_down · removed_dp_ranks [3] · request_id iro-ft-1", "out": "202 · queued"}
+          ],
+          "journal": "recovering · reconfig iro-ft-1 since 10:00:05"
         },
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
+          "title": "It keeps running",
+          "phase": "recovering",
+          "internal": "The status keeps ft_state recovering with the reconfig's request_id until the ranks are healthy again.",
+          "calls": [
+            {"to": "engine", "call": "GET /v1/fault_tolerance/status · GET /health", "in": "on dp0 to dp2", "out": "dp0, dp1, dp2 ft_state recovering, request iro-ft-1"},
+            {"to": "policy", "call": "Progress(...)", "out": "Running"}
+          ]
+        },
+        {
+          "title": "--ft-apply-timeout passes",
+          "phase": "starting",
+          "pods": {"pod-0": {"gone": true}, "pod-1": {"gone": true}, "pod-2": {"gone": true}, "pod-3": {"gone": true}},
+          "calls": [
+            {"to": "workload", "call": "ResetAll([pod-0 ... pod-3])", "in": "reason: apply_deadline", "out": "the whole group is recreated"}
+          ],
+          "note": "90s by default, from when the reconfig was sent."
+        },
+        {
+          "title": "A new group serves",
+          "phase": "serving",
+          "pods": {"pod-0": {"uid": "a2", "dp0": "serving"}, "pod-1": {"uid": "b2", "dp1": "serving"}, "pod-2": {"uid": "c2", "dp2": "serving"}, "pod-3": {"uid": "d2", "dp3": "serving"}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "4 new UIDs, none saved: a new group"},
+            {"to": "policy", "call": "Plan(...)", "out": "Healthy"}
+          ]
         }
       ]
     }
-  ]
+  }
 }
