@@ -14,6 +14,8 @@
   --blue-bg: #e8f0fe;
   --purple: #8430ce;
   --purple-bg: #f3e8fd;
+  --teal: #0e7490;
+  --teal-bg: #e0f2f7;
   --surface: #ffffff;
   border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 12px;
@@ -35,7 +37,45 @@
   --blue-bg: rgba(26, 115, 232, 0.18);
   --purple-bg: rgba(132, 48, 206, 0.2);
   --grey-cell: #5f6368;
+  --teal-bg: rgba(14, 116, 144, 0.2);
   --surface: var(--ifm-background-surface-color);
+}
+
+.engines {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.engineTab {
+  border: 1.5px solid var(--ifm-color-emphasis-300);
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  border-radius: 999px;
+  padding: 0.12rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.engineTabActive {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--teal-bg);
+}
+
+.engineTab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.soon {
+  margin-left: 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ifm-color-emphasis-600);
 }
 
 .timeline {
@@ -252,6 +292,20 @@
   padding: 0.4rem 0.7rem;
 }
 
+.callEngine {
+  border-left-color: var(--teal);
+  background: var(--teal-bg);
+}
+
+.internal {
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
 .callHead {
   display: flex;
   align-items: center;
@@ -285,6 +339,9 @@
 }
 .t_journal {
   background: var(--purple);
+}
+.t_engine {
+  background: var(--teal);
 }
 .t_telemetry {
   background: var(--blue);

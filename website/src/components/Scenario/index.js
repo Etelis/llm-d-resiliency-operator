@@ -19,6 +19,11 @@ const TARGETS = {
   telemetry: 'Telemetry',
 };
 
+const ENGINES = [
+  {id: 'vllm', label: 'vLLM'},
+  {id: 'sglang', label: 'SGLang', soon: 'No SGLang engine yet'},
+];
+
 function frames(data) {
   let pods = (data.pods || []).map((pod) => ({...pod, members: {...pod.members}}));
   return data.steps.map((step) => {
@@ -66,11 +71,12 @@ function Pod({pod}) {
   );
 }
 
-function Call({call}) {
+function Call({call, engineLabel}) {
+  const toEngine = call.to === 'engine';
   return (
-    <div className={styles.call}>
+    <div className={`${styles.call} ${toEngine ? styles.callEngine : ''}`}>
       <div className={styles.callHead}>
-        <span className={`${styles.target} ${styles[`t_${call.to}`]}`}>{TARGETS[call.to] || call.to}</span>
+        <span className={`${styles.target} ${styles[`t_${call.to}`]}`}>{toEngine ? engineLabel : TARGETS[call.to] || call.to}</span>
         <code className={styles.callName}>{call.call}</code>
       </div>
       {call.in && (
@@ -90,10 +96,18 @@ function Call({call}) {
 }
 
 export default function Scenario({data}) {
-  const steps = useMemo(() => frames(data), [data]);
+  const tabbed = Boolean(data.engines);
+  const [engine, setEngine] = useState(tabbed ? ENGINES[0].id : null);
+  const engineLabel = (ENGINES.find((e) => e.id === engine) || {}).label;
+  const body = tabbed ? data.engines[engine] : data;
+  const steps = useMemo(() => frames(body), [body]);
   const [index, setIndex] = useState(0);
   const step = steps[index];
   const go = (i) => setIndex(Math.max(0, Math.min(steps.length - 1, i)));
+  const select = (id) => {
+    setEngine(id);
+    setIndex(0);
+  };
 
   useEffect(() => {
     const match = window.location.hash.match(/^#step-(\d+)$/);
@@ -107,6 +121,23 @@ export default function Scenario({data}) {
 
   return (
     <div className={styles.scenario} tabIndex={0} onKeyDown={onKey}>
+      {tabbed && (
+        <div className={styles.engines}>
+          {ENGINES.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              className={`${styles.engineTab} ${engine === e.id ? styles.engineTabActive : ''}`}
+              onClick={() => select(e.id)}
+              disabled={Boolean(e.soon)}
+              title={e.soon || e.label}>
+              {e.label}
+              {e.soon && <span className={styles.soon}>soon</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className={styles.timeline}>
         {steps.map((s, i) => (
           <button
@@ -136,11 +167,18 @@ export default function Scenario({data}) {
         </div>
       )}
 
+      {step.internal && (
+        <div className={styles.internal}>
+          <span className={`${styles.target} ${styles.t_engine}`}>{engineLabel}</span>
+          <span>{step.internal}</span>
+        </div>
+      )}
+
       {step.calls && step.calls.length > 0 && (
         <div className={styles.calls}>
-          <div className={styles.callsTitle}>{data.callsTitle || 'What the controller calls'}</div>
+          <div className={styles.callsTitle}>{body.callsTitle || data.callsTitle || 'What the controller calls'}</div>
           {step.calls.map((call, i) => (
-            <Call key={i} call={call} />
+            <Call key={i} call={call} engineLabel={engineLabel} />
           ))}
         </div>
       )}
