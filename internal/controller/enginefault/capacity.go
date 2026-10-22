@@ -6,6 +6,7 @@ package enginefault
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -55,6 +56,9 @@ func (fsm *controller) restore(ctx context.Context, next *Record, current *view,
 
 func (fsm *controller) remove(ctx context.Context, next *Record, pods []workload.PodRef, record bool) {
 	release := fsm.config.CapacityRestore == RestoreRelease
+	if fsm.would(fmt.Sprintf("%s %v", fsm.config.CapacityRestore, pods)) {
+		return
+	}
 	var err error
 	if release {
 		err = fsm.wl.Release(ctx, pods)

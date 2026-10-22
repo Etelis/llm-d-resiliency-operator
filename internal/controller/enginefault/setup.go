@@ -50,6 +50,7 @@ func (options *Options) BindFlags(flags *flag.FlagSet) {
 	options.Config = Defaults()
 	config := &options.Config
 	flags.BoolVar(&options.Enabled, "enable-engine-ft", false, "recover inference engine faults (needs --leader-elect)")
+	flags.BoolVar(&config.DryRun, "ft-dry-run", false, "decide as usual, but only log what recovery would do")
 	flags.StringVar(&options.Engine, "engine", "", "inference engine implementation")
 	flags.StringVar(&options.Workload, "workload", "lws", "workload implementation")
 	flags.DurationVar(&config.PollInterval, "ft-poll-interval", config.PollInterval, "how often the leader reads the group and acts")

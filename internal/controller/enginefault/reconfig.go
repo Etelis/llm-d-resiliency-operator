@@ -69,6 +69,9 @@ func (fsm *controller) send(ctx context.Context, next *Record, current *view, pl
 	if noChange && !next.LastNoChangeReconfig.IsZero() && now.Sub(next.LastNoChangeReconfig) < fsm.config.FlapWindow {
 		return fsm.resetAll(ctx, next, ResetFlap, "C6: "+plan.Reason, now)
 	}
+	if fsm.would(fmt.Sprintf("reconfig: remove %v, add %v", plan.Remove, plan.Add)) {
+		return nil
+	}
 	reconfig := engine.Reconfig{
 		ID: newID("iro-ft-", 16), Participants: slices.Clone(plan.Participants),
 		Remove: slices.Clone(plan.Remove), Add: slices.Clone(plan.Add),
@@ -184,6 +187,9 @@ func (fsm *controller) verify(ctx context.Context, next *Record, current *view, 
 }
 
 func (fsm *controller) resetAll(ctx context.Context, next *Record, reason ResetReason, detail string, now time.Time) error {
+	if fsm.would("reset all: " + string(reason)) {
+		return nil
+	}
 	if next.Reconfig != nil {
 		fsm.finishReconfig(next, &engine.Progress{State: engine.Running, Reason: "dropped by reset"}, now)
 	}
