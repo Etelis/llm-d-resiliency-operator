@@ -1,83 +1,64 @@
 {
   "title": "The journal is lost",
   "page": "failures/journal-lost",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "The group serves",
-      "phase": "serving",
-      "calls": [
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}}
+      ],
+      "steps": [
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
+          "title": "The group serves",
+          "phase": "serving",
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
+          ]
+        },
+        {
+          "title": "The journal is deleted",
+          "note": "Someone deletes the ConfigMap, and the leader restarts.",
+          "phase": "starting",
+          "calls": [
+            {"to": "journal", "call": "Load()", "out": "empty: a new group"},
+            {"to": "workload", "call": "Discover()", "out": "4 Pods, all Ready"}
+          ],
+          "journal": "starting",
+          "pods": {"pod-0": {"dp0": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-1": {"dp1": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-2": {"dp2": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-3": {"dp3": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}}
+        },
+        {
+          "title": "The serving members are admitted again",
+          "note": "Nothing is reset: the group never stopped serving.",
+          "phase": "serving",
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
+          ],
+          "journal": "serving; admitted dp0@idA dp1@idB dp2@idC dp3@idD",
+          "pods": {"pod-0": {"dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-1": {"dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-2": {"dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-3": {"dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}}
         }
       ]
-    },
-    {
-      "title": "The journal is deleted",
-      "note": "Someone deletes the ConfigMap, and the leader restarts.",
-      "phase": "starting",
-      "calls": [
-        {
-          "to": "journal",
-          "call": "Load()",
-          "out": "empty: a new group"
-        },
-        {
-          "to": "workload",
-          "call": "Discover()",
-          "out": "4 Pods, all Ready"
-        }
-      ],
-      "journal": "starting"
-    },
-    {
-      "title": "The serving members are admitted again",
-      "note": "Nothing is reset: the group never stopped serving.",
-      "phase": "serving",
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Observe(pods)",
-          "out": "m0 to m3 serving"
-        },
-        {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
-      ],
-      "journal": "serving \u00b7 admitted m0@idA m1@idB m2@idC m3@idD"
     }
-  ]
+  }
 }

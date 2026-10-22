@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "start": "docusaurus start",
+    "test": "node --test src/components/Scenario/*.test.mjs",
     "build": "docusaurus build",
     "serve": "docusaurus serve"
   },

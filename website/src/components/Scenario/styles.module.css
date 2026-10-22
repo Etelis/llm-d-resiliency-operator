@@ -14,6 +14,8 @@
   --blue-bg: #e8f0fe;
   --purple: #8430ce;
   --purple-bg: #f3e8fd;
+  --teal: #0e7490;
+  --teal-bg: #e0f2f7;
   --surface: #ffffff;
   border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 12px;
@@ -35,7 +37,36 @@
   --blue-bg: rgba(26, 115, 232, 0.18);
   --purple-bg: rgba(132, 48, 206, 0.2);
   --grey-cell: #5f6368;
+  --teal-bg: rgba(14, 116, 144, 0.2);
   --surface: var(--ifm-background-surface-color);
+}
+
+.engines {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.engineTab {
+  border: 1.5px solid var(--ifm-color-emphasis-300);
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  border-radius: 999px;
+  padding: 0.12rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.engineTabActive {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--teal-bg);
+}
+
+.engineTab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .timeline {
@@ -252,6 +283,30 @@
   padding: 0.4rem 0.7rem;
 }
 
+.requests {
+  margin: 0.2rem 0 0.45rem 0.75rem;
+  border-left: 3px solid var(--teal);
+  background: var(--teal-bg);
+  border-radius: 0 6px 6px 0;
+  padding: 0.35rem 0.7rem 0.4rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.request {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.internal {
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
 .callHead {
   display: flex;
   align-items: center;
@@ -285,6 +340,9 @@
 }
 .t_journal {
   background: var(--purple);
+}
+.t_engine {
+  background: var(--teal);
 }
 .t_telemetry {
   background: var(--blue);
@@ -339,4 +397,82 @@
 }
 .t_B {
   background: var(--amber);
+}
+
+.memberDetail {
+  width: 100%;
+  min-width: 0;
+}
+
+.facts {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.facts dt {
+  font-size: 0.68rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-top: 0.35rem;
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.requestsTitle {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.requestNote {
+  font-size: 0.78rem;
+  color: var(--ifm-color-emphasis-700);
+  margin: 0.4rem 0;
+}
+
+.request {
+  margin-top: 0.55rem;
+}
+
+.io > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .header { flex-direction: column; gap: 0.5rem; }
+}
+
+.callHeadButton {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.callHeadButton:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 0.65rem;
+  transition: transform 0.15s;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.requests[hidden] {
+  display: none;
 }

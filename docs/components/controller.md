@@ -69,21 +69,23 @@ Each poll runs one step, in this order. Every later section covers one part of i
 
 The step stops early when it cannot see the group, and while the old group of a reset is still going.
 
+This example assumes an engine that can grow and the default `reset-pod` capacity policy.
+
 | Poll | Discover | Observe | Policy says | Controller does | Phase, reconfig |
 |---|---|---|---|---|---|
 | 1 | 4 Pods `Ready` | all `Serving` | `Plan`: Healthy | nothing | serving |
 | 2 | same | `m3` Terminal, `m0`-`m2` paused | `Plan`: Change, remove `m3@idD` | enters `recovering`, saves, calls `Probe` once | recovering |
 | 3 | same | same | same | waits: under 2 polls in `recovering` | recovering |
-| 4 | same | same | same | checks C1-C7, saves reconfig `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, reconfig in flight |
+| 4 | same | same | same | checks the plan, saves reconfig `iro-ft-7c1e`, `Apply`, saves acceptances | recovering, reconfig in flight |
 | 5 | same | survivors rebuilding | `Progress`: Running | waits, under the apply deadline | recovering, reconfig in flight |
-| 6 | same | `m0`-`m2` healthy | `Progress`: Succeeded | marks `m3@idD` excluded, clears the reconfig, `Verify(m0, m1, m2)` | serving |
+| 6 | same | `m0`-`m2` healthy | `Progress`: Succeeded | marks `m3@idD` excluded, clears the reconfig, saves, `Verify(m0, m1, m2)` | serving |
 | 7 | same | same | `Plan`: Healthy | `pod-3` holds only excluded members: marks it `Removing`, saves, `Reset([pod-3 d1])` | serving |
 | 8 | `pod-3` (d1) Terminating | `m0`-`m2` Serving | `Plan`: Healthy | waits | serving |
 | 9 | `pod-3` (d2) Starting | same | `Plan`: Healthy | saves the new Pod, forgets d1 and `m3@idD`. No deadline. | serving |
 | ... | `pod-3` (d2) Ready | `m3` on d2 Joinable | `Plan`: Change, add `m3@idD2` | checks, saves reconfig, `Apply` | serving, reconfig in flight |
-| ... | same | `m3@idD2` healthy | `Progress`: Succeeded | marks `m3@idD2` admitted, `Verify(m3@idD2)` | serving |
+| ... | same | `m3@idD2` healthy | `Progress`: Succeeded | marks `m3@idD2` admitted, saves, verifies all reconfig participants and the added member | serving |
 
-[example controller-polls]: ../scenarios/controller-polls.json
+See the [member-death example](../failures/member-dies.md#poll-by-poll) for an engine-specific poll sequence.
 
 ## Taking over
 
@@ -101,7 +103,7 @@ it picks up a recovery where the last leader stopped.
 Every save is compare-and-swap on the version the controller loaded or saved. If another writer saved first,
 the save conflicts: the controller drops its state and loads again, and its deadlines restart.
 
-[example leader-change]: ../scenarios/leader-change.json
+See the [leader-change example](../failures/leader-dies.md) for an engine-specific recovery.
 
 ## Seeing the group
 
@@ -179,7 +181,7 @@ at the engine, so once `Discover` works again the clock restarts, and the engine
 `--ft-unseen-timeout` before the group is reset. This holds even if the engine was already unreadable before
 `Discover` failed: IRO then waits longer, never shorter.
 
-[example controller-blind]: ../scenarios/controller-blind.json
+See the [unreadable-group example](../failures/iro-blind.md).
 
 ## Deciding
 
@@ -291,7 +293,7 @@ only while the group is `serving`; a fault comes first.
 A call that names several Pods and returns `ErrUnsupported` is repeated for each Pod alone, so one Pod the
 workload can never replace does not keep the others below full. Other workload errors are retried next poll.
 
-[example two-members-die]: ../scenarios/two-members-die.json
+See the [multiple-member failure example](../failures/several-members-die.md).
 
 ## Resetting the group
 

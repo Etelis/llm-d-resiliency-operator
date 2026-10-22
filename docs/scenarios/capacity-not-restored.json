@@ -1,102 +1,100 @@
 {
   "title": "The failed Pod cannot come back",
   "page": "failures/capacity-not-restored",
-  "pods": [
-    {
-      "name": "pod-0",
-      "uid": "a1",
-      "members": {
-        "m0": "serving"
-      }
-    },
-    {
-      "name": "pod-1",
-      "uid": "b1",
-      "members": {
-        "m1": "serving"
-      }
-    },
-    {
-      "name": "pod-2",
-      "uid": "c1",
-      "members": {
-        "m2": "serving"
-      }
-    },
-    {
-      "name": "pod-3",
-      "uid": "d1",
-      "members": {
-        "m3": "serving"
-      }
-    }
-  ],
-  "steps": [
-    {
-      "title": "m3 was removed",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "excluded"
-        }
-      },
-      "calls": [
+  "engines": {
+    "vllm": {
+      "pods": [
+        {"name": "pod-0", "uid": "a1", "members": {"dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-1", "uid": "b1", "members": {"dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-2", "uid": "c1", "members": {"dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+        {"name": "pod-3", "uid": "d1", "members": {"dp3": {"state": "dead", "membership": "excluded", "status": "healthy", "health": 503}}}
+      ],
+      "steps": [
         {
-          "to": "policy",
-          "call": "Plan(...)",
-          "out": "Healthy"
-        }
-      ]
-    },
-    {
-      "title": "IRO resets pod-3, once",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "uid": "d2",
-          "m3": "starting"
-        }
-      },
-      "calls": [
-        {
-          "to": "workload",
-          "call": "Reset([pod-3 d1])",
-          "out": "pod-3 recreated with UID d2"
-        }
-      ]
-    },
-    {
-      "title": "The new member cannot join",
-      "note": "For example the engine cannot grow, or the join reconfig fails.",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "joining"
-        }
-      },
-      "calls": [
-        {
-          "to": "driver",
-          "call": "Apply(add m3@idD2)",
-          "out": "accepted"
+          "title": "dp3 was removed",
+          "phase": "serving",
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200"},
+                {"call": "GET /health", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "503"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
+          ]
         },
         {
-          "to": "policy",
-          "call": "Progress(...)",
-          "out": "Failed, scope Joiners: m3@idD2 could not join"
+          "title": "The default keeps the Pod",
+          "note": "reset-pod is the default. vLLM cannot add a rank to a running group, so IRO resets nothing: dp3@idD is rejected and the group serves below full until the next group.",
+          "phase": "serving",
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200"},
+                {"call": "GET /health", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "503"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"},
+            {"to": "driver", "call": "Capabilities()", "out": "Grow: no"},
+            {"to": "journal", "call": "Save(record)", "in": "membership updated: excluded members on kept Pods become rejected"}
+          ],
+          "journal": "serving; admitted dp0@idA dp1@idB dp2@idC; rejected dp3@idD",
+          "decision": "With reset-pod and Grow=false, IRO keeps Pods containing only excluded members and records those members as rejected.",
+          "pods": {"pod-3": {"dp3": {"state": "dead", "membership": "rejected", "status": "healthy", "health": 503}}}
+        },
+        {
+          "title": "Alternative: reset-all capacity policy",
+          "note": "This is the alternative to reset-pod at the same capacity decision. IRO requests a group reset to restore capacity; the workload still needs time to recreate it.",
+          "phase": "starting",
+          "pods": {"pod-0": {"dp0": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-1": {"dp1": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-2": {"dp2": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-3": {"dp3": {"state": "dead", "membership": "untracked", "status": "healthy", "health": 503}}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "saved Pod UIDs are still present before the reset request"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Terminal",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000", "out": "200"},
+                {"call": "GET /health", "in": "dp3 on pod-3 (UID d1), port 8000", "out": "503"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"},
+            {"to": "journal", "call": "Save(record)", "in": "phase starting; saved Pods marked Removing; membership cleared"},
+            {"to": "workload", "call": "ResetAll(pods)", "in": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1; reason: capacity", "out": "reset requested for the saved UIDs; the workload recreates the group asynchronously"}
+          ],
+          "journal": "starting; membership cleared; saved Pods marked Removing",
+          "decision": "IRO saves the reset intent, then asks the workload to recreate the saved Pod UIDs."
+        },
+        {
+          "title": "A new group serves",
+          "phase": "serving",
+          "pods": {"pod-0": {"uid": "a2", "dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-1": {"uid": "b2", "dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-2": {"uid": "c2", "dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-3": {"uid": "d2", "dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}},
+          "calls": [
+            {"to": "workload", "call": "Discover()", "out": "4 new UIDs, none saved: a new group"},
+            {
+              "to": "driver",
+              "call": "Observe(pods)",
+              "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
+              "requests": [
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200"}
+              ]
+            },
+            {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
+          ]
         }
       ]
-    },
-    {
-      "title": "The group keeps serving with 3",
-      "note": "One try, no budget. m3@idD2 is rejected, so pod-3 is not tried again until the next group. With --ft-capacity-restore=reset-all IRO would reset the group instead.",
-      "phase": "serving",
-      "pods": {
-        "pod-3": {
-          "m3": "excluded"
-        }
-      },
-      "journal": "serving \u00b7 admitted m0 m1 m2 \u00b7 rejected m3@idD2"
     }
-  ]
+  }
 }
