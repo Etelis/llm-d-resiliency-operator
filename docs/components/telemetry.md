@@ -158,6 +158,7 @@ type Recorder interface {
     ReleaseRequested(pods []PodRef, err error)
     SaveFailed(err error)
     IncidentClosed(incident *Incident)
+    WouldDo(from, to, reason string)
     Ready() error
 }
 ```

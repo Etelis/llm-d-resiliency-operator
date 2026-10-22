@@ -23,6 +23,8 @@ type Config struct {
 	UnseenTimeout    time.Duration
 	FlapWindow       time.Duration
 	CapacityRestore  CapacityRestore
+	// DryRun decides as usual but only records what it would do. See docs/components/controller.md#dry-run.
+	DryRun bool
 }
 
 type CapacityRestore string
@@ -78,4 +80,7 @@ type Record struct {
 	RecreateStopped      bool      `json:"recreate_stopped,omitempty"`
 
 	Incident *Incident `json:"incident,omitempty"`
+
+	// WouldDo is the action a dry run skipped on the last poll.
+	WouldDo string `json:"would_do,omitempty"`
 }

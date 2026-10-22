@@ -78,6 +78,14 @@ func (rec *Recorder) IncidentClosed(incident *enginefault.Incident) {
 		"total", incident.Durations.Total)
 }
 
+func (rec *Recorder) WouldDo(from, to, reason string) {
+	if to == "" {
+		rec.log.Info("dry run: nothing to do any more", "was", from, "reason", reason)
+		return
+	}
+	rec.log.Info("dry run: would "+to, "reason", reason)
+}
+
 // Ready fails once the loop has stepped and then stopped stepping.
 func (rec *Recorder) Ready() error {
 	rec.mu.Lock()
