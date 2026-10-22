@@ -382,6 +382,65 @@ def recovery_sequence():
     )
 
 
+TIMELINE = [
+    ("t0", "serving", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
+    (
+        "t1",
+        "m3 dies",
+        "recovering",
+        "amber",
+        ["paused", "paused", "paused", "failed"],
+        ["paused", "paused", "paused", "dead"],
+        ("m3",),
+    ),
+    (
+        "t2",
+        "a reconfig removes m3",
+        "serving 3",
+        "blue",
+        ["active", "active", "active", "failed"],
+        ["serving", "serving", "serving", "excluded"],
+        (),
+    ),
+    (
+        "t3",
+        "Reset replaces pod-3",
+        "serving 3",
+        "blue",
+        ["active", "active", "active", "starting"],
+        ["serving", "serving", "serving", "new UID, starting"],
+        (),
+    ),
+    (
+        "t4",
+        "a reconfig adds the new m3",
+        "serving 3",
+        "blue",
+        ["active", "active", "active", "joining"],
+        ["serving", "serving", "serving", "joining"],
+        (),
+    ),
+    ("t5", "full again", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
+]
+
+
+def timeline_row(s, y, row):
+    t, what, phase, _, states, status, crossed = row
+    s.line(28, y - 10, 1032, y - 10, C["rule"], 1.2)
+    s.text(32, y + 18, t, 15, color=C["blue"], bold=True)
+    s.text(64, y + 18, what, 14, color=C["blue"], bold=True)
+    tone = {"recovering": "amber"}.get(phase, "green")
+    s.rect(32, y + 34, 9 + width(phase, 12, True) + 9, 22, C[tone], C[tone + "_bg"], r=11, sw=1.2)
+    s.text(41, y + 50, phase, 12, color=C[tone], bold=True)
+    x = 300
+    for i, state in enumerate(states):
+        st = status[i]
+        pod_state = state
+        sub = "UID d2" if t in ("t3", "t4", "t5") and i == 3 else "UID d1" if i == 3 else f"UID {'abc'[i]}1"
+        pod(s, x, y, f"pod-{i}", sub, [(f"m{i}", state)], st, pod_state, w=170, crossed=crossed)
+        x += 182
+
+
 def recovery_timeline():
     s = Svg(
         1060,
@@ -389,61 +448,9 @@ def recovery_timeline():
         "One member dies: 4 → 3 → 4",
         "four Pods with one member each · an engine that can grow · the group keeps serving the whole time",
     )
-    rows = [
-        ("t0", "serving", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
-        (
-            "t1",
-            "m3 dies",
-            "recovering",
-            "amber",
-            ["paused", "paused", "paused", "failed"],
-            ["paused", "paused", "paused", "dead"],
-            ("m3",),
-        ),
-        (
-            "t2",
-            "a reconfig removes m3",
-            "serving 3",
-            "blue",
-            ["active", "active", "active", "failed"],
-            ["serving", "serving", "serving", "excluded"],
-            (),
-        ),
-        (
-            "t3",
-            "Reset replaces pod-3",
-            "serving 3",
-            "blue",
-            ["active", "active", "active", "starting"],
-            ["serving", "serving", "serving", "new UID, starting"],
-            (),
-        ),
-        (
-            "t4",
-            "a reconfig adds the new m3",
-            "serving 3",
-            "blue",
-            ["active", "active", "active", "joining"],
-            ["serving", "serving", "serving", "joining"],
-            (),
-        ),
-        ("t5", "full again", "4 members", "blue", ["active"] * 4, ["serving"] * 4, ()),
-    ]
     y = 96
-    for t, what, phase, _, states, status, crossed in rows:
-        s.line(28, y - 10, 1032, y - 10, C["rule"], 1.2)
-        s.text(32, y + 18, t, 15, color=C["blue"], bold=True)
-        s.text(64, y + 18, what, 14, color=C["blue"], bold=True)
-        tone = {"recovering": "amber"}.get(phase, "green")
-        s.rect(32, y + 34, 9 + width(phase, 12, True) + 9, 22, C[tone], C[tone + "_bg"], r=11, sw=1.2)
-        s.text(41, y + 50, phase, 12, color=C[tone], bold=True)
-        x = 300
-        for i, state in enumerate(states):
-            st = status[i]
-            pod_state = state
-            sub = "UID d2" if t in ("t3", "t4", "t5") and i == 3 else "UID d1" if i == 3 else f"UID {'abc'[i]}1"
-            pod(s, x, y, f"pod-{i}", sub, [(f"m{i}", state)], st, pod_state, w=170, crossed=crossed)
-            x += 182
+    for row in TIMELINE:
+        timeline_row(s, y, row)
         y += 140
     s.line(28, y - 10, 1032, y - 10, C["rule"], 1.2)
     s.legend(
@@ -464,6 +471,37 @@ def recovery_timeline():
     )
     s.h = y + 74
     s.save("recovery-timeline.svg")
+
+
+def recovery_animation():
+    """The timeline above, one step at a time. CSS only, so it also plays where scripts cannot run."""
+    step, n = 2.5, len(TIMELINE)
+    s = Svg(
+        1060,
+        300,
+        "One member dies: 4 → 3 → 4",
+        "the group keeps serving while IRO removes the dead member and restores capacity",
+    )
+    s.parts.append(
+        f"<style>.f{{opacity:0;animation:show {step * n}s infinite}}.f0{{opacity:1}}"
+        f"@keyframes show{{0%,{100 / n:.2f}%{{opacity:1}}{100 / n + 0.01:.2f}%,100%{{opacity:0}}}}"
+        "@media (prefers-reduced-motion:reduce){.f{animation:none}}</style>"
+    )
+    for i, row in enumerate(TIMELINE):
+        s.parts.append(f'<g class="f f{i}" style="animation-delay:{i * step}s">')
+        timeline_row(s, 106, row)
+        s.parts.append("</g>")
+    s.line(28, 240, 1032, 240, C["rule"], 1.2)
+    s.legend(
+        272,
+        [
+            ("active", "green", "serving"),
+            ("paused", "amber", "paused or joining"),
+            ("failed", "red", "dead or excluded"),
+            ("starting", "grey", "new Pod, not yet a member"),
+        ],
+    )
+    s.save("recovery-animation.svg")
 
 
 def phases():
@@ -588,6 +626,7 @@ if __name__ == "__main__":
         step,
         recovery_sequence,
         recovery_timeline,
+        recovery_animation,
         phases,
         adopt,
         capacity,

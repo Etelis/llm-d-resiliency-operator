@@ -13,7 +13,8 @@ poll or skip repeated polls; the [poll-by-poll example](member-dies.md#poll-by-p
    it resets failed Pods and admits their new members when the engine can grow; otherwise it keeps the Pods.
 3. **Reset as the last resort.** When nothing can be removed safely, or a recovery itself fails, IRO resets the
    whole group. It never gives up on its own: the workload's restart policy paces resets.
-4. **Never act blind.** IRO never removes a member it cannot see, and never resets a group it cannot list.
+4. **Act only on what it sees.** IRO removes a member only when the engine reports it dead, and resets a group only
+   when it can list its Pods.
 
 A fault always comes first: capacity work waits until the group serves again.
 

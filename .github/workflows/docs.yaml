@@ -3,24 +3,22 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: [website/**]
+    paths: [docs/**, website/**, .github/workflows/docs.yaml]
+  pull_request:
+    branches: [main]
+    paths: [docs/**, website/**, .github/workflows/docs.yaml]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     defaults:
       run:
         working-directory: website
@@ -34,7 +32,20 @@ jobs:
       - run: npm ci
       - run: npm run build
       - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
         with:
           path: website/build
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v5
