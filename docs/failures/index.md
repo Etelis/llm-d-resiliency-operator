@@ -8,10 +8,12 @@ members, the controller's phase, and every call IRO makes with its input and out
 ![Controller phases: starting, serving, recovering](../figures/phases.svg)
 
 1. **Remove in place.** When the engine proves members are gone, one reconfig removes them. The rest keep serving.
-2. **Restore capacity.** Once the group serves, IRO resets the failed Pods once and admits their new members.
+2. **Restore capacity.** The group now serves with fewer members. IRO restarts the failed Pods once and adds their new
+   members back.
 3. **Reset as the last resort.** When nothing can be removed safely, or a recovery itself fails, IRO resets the
    whole group. It never gives up on its own: the workload's restart policy paces resets.
-4. **Never act blind.** IRO never removes a member it cannot see, and never resets a group it cannot list.
+4. **Act only on what it sees.** IRO removes a member only when the engine reports it dead, and resets a group only
+   when it can list its Pods.
 
 A fault always comes first: capacity work waits until the group serves again.
 
