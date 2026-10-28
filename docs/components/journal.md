@@ -14,7 +14,7 @@ set with several engine groups needs one record per group, and tests can fake it
 | With | Calls | When | Returns |
 |---|---|---|---|
 | Controller → journal | `Load` | when it becomes the leader, and after a conflict | the saved record and its version |
-| | `Save` | before every action, and after each change | the new version, or a conflict |
+| | `Save` | before every action, and on every successful poll | the new version, or a conflict |
 | Journal → storage | the store's own API, such as a ConfigMap owned by the workload object | inside the calls above | |
 
 ## When the controller uses it

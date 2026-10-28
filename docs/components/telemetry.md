@@ -202,5 +202,5 @@ type Durations struct {
 }
 
 // ResetReason is a fixed set, so it can be a metric label.
-type ResetReason string // unrecoverable | reconfig_failed | diagnosis_deadline | apply_deadline | flap | verify_failed | exclusion_broken | capacity | unseen
+type ResetReason string // unrecoverable | reconfig_failed | diagnosis_deadline | apply_deadline | flap | verify_failed | exclusion_broken | capacity | unseen | journal_lost
 ```

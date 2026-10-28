@@ -94,7 +94,7 @@ it picks up a recovery where the last leader stopped.
 
 | The journal holds | The new leader |
 |---|---|
-| nothing (IRO's first run, or the record was deleted) | starts over in `starting`. A group that serves is admitted again, not reset. |
+| nothing (IRO's first run, or the record was deleted) | saves `ResetPending`, then resets the discovered group (reason `journal_lost`). |
 | a phase, no reconfig in flight | continues in that phase. Its deadlines restart. |
 | a reconfig in flight | follows its `Progress`. It sends the same reconfig again only if no acceptance was saved and `Progress` says `NotStarted` (see [sending a reconfig](#sending-a-reconfig)). |
 | `Verifying` members | continues the check |
@@ -102,6 +102,10 @@ it picks up a recovery where the last leader stopped.
 
 Every save is compare-and-swap on the version the controller loaded or saved. If another writer saved first,
 the save conflicts: the controller drops its state and loads again, and its deadlines restart.
+
+An empty journal cannot establish which recovery actions have run. IRO resets existing Pods after successful
+discovery, including on first attachment to a group. A group with no Pods starts normally. The reset intent
+survives leader changes and discovery outages. Dry runs leave existing Pods running.
 
 See the [leader-change example](../failures/leader-dies.md) for an engine-specific recovery.
 
@@ -312,6 +316,7 @@ when to stop, is the workload's restart policy. When the workload stops recreati
 | `verify_failed` | a checked member still cannot generate after `--ft-verify-timeout` | [the group cannot generate after a recovery](../failures/verify-fails.md) |
 | `exclusion_broken` | the engine reports something C1, C4 or C5 forbids | |
 | `capacity` | `--ft-capacity-restore=reset-all` and a member is excluded or rejected | [the failed Pod cannot come back](../failures/capacity-not-restored.md) |
+| `journal_lost` | the saved recovery state is missing | [the journal is lost](../failures/journal-lost.md) |
 | `unseen` | no admitted member readable for `--ft-unseen-timeout` | [IRO cannot see the group](../failures/iro-blind.md) |
 
 ## Dry run
@@ -323,7 +328,7 @@ the controller skipped, in `WouldDo`, so the next poll does not start over.
 On every poll the controller compares what it would do now with what the state already says, and records (logs)
 only when that changes.
 
-```
+```text
 poll 1: dp3 dead  -> state empty           -> record "would remove dp3"
 poll 2: dp3 dead  -> state = remove dp3    -> same, stay quiet
 poll 3: dp3 dead  -> state = remove dp3    -> same, stay quiet
@@ -434,6 +439,7 @@ type Record struct {
     UnseenSince          time.Time // Discover failed, or Observe read no admitted member. Deadlines do not count this time.
     UnseenByDiscover     bool      // Discover failed since UnseenSince: the clock restarts once Discover works again
     RecreateStopped      bool      // from the last Discover, so people can see the workload gave up
+    ResetPending         bool      // an empty journal requires a reset after discovery succeeds
 
     Incident *Incident // the open incident, nil when none. Closed ones go to telemetry.
 }
@@ -463,7 +469,7 @@ Builds the controller and loads its state.
 | **Side effects** | `Journal.Load` |
 
 ```go
-New(...) // empty journal (first run):         Record{Phase: starting}
+New(...) // empty journal:                     Record{Phase: starting, ResetPending: true}
 New(...) // leader changed during a reconfig:  Record{Phase: recovering, Reconfig: iro-ft-7c1e, ...}
 New(...) // journal unreadable or not valid:   error. The runner logs it and calls New again next poll.
 New(...) // after a save conflicted:           Record as saved by the other writer. Deadlines restart.
