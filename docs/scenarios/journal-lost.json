@@ -29,34 +29,37 @@
         },
         {
           "title": "The journal is deleted",
-          "note": "Someone deletes the ConfigMap, and the leader restarts.",
+          "note": "An idle poll detects deletion and reloads the empty journal.",
           "phase": "starting",
           "calls": [
-            {"to": "journal", "call": "Load()", "out": "empty: a new group"},
-            {"to": "workload", "call": "Discover()", "out": "4 Pods, all Ready"}
+            {"to": "journal", "call": "Save(record)", "out": "ErrConflict: the record was deleted"},
+            {"to": "journal", "call": "Load()", "out": "empty: reset pending"},
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {"to": "journal", "call": "Save(record)", "in": "starting; discovered Pod UIDs marked Removing; reason journal_lost"},
+            {"to": "workload", "call": "ResetAll([pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1])", "out": "the workload recreates the group"}
           ],
-          "journal": "starting",
+          "journal": "starting; journal_lost; old Pod UIDs marked Removing",
           "pods": {"pod-0": {"dp0": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-1": {"dp1": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-2": {"dp2": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}, "pod-3": {"dp3": {"state": "serving", "membership": "untracked", "status": "healthy", "health": 200}}}
         },
         {
-          "title": "The serving members are admitted again",
-          "note": "Nothing is reset: the group never stopped serving.",
+          "title": "The replacement group serves",
+          "note": "IRO waits for the replacement Pods and admits their healthy members.",
           "phase": "serving",
           "calls": [
-            {"to": "workload", "call": "Discover()", "out": "pod-0@a1, pod-1@b1, pod-2@c1, pod-3@d1"},
+            {"to": "workload", "call": "Discover()", "out": "pod-0@a2, pod-1@b2, pod-2@c2, pod-3@d2"},
             {
               "to": "driver",
               "call": "Observe(pods)",
               "out": "dp0: Serving; dp1: Serving; dp2: Serving; dp3: Serving",
               "requests": [
-                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
-                {"call": "GET /health", "in": "dp0 on pod-0 (UID a1), port 8000; dp1 on pod-1 (UID b1), port 8000; dp2 on pod-2 (UID c1), port 8000; dp3 on pod-3 (UID d1), port 8000", "out": "200"}
+                {"call": "GET /v1/fault_tolerance/status", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200; schema_version=1; engines[0].id=<target rank>; engines=[{\"status\":\"healthy\"}]"},
+                {"call": "GET /health", "in": "dp0 on pod-0 (UID a2), port 8000; dp1 on pod-1 (UID b2), port 8000; dp2 on pod-2 (UID c2), port 8000; dp3 on pod-3 (UID d2), port 8000", "out": "200"}
               ]
             },
             {"to": "policy", "call": "Plan(observation, admitted, candidates)", "out": "Healthy"}
           ],
-          "journal": "serving; admitted dp0@idA dp1@idB dp2@idC dp3@idD",
-          "pods": {"pod-0": {"dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-1": {"dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-2": {"dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-3": {"dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}}
+          "journal": "serving; admitted dp0@idA2 dp1@idB2 dp2@idC2 dp3@idD2",
+          "pods": {"pod-0": {"uid": "a2", "dp0": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-1": {"uid": "b2", "dp1": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-2": {"uid": "c2", "dp2": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}, "pod-3": {"uid": "d2", "dp3": {"state": "serving", "membership": "admitted", "status": "healthy", "health": 200}}}
         }
       ]
     }

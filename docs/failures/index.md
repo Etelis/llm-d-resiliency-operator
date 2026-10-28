@@ -51,7 +51,7 @@ A fault always comes first: capacity work waits until the group serves again.
 |---|---|---|
 | [The IRO leader dies mid-reconfig](leader-dies.md) | a reconfig in the journal, with or without saved acceptances | the recovery finishes, never sent twice |
 | [IRO cannot see the group](iro-blind.md) | `Observe` reads no admitted member | nothing, if reads come back in time; otherwise a new group |
-| [The journal is lost](journal-lost.md) | an empty journal | the same group, never reset |
+| [The journal is lost](journal-lost.md) | an empty journal | a new group |
 
 The workload can also give up recreating the group (`RecreateStopped`). IRO then waits and acts on
 nothing until the workload recreates the group; see [resetting the group](../components/controller.md#resetting-the-group).
