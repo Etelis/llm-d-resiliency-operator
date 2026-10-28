@@ -114,25 +114,37 @@ func TestUnseenTimeoutExcludesDiscoveryOutages(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-			clock := start
-			wl, eng := &unseenWorkload{}, &unseenEngine{}
-			config := Defaults()
-			config.UnseenTimeout = time.Minute
-			fsm, err := load(t.Context(), wl, eng, &memJournal{}, unseenRecorder{}, config, func() time.Time { return clock })
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := fsm.Step(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-			for _, poll := range polls {
-				clock = start.Add(time.Duration(poll.at) * time.Second)
-				eng.unknown, wl.failed = poll.unknown, poll.failed
-				err := fsm.Step(t.Context())
-				if (wl.resets > 0) != poll.reset {
-					t.Fatalf("at %ds: resets=%d, want reset=%t, error=%v", poll.at, wl.resets, poll.reset, err)
-				}
+			for mode, restart := range map[string]bool{"continuous": false, "reload": true} {
+				t.Run(mode, func(t *testing.T) {
+					t.Parallel()
+					start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+					clock := start
+					wl, eng := &unseenWorkload{}, &unseenEngine{}
+					config := Defaults()
+					config.UnseenTimeout = time.Minute
+					store := &memJournal{}
+					fsm, err := load(t.Context(), wl, eng, store, unseenRecorder{}, config, func() time.Time { return clock })
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := fsm.Step(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+					for _, poll := range polls {
+						clock = start.Add(time.Duration(poll.at) * time.Second)
+						eng.unknown, wl.failed = poll.unknown, poll.failed
+						if restart {
+							fsm, err = load(t.Context(), wl, eng, store, unseenRecorder{}, config, func() time.Time { return clock })
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						err := fsm.Step(t.Context())
+						if (wl.resets > 0) != poll.reset {
+							t.Fatalf("at %ds: resets=%d, want reset=%t, error=%v", poll.at, wl.resets, poll.reset, err)
+						}
+					}
+				})
 			}
 		})
 	}
@@ -143,7 +155,8 @@ func TestDiscoveryPausePreservesRecoveryDeadlines(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	clock := start
 	wl, eng := &unseenWorkload{}, &unseenEngine{}
-	fsm, err := load(t.Context(), wl, eng, &memJournal{}, unseenRecorder{}, Defaults(), func() time.Time { return clock })
+	store := &memJournal{}
+	fsm, err := load(t.Context(), wl, eng, store, unseenRecorder{}, Defaults(), func() time.Time { return clock })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,16 +170,62 @@ func TestDiscoveryPausePreservesRecoveryDeadlines(t *testing.T) {
 	if err := fsm.save(t.Context(), &record); err != nil {
 		t.Fatal(err)
 	}
-	for _, at := range []int{10, 25, 100, 110} {
+	for _, at := range []int{10, 25, 100, 110, 185, 195, 205} {
 		clock = start.Add(time.Duration(at) * time.Second)
-		eng.unknown, wl.failed = at != 110, at == 25
-		if err := fsm.Step(t.Context()); (err != nil) != (at != 110) {
+		eng.unknown, wl.failed = at != 205, at == 25 || at == 110
+		if at != 10 {
+			fsm, err = load(t.Context(), wl, eng, store, unseenRecorder{}, Defaults(), func() time.Time { return clock })
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := fsm.Step(t.Context()); (err != nil) != (at != 205) {
 			t.Fatalf("at %ds: unexpected step result: %v", at, err)
 		}
 	}
 	record = fsm.record()
-	if wl.resets != 0 || !record.Since.Equal(start.Add(100*time.Second)) ||
-		!record.ReconfigSince.Equal(start.Add(100*time.Second)) || !record.VerifyFailedSince.Equal(start.Add(101*time.Second)) {
+	if wl.resets != 0 || !record.Since.Equal(start.Add(195*time.Second)) ||
+		!record.ReconfigSince.Equal(start.Add(195*time.Second)) || !record.VerifyFailedSince.Equal(start.Add(196*time.Second)) {
 		t.Fatalf("resets=%d, record=%+v", wl.resets, record)
+	}
+}
+
+func TestLegacyVisibilityPauseReload(t *testing.T) {
+	t.Parallel()
+	for name, byDiscover := range map[string]bool{"discovery": true, "engine": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			clock := start
+			wl, eng, store := &unseenWorkload{}, &unseenEngine{}, &memJournal{}
+			fsm, err := load(t.Context(), wl, eng, store, unseenRecorder{}, Defaults(), func() time.Time { return clock })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := fsm.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			record := fsm.record()
+			record.Phase = Recovering
+			record.UnseenSince, record.UnseenByDiscover = start.Add(10*time.Second), byDiscover
+			record.Reconfig = &engine.Reconfig{ID: "pending", Participants: []engine.MemberID{"m@i"}}
+			record.ReconfigSince, record.VerifyFailedSince = start, start.Add(time.Second)
+			if err := fsm.save(t.Context(), &record); err != nil {
+				t.Fatal(err)
+			}
+			clock = start.Add(110 * time.Second)
+			fsm, err = load(t.Context(), wl, eng, store, unseenRecorder{}, Defaults(), func() time.Time { return clock })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := fsm.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			record = fsm.record()
+			if wl.resets != 0 || !record.Since.Equal(start.Add(100*time.Second)) ||
+				!record.ReconfigSince.Equal(start.Add(100*time.Second)) || !record.VerifyFailedSince.Equal(start.Add(101*time.Second)) {
+				t.Fatalf("resets=%d, record=%+v", wl.resets, record)
+			}
+		})
 	}
 }

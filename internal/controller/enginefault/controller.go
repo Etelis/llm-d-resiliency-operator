@@ -75,6 +75,7 @@ type Record struct {
 
 	LastNoChangeReconfig time.Time     `json:"last_no_change_reconfig,omitzero"`
 	VerifyFailedSince    time.Time     `json:"verify_failed_since,omitzero"`
+	PausedSince          time.Time     `json:"paused_since,omitzero"`
 	UnseenSince          time.Time     `json:"unseen_since,omitzero"`
 	UnseenByDiscover     bool          `json:"unseen_by_discover,omitempty"`
 	UnseenElapsed        time.Duration `json:"unseen_elapsed,omitempty"`
