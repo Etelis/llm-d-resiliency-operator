@@ -181,7 +181,10 @@ func newFlow(t *testing.T) *flow {
 func newFlowWith(t *testing.T, applyTimeout time.Duration) *flow {
 	t.Helper()
 	test := newFleet(t, 4, 1)
-	run := &flow{t: t, fleet: test, sim: newCluster(test), wl: &lwsToday{pods: test.pods}, store: &memoryJournal{}}
+	run := &flow{
+		t: t, fleet: test, sim: newCluster(test), wl: &lwsToday{pods: test.pods},
+		store: &memoryJournal{data: []byte(`{"phase":"starting"}`), version: 1},
+	}
 	config := enginefault.Defaults()
 	config.PollInterval, config.DiagnosisTimeout, config.ApplyTimeout = time.Millisecond, time.Second, applyTimeout
 	fsm, err := enginefault.New(t.Context(), run.wl, test.eng, run.store, telemetry.New(logr.Discard(), time.Minute), config)
@@ -249,36 +252,73 @@ func TestFlowDeadRankIsRemoved(t *testing.T) {
 	}
 }
 
-func TestFlowJournalLostWhileServing(t *testing.T) {
+func TestFlowJournalLossResetsGroup(t *testing.T) {
 	t.Parallel()
-	run := newFlow(t)
-	if err := run.fsm.Step(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	pods := slices.Clone(run.wl.pods)
-	run.store.mu.Lock()
-	run.store.data, run.store.version = nil, 0
-	run.store.mu.Unlock()
-	if err := run.fsm.Step(t.Context()); !errors.Is(err, journal.ErrConflict) {
-		t.Fatalf("deleted journal: got %v, want conflict", err)
-	}
-	config := enginefault.Defaults()
-	fsm, err := enginefault.New(t.Context(), run.wl, run.fleet.eng, run.store,
-		telemetry.New(logr.Discard(), time.Minute), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	run.fsm = fsm
-	record := run.until("journal recreated with four admitted ranks", func(record enginefault.Record) bool {
-		return served(&record) && len(record.Members) == len(four)
-	})
-	for _, state := range record.Members {
-		if state != enginefault.Admitted {
-			t.Fatalf("members %v", record.Members)
-		}
-	}
-	if run.wl.resetAll != 0 || len(run.sim.applies) != 0 || !slices.Equal(run.wl.pods, pods) {
-		t.Fatalf("group resets %d, applies %v, pods %v", run.wl.resetAll, run.sim.applies, run.wl.pods)
+	for _, stage := range []string{"serving", "diagnosing", "applying", "completed", "verifying"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			run := newFlow(t)
+			if stage != "serving" {
+				run.fault(3)
+				if stage == "applying" {
+					for _, rank := range run.fleet.ranks {
+						rank.onApply = func(fake *fakeRank, payload map[string]any) {
+							fake.put(map[string]any{
+								"id": fake.rank, "status": "unhealthy", "ft_state": "recovering", "last_ft_request_id": payload["request_id"],
+							})
+						}
+					}
+				}
+				switch stage {
+				case "diagnosing":
+					run.until("diagnosing", func(r enginefault.Record) bool { return r.Phase == enginefault.Recovering })
+				case "applying", "completed":
+					run.until("dispatched", func(r enginefault.Record) bool { return r.Reconfig != nil })
+				case "verifying":
+					run.fleet.ranks[0].tokens = 0
+					run.until("verifying", func(r enginefault.Record) bool { return len(r.Verifying) > 0 })
+				}
+			}
+			run.store.mu.Lock()
+			run.store.data, run.store.version = nil, 0
+			run.store.mu.Unlock()
+			applies := len(run.sim.applies)
+			if err := run.fsm.Step(t.Context()); !errors.Is(err, journal.ErrConflict) {
+				t.Fatalf("deleted journal: got %v, want conflict", err)
+			}
+			fsm, err := enginefault.New(t.Context(), run.wl, run.fleet.eng, run.store,
+				telemetry.New(logr.Discard(), time.Minute), enginefault.Defaults())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := fsm.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			record := run.store.record(t)
+			if run.wl.resetAll != 1 || len(run.sim.applies) != applies || record.Phase != enginefault.Starting {
+				t.Fatalf("resets %d, applies %v, record %+v", run.wl.resetAll, run.sim.applies, record)
+			}
+			for _, pod := range record.Pods {
+				if !pod.Removing {
+					t.Fatalf("reset not recorded: %+v", record)
+				}
+			}
+			run.fsm = fsm
+			run.wl.pods = slices.Clone(run.wl.pods)
+			for index := range run.wl.pods {
+				run.wl.pods[index].UID += "-replacement"
+				run.wl.pods[index].Identity += "-replacement"
+				run.fleet.ranks[index].set("healthy", nil)
+			}
+			run.fleet.ranks[0].tokens = 8
+			run.until("serving after reset", func(r enginefault.Record) bool { return served(&r) && len(r.Members) == 4 })
+			if err := fsm.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if run.wl.resetAll != 1 {
+				t.Fatalf("repeated reset after replacement: %d", run.wl.resetAll)
+			}
+		})
 	}
 }
 
